@@ -13,3 +13,9 @@
 ## Stack
 - Next.js App Router, Neon Postgres, Vercel, Leaflet/OSM.
 - Filters: min % right, max turnout, min בז״ב. Right parties: ט + מחל + שס + ג.
+
+## Cloud agents
+- Work from this repository root. Install with `npm ci`. Dev server: `npm run dev -- --hostname 0.0.0.0 --port 3000`.
+- `DATABASE_URL` is the Neon pooled connection for project `election-day-ops`, database `neondb`, with `sslmode=require`. `SESSION_SECRET` signs auth cookies.
+- Do not run `npm run seed` unless asked. It truncates `settlements` and `clusters`.
+- Vercel project `election-day-ops` (`prj_pwImjryRCzAcqSYYwU1o0E13qEeh`) tracks this repo with an empty root directory.
