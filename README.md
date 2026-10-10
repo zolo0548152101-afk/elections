@@ -9,7 +9,6 @@
 
 ## פיתוח מקומי
 ```bash
-cd election-day
 cp .env.example .env.local   # אם קיים; או הגדר DATABASE_URL
 npm install
 npm run seed
