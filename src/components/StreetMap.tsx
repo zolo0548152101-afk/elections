@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
+  setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
   type VectorTileSource,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+// Turbopack rewrites the library chunk, so the relative worker URL 404s.
+setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import type { Feature } from "geojson";
 
@@ -196,11 +200,16 @@ export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selectedAshkol) {
-      map?.setFilter("streets-line", null);
-      return;
-    }
-    map.setFilter("streets-line", ["==", ["get", "ashkol"], selectedAshkol]);
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer("streets-line")) return;
+      map.setFilter(
+        "streets-line",
+        selectedAshkol ? ["==", ["get", "ashkol"], selectedAshkol] : null,
+      );
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
   }, [selectedAshkol]);
 
   useEffect(() => {
