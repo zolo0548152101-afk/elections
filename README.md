@@ -17,5 +17,6 @@ npm run dev
 
 ימין = `ט` + `מחל` + `שס` + `ג`. ברירת מחדל: ימין ≥ 70%, הצבעה &lt; 60%.
 
+
 ## זריעת נתונים
 `npm run seed` טוען `data/clusters.json` ו-`data/settlement_coords.json` ל-Neon.
