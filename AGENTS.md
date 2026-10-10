@@ -11,5 +11,8 @@
 4. Do not start implementation on a stale checkout — coworker may have pushed since the last session.
 
 ## Stack
-- Next.js App Router, Neon Postgres, Vercel, Leaflet/OSM.
+- Next.js App Router, Neon Postgres, Vercel, Leaflet (cluster dashboard), MapLibre (street map).
+- Streets: OSM Hebrew names only (Geofabrik / HOT roads). Vector tiles via `/api/tiles/{z}/{x}/{y}`.
+- Roles: `super_admin`, `area_manager`, `coordinator`. Auth: email/password sessions.
 - Filters: min % right, max turnout, min בז״ב. Right parties: ט + מחל + שס + ג.
+- Cluster↔street link column `streets.ashkol` stays null until `npm run import:cluster-streets`.
