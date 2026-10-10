@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth";
 import { getSql, type ClusterRow } from "@/lib/db";
 import { offsetWithinSettlement } from "@/lib/geo";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const sp = req.nextUrl.searchParams;
   const minRight = Number(sp.get("minRight") ?? "70");
   const maxTurnout = Number(sp.get("maxTurnout") ?? "60");
