@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ results: [] });
 
   const sql = getSql();
-  const like = `%${q}%`;
+  const like = `%${q.replace(/[%_\\]/g, "")}%`;
   const rows = await sql`
     SELECT s.id, s.name_he, s.lat, s.lng, s.ashkol, COALESCE(m.done, false) AS done
     FROM streets s

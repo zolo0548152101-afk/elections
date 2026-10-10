@@ -80,13 +80,25 @@ export async function POST(req: NextRequest) {
   }
 
   const sql = getSql();
+  const ids = coordinatorIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
+  if (user!.role === "area_manager" && ids.length > 0) {
+    const allowed = (await sql`
+      SELECT id FROM users
+      WHERE role = 'coordinator' AND manager_id = ${user!.id}
+    `) as { id: number }[];
+    const allowedIds = new Set(allowed.map((row) => row.id));
+    if (ids.some((id) => !allowedIds.has(id))) {
+      return NextResponse.json({ error: "רכז מחוץ לצוות" }, { status: 403 });
+    }
+  }
+
   const [group] = await sql`
     INSERT INTO groups (name, location_text, headcount, gender, type)
     VALUES (${name}, ${location_text}, ${headcount}, ${gender}, ${type})
     RETURNING *
   `;
 
-  for (const cid of coordinatorIds) {
+  for (const cid of ids) {
     await sql`
       INSERT INTO group_coordinators (group_id, user_id)
       VALUES (${group.id}, ${cid})

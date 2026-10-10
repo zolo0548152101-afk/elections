@@ -25,4 +25,4 @@ await sql`
     institution_id = EXCLUDED.institution_id
 `;
 
-console.log({ admin: email, password, institutionId: inst.id });
+console.log({ admin: email, institutionId: inst.id });

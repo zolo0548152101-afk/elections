@@ -27,6 +27,7 @@ export default function UsersPage() {
     role: "coordinator",
     institution_id: "",
     settlement_name: "",
+    manager_id: "",
   });
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -57,6 +58,8 @@ export default function UsersPage() {
         ...form,
         institution_id: form.institution_id ? Number(form.institution_id) : null,
         settlement_name: form.settlement_name || null,
+        manager_id:
+          form.role === "coordinator" && form.manager_id ? Number(form.manager_id) : null,
       }),
     });
     const data = await res.json();
@@ -73,6 +76,7 @@ export default function UsersPage() {
       role: "coordinator",
       institution_id: "",
       settlement_name: "",
+      manager_id: "",
     });
     load();
   }
@@ -134,6 +138,24 @@ export default function UsersPage() {
                     <option value="coordinator">רכז</option>
                     <option value="area_manager">מנהל אזור</option>
                     <option value="super_admin">מנהל על</option>
+                  </select>
+                </label>
+              )}
+              {meRole === "super_admin" && form.role === "coordinator" && (
+                <label>
+                  מנהל אזור
+                  <select
+                    value={form.manager_id}
+                    onChange={(e) => setForm({ ...form, manager_id: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    {users
+                      .filter((u) => u.role === "area_manager")
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name}
+                        </option>
+                      ))}
                   </select>
                 </label>
               )}

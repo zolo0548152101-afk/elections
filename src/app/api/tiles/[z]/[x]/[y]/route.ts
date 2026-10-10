@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import geojsonvt from "geojson-vt";
 import vtpbf from "vt-pbf";
+import { getSessionUser } from "@/lib/auth";
 import { getSql, type StreetRow } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -20,6 +21,9 @@ export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ z: string; x: string; y: string }> },
 ) {
+  const user = await getSessionUser();
+  if (!user) return new NextResponse("unauthorized", { status: 401 });
+
   const { z: zs, x: xs, y: ys } = await ctx.params;
   const z = Number(zs);
   const x = Number(xs);
@@ -69,7 +73,7 @@ export async function GET(
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/x-protobuf",
-      "Cache-Control": "public, max-age=30",
+      "Cache-Control": "private, max-age=15",
     },
   });
 }
