@@ -1,18 +1,5 @@
 import type { Metadata } from "next";
-import { Assistant, Heebo } from "next/font/google";
 import "./globals.css";
-
-const display = Assistant({
-  subsets: ["hebrew", "latin"],
-  variable: "--font-display",
-  weight: ["600", "700", "800"],
-});
-
-const body = Heebo({
-  subsets: ["hebrew", "latin"],
-  variable: "--font-body",
-  weight: ["400", "500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: "ניהול יום בחירות | אשכולות",
@@ -21,7 +8,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={`${display.variable} ${body.variable}`}>
+    <html lang="he" dir="rtl">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Assistant:wght@600;700;800&family=Heebo:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
