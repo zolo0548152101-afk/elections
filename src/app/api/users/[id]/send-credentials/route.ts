@@ -1,4 +1,3 @@
-import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSessionUser,
@@ -8,7 +7,7 @@ import {
 } from "@/lib/auth";
 import { appLoginUrl } from "@/lib/app-url";
 import { getSql } from "@/lib/db";
-import { validatePassword } from "@/lib/passwords";
+import { generateTempPassword, validatePassword } from "@/lib/passwords";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -28,11 +27,6 @@ function canManage(actor: SessionUser, target: TargetUser) {
     return target.role === "coordinator" && target.manager_id === actor.id;
   }
   return false;
-}
-
-function generatePassword(): string {
-  // 10 chars, easy to type on mobile; meets min length 8.
-  return randomBytes(8).toString("base64url").slice(0, 10);
 }
 
 /**
@@ -77,7 +71,7 @@ export async function POST(
   let password = body.password?.trim() ?? "";
   let generated = false;
   if (!password) {
-    password = generatePassword();
+    password = generateTempPassword();
     generated = true;
   }
   const pwErr = validatePassword(password);
