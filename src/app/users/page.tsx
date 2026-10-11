@@ -112,8 +112,10 @@ export default function UsersPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgKind, setMsgKind] = useState<"ok" | "err" | "info">("info");
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [sentOkId, setSentOkId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [addInstitutionId, setAddInstitutionId] = useState("");
@@ -137,6 +139,11 @@ export default function UsersPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  function flash(kind: "ok" | "err" | "info", text: string) {
+    setMsgKind(kind);
+    setMsg(text);
+  }
 
   function resetForm() {
     setForm(freshForm());
@@ -163,7 +170,7 @@ export default function UsersPage() {
     setInstPickerQ("");
     setAddCoordinatorId("");
     setShowPassword(false);
-    setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
+    flash("info", "עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -213,17 +220,22 @@ export default function UsersPage() {
     return ids;
   }
 
+  function flash(kind: "ok" | "err" | "info", text: string) {
+    setMsgKind(kind);
+    setMsg(text);
+  }
+
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
 
     const role = meRole === "area_manager" ? "coordinator" : form.role;
     if (!form.full_name.trim() || !form.mobile.trim()) {
-      setMsg("שם ונייד חובה");
+      flash("err", "שם ונייד חובה");
       return;
     }
     if (!editId && !form.password.trim()) {
-      setMsg("סיסמה חובה");
+      flash("err", "סיסמה חובה");
       return;
     }
 
@@ -255,14 +267,15 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg(data.error || "שגיאה");
+        flash("err", data.error || "שגיאה");
         return;
       }
       const savedNames = institutionIds
         .map((id) => institutions.find((i) => i.id === id)?.name)
         .filter(Boolean)
         .join(" · ");
-      setMsg(
+      flash(
+        "ok",
         editId
           ? role === "coordinator"
             ? `עודכן בהצלחה${savedNames ? ` · מוסדות: ${savedNames}` : " · ללא מוסדות"}`
@@ -278,7 +291,7 @@ export default function UsersPage() {
 
   async function deleteUser(u: UserRow) {
     if (u.id === meId) {
-      setMsg("לא ניתן למחוק את המשתמש המחובר");
+      flash("err", "לא ניתן למחוק את המשתמש המחובר");
       return;
     }
     const ok = window.confirm(
@@ -289,17 +302,17 @@ export default function UsersPage() {
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
-      setMsg(data.error || "שגיאה במחיקה");
+      flash("err", data.error || "שגיאה במחיקה");
       return;
     }
     if (editId === u.id) resetForm();
-    setMsg("נמחק בהצלחה");
+    flash("ok", "נמחק בהצלחה");
     await load();
   }
 
   async function sendCredentials(u: UserRow) {
     if (!u.mobile?.trim()) {
-      setMsg("למשתמש אין מספר נייד");
+      flash("err", "למשתמש אין מספר נייד");
       return;
     }
     const ok = window.confirm(
@@ -307,6 +320,7 @@ export default function UsersPage() {
     );
     if (!ok) return;
     setSendingId(u.id);
+    setSentOkId(null);
     setMsg(null);
     try {
       const res = await fetch(`/api/users/${u.id}/send-credentials`, {
@@ -318,12 +332,20 @@ export default function UsersPage() {
         error?: string;
       };
       if (!res.ok) {
-        setMsg(data.error || "שגיאה בשליחה");
+        flash("err", data.error || "שגיאה בשליחה");
         return;
       }
-      setMsg(`נשלחו פרטי התחברות קבועים ב-WhatsApp אל ${u.full_name}`);
+      setSentOkId(u.id);
+      flash(
+        "ok",
+        `✓ ההודעה נשלחה בהצלחה ב-WhatsApp אל ${u.full_name} (${u.mobile})`,
+      );
+      window.setTimeout(() => {
+        setSentOkId((cur) => (cur === u.id ? null : cur));
+      }, 4000);
     } catch (err) {
-      setMsg(
+      flash(
+        "err",
         err instanceof Error
           ? `שגיאת רשת בשליחה: ${err.message}`
           : "שגיאת רשת בשליחה",
@@ -628,8 +650,23 @@ export default function UsersPage() {
                 </button>
               )}
             </div>
-            {msg && <p className="form-msg">{msg}</p>}
           </form>
+        )}
+
+        {msg && (
+          <p
+            className={`form-msg ${
+              msgKind === "ok"
+                ? "form-msg-ok"
+                : msgKind === "err"
+                  ? "form-msg-err"
+                  : ""
+            }`}
+            role="status"
+            style={{ marginBottom: "0.75rem" }}
+          >
+            {msg}
+          </p>
         )}
 
         <div className="panel-form users-filters">
@@ -695,7 +732,11 @@ export default function UsersPage() {
                             : "אין נייד"
                         }
                       >
-                        {sendingId === u.id ? "שולח…" : "שלח בוואטסאפ"}
+                        {sendingId === u.id
+                          ? "שולח…"
+                          : sentOkId === u.id
+                            ? "נשלח ✓"
+                            : "שלח בוואטסאפ"}
                       </button>
                       <button
                         type="button"
