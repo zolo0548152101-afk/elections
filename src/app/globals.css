@@ -437,6 +437,59 @@ tbody tr.cluster-row-selected:hover {
   margin-bottom: 0;
 }
 
+.form-msg-ok {
+  background: rgba(22, 163, 74, 0.14);
+  color: #14532d;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  font-weight: 600;
+}
+
+.form-msg-err {
+  background: rgba(185, 28, 28, 0.1);
+  color: #7f1d1d;
+  border: 1px solid rgba(185, 28, 28, 0.3);
+}
+
+.links-panel-flash {
+  outline: 2px solid rgba(22, 163, 74, 0.55);
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-done {
+  background: rgba(22, 163, 74, 0.16);
+  color: #14532d;
+}
+
+.status-open {
+  background: rgba(196, 92, 38, 0.14);
+  color: #9a3412;
+}
+
+.cluster-link-search {
+  flex-wrap: wrap;
+}
+
+.cluster-link-search input[type="search"] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.link-success-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #14532d;
+}
+
 .password-field {
   display: flex;
   gap: 0.4rem;

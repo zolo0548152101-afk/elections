@@ -5,6 +5,7 @@ import {
   coordinatorInstitutionIds,
   syncPrimaryInstitution,
 } from "@/lib/streets-access";
+import { ashkolStreetStats } from "@/lib/cluster-status";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,55 @@ const KINDS = [
   "אולפנה",
   "מוסד חינוך",
 ];
+
+type LinkedClusterRow = {
+  ashkol: string;
+  settlement_name?: string;
+  right_pct?: number;
+  turnout_pct?: number;
+  bzb?: number;
+  street_total?: number;
+  street_done?: number;
+  done?: boolean;
+};
+
+function parseLinkedClusters(value: unknown): LinkedClusterRow[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as LinkedClusterRow[];
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(value) ? (value as LinkedClusterRow[]) : [];
+}
+
+async function withClusterDoneStatus<T extends { linked_clusters?: unknown }>(
+  sql: ReturnType<typeof getSql>,
+  institutions: T[],
+): Promise<T[]> {
+  const ashkols = [
+    ...new Set(
+      institutions.flatMap((i) =>
+        parseLinkedClusters(i.linked_clusters).map((c) => c.ashkol),
+      ),
+    ),
+  ];
+  const stats = await ashkolStreetStats(sql, ashkols);
+  return institutions.map((inst) => {
+    const clusters = parseLinkedClusters(inst.linked_clusters).map((c) => {
+      const st = stats.get(c.ashkol);
+      return {
+        ...c,
+        street_total: st?.street_total ?? 0,
+        street_done: st?.street_done ?? 0,
+        done: st?.done ?? false,
+      };
+    });
+    return { ...inst, linked_clusters: clusters };
+  });
+}
 
 async function availableCoordinators(
   sql: ReturnType<typeof getSql>,
@@ -112,7 +162,10 @@ export async function GET() {
       WHERE i.id = ANY(${ids})
       ORDER BY i.name
     `;
-    return NextResponse.json({ institutions: rows, kinds: KINDS });
+    return NextResponse.json({
+      institutions: await withClusterDoneStatus(sql, rows as { linked_clusters?: unknown }[]),
+      kinds: KINDS,
+    });
   }
 
   try {
@@ -240,7 +293,10 @@ export async function GET() {
 
   const pickable = await availableCoordinators(sql, user);
   return NextResponse.json({
-    institutions: rows,
+    institutions: await withClusterDoneStatus(
+      sql,
+      rows as { linked_clusters?: unknown }[],
+    ),
     kinds: KINDS,
     available_coordinators: pickable,
   });

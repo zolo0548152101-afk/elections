@@ -12,6 +12,10 @@ export type ClusterView = {
   ballot_count: number;
   map_lat: number | null;
   map_lng: number | null;
+  /** Linked to at least one institution. */
+  linked?: boolean;
+  /** All streets in the ashkol marked done for the current user. */
+  done?: boolean;
 };
 
 type SortKey =

@@ -16,6 +16,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import type { Feature } from "geojson";
+import { matchesSearch } from "@/lib/text-search";
 
 type SearchStreet = {
   id: string;
@@ -77,6 +78,42 @@ function clusterFromProps(p: Record<string, unknown>): ClusterView {
     ballot_count: Number(p.ballot_count ?? 0),
     map_lat: null,
     map_lng: null,
+    linked: Number(p.linked ?? 0) === 1 || p.linked === true,
+    done: Number(p.done ?? 0) === 1 || p.done === true,
+  };
+}
+
+/** Status colors: blue unassigned, orange assigned-open, green done. */
+const COLOR_UNASSIGNED = "#2563eb";
+const COLOR_ASSIGNED = "#c45c26";
+const COLOR_DONE = "#16a34a";
+
+function streetStatusPaint() {
+  return {
+    "line-color": [
+      "case",
+      ["==", ["get", "done"], 1],
+      COLOR_DONE,
+      ["==", ["get", "linked"], 1],
+      COLOR_ASSIGNED,
+      COLOR_UNASSIGNED,
+    ] as unknown as string,
+    "line-width": [
+      "case",
+      ["==", ["get", "done"], 1],
+      5,
+      ["==", ["get", "linked"], 1],
+      3.5,
+      2.5,
+    ] as unknown as number,
+    "line-opacity": [
+      "case",
+      ["==", ["get", "done"], 1],
+      0.9,
+      ["==", ["get", "linked"], 1],
+      0.85,
+      0.75,
+    ] as unknown as number,
   };
 }
 
@@ -127,6 +164,9 @@ export function StreetMap({
   const [me, setMe] = useState<MeUser | null>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [linkInstitutionId, setLinkInstitutionId] = useState("");
+  const [instQuery, setInstQuery] = useState("");
+  const [linkedOverride, setLinkedOverride] = useState<Set<string>>(() => new Set());
+  const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
   const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
@@ -205,27 +245,7 @@ export function StreetMap({
             type: "line",
             source: "streets",
             "source-layer": "streets",
-            paint: {
-              // Neutral by default — blue only when street/cluster selected (updated via setPaintProperty).
-              "line-color": [
-                "case",
-                ["==", ["get", "done"], 1],
-                "#16a34a",
-                "#94a3b8",
-              ],
-              "line-width": [
-                "case",
-                ["==", ["get", "done"], 1],
-                5,
-                2,
-              ],
-              "line-opacity": [
-                "case",
-                ["==", ["get", "done"], 1],
-                0.9,
-                0.35,
-              ],
-            },
+            paint: streetStatusPaint(),
           },
           {
             id: "streets-label",
@@ -250,9 +270,26 @@ export function StreetMap({
             type: "circle",
             source: "clusters",
             paint: {
-              "circle-radius": 7,
-              "circle-color": "#c45c26",
-              "circle-stroke-width": 1,
+              "circle-radius": [
+                "case",
+                ["==", ["get", "selected"], 1],
+                10,
+                7,
+              ],
+              "circle-color": [
+                "case",
+                ["==", ["get", "done"], 1],
+                COLOR_DONE,
+                ["==", ["get", "linked"], 1],
+                COLOR_ASSIGNED,
+                COLOR_UNASSIGNED,
+              ],
+              "circle-stroke-width": [
+                "case",
+                ["==", ["get", "selected"], 1],
+                3,
+                1,
+              ],
               "circle-stroke-color": "#fff",
             },
           },
@@ -371,31 +408,41 @@ export function StreetMap({
     if (!map) return;
     const features = clusters
       .filter((c) => c.map_lat != null && c.map_lng != null)
-      .map((c) => ({
-        type: "Feature" as const,
-        properties: {
-          ashkol: c.ashkol,
-          settlement_name: c.settlement_name,
-          bzb: c.bzb,
-          voters: c.voters,
-          valid: c.valid,
-          right_votes: c.right_votes,
-          turnout_pct: c.turnout_pct,
-          right_pct: c.right_pct,
-          ballot_count: c.ballot_count,
-        },
-        geometry: {
-          type: "Point" as const,
-          coordinates: [c.map_lng!, c.map_lat!],
-        },
-      }));
+      .map((c) => {
+        const linked = Boolean(c.linked) || linkedOverride.has(c.ashkol);
+        const done =
+          doneOverride[c.ashkol] !== undefined
+            ? doneOverride[c.ashkol]
+            : Boolean(c.done);
+        return {
+          type: "Feature" as const,
+          properties: {
+            ashkol: c.ashkol,
+            settlement_name: c.settlement_name,
+            bzb: c.bzb,
+            voters: c.voters,
+            valid: c.valid,
+            right_votes: c.right_votes,
+            turnout_pct: c.turnout_pct,
+            right_pct: c.right_pct,
+            ballot_count: c.ballot_count,
+            linked: linked ? 1 : 0,
+            done: done ? 1 : 0,
+            selected: selectedAshkol === c.ashkol ? 1 : 0,
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: [c.map_lng!, c.map_lat!],
+          },
+        };
+      });
     const apply = () => {
       const src = map.getSource("clusters") as GeoJSONSource | undefined;
       src?.setData({ type: "FeatureCollection", features });
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [clusters]);
+  }, [clusters, selectedAshkol, linkedOverride, doneOverride]);
 
   useEffect(() => {
     if (!picked) return;
@@ -404,7 +451,7 @@ export function StreetMap({
     setSelectedAshkol("");
   }, [clusters, picked]);
 
-  /** Neutral streets; blue only for selected cluster ashkol or selected street. */
+  /** Status colors; selection only thickens the line. */
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.getLayer("streets-line")) return;
@@ -415,32 +462,34 @@ export function StreetMap({
       map.setPaintProperty("streets-line", "line-color", [
         "case",
         ["==", ["get", "done"], 1],
-        "#16a34a",
-        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
-        "#2563eb",
-        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
-        "#2563eb",
-        "#94a3b8",
+        COLOR_DONE,
+        ["==", ["get", "linked"], 1],
+        COLOR_ASSIGNED,
+        COLOR_UNASSIGNED,
       ]);
       map.setPaintProperty("streets-line", "line-width", [
         "case",
+        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
+        7,
+        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
+        6,
         ["==", ["get", "done"], 1],
         5,
-        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
-        5,
-        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
-        5,
-        2,
+        ["==", ["get", "linked"], 1],
+        3.5,
+        2.5,
       ]);
       map.setPaintProperty("streets-line", "line-opacity", [
         "case",
-        ["==", ["get", "done"], 1],
-        0.9,
+        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
+        1,
         ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
         0.95,
-        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
-        0.95,
-        0.35,
+        ["==", ["get", "done"], 1],
+        0.9,
+        ["==", ["get", "linked"], 1],
+        0.85,
+        0.75,
       ]);
     };
     if (map.isStyleLoaded()) apply();
@@ -690,6 +739,9 @@ export function StreetMap({
       setStatus("בחרו מוסד לקישור האשכול");
       return;
     }
+    const instName =
+      institutions.find((i) => i.id === institutionId)?.name ?? "המוסד";
+    setStatus("מקשר אשכול למוסד…");
     const res = await fetch(`/api/institutions/${institutionId}/clusters`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -700,7 +752,10 @@ export function StreetMap({
       setStatus(data.error || "שגיאה בקישור אשכול");
       return;
     }
-    setStatus(`אשכול ${picked.ashkol} קושר למוסד`);
+    setStatus(`✓ הקישור הצליח — אשכול ${picked.ashkol} קושר ל«${instName}»`);
+    setPicked({ ...picked, linked: true });
+    setLinkedOverride((prev) => new Set(prev).add(picked.ashkol));
+    refreshStreetTiles();
   }
 
   async function markClusterStreets(done: boolean) {
@@ -717,6 +772,12 @@ export function StreetMap({
         ? `${done ? "סומנו" : "הוסרו"} ${data.updated} רחובות באשכול ${selectedAshkol}`
         : data.message || "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)",
     );
+    if (data.updated) {
+      setDoneOverride((prev) => ({ ...prev, [selectedAshkol]: done }));
+      if (picked?.ashkol === selectedAshkol) {
+        setPicked({ ...picked, done });
+      }
+    }
     refreshStreetTiles();
     if (selectedAshkol) void loadClusterStreets(selectedAshkol);
   }
@@ -733,6 +794,15 @@ export function StreetMap({
   // «קשר למוסד» is admin/manager only.
   const canLinkCluster =
     me && (me.role === "super_admin" || me.role === "area_manager");
+
+  const filteredInstitutions = (() => {
+    const matched = institutions.filter((i) => matchesSearch(i.name, instQuery));
+    const selected = institutions.find((i) => String(i.id) === linkInstitutionId);
+    if (selected && !matched.some((i) => i.id === selected.id)) {
+      return [selected, ...matched];
+    }
+    return matched;
+  })();
 
   function activateHit(index: number) {
     const item = hitItems[index];
@@ -958,19 +1028,28 @@ export function StreetMap({
                 <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
               </div>
               {canLinkCluster && (
-                <div className="cluster-link-row">
+                <div className="cluster-link-row cluster-link-search">
                   {(me?.role === "super_admin" || me?.role === "area_manager") && (
-                    <select
-                      value={linkInstitutionId}
-                      onChange={(e) => setLinkInstitutionId(e.target.value)}
-                    >
-                      <option value="">מוסד לקישור</option>
-                      {institutions.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <input
+                        type="search"
+                        value={instQuery}
+                        onChange={(e) => setInstQuery(e.target.value)}
+                        placeholder="חיפוש מוסד (כל חלק מהשם)…"
+                        autoComplete="off"
+                      />
+                      <select
+                        value={linkInstitutionId}
+                        onChange={(e) => setLinkInstitutionId(e.target.value)}
+                      >
+                        <option value="">מוסד לקישור</option>
+                        {filteredInstitutions.map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
                   )}
                   <button
                     type="button"
@@ -981,6 +1060,16 @@ export function StreetMap({
                   </button>
                 </div>
               )}
+              {(picked.linked || linkedOverride.has(picked.ashkol)) && (
+                <p className="link-success-note">
+                  מקושר למוסד
+                  {(doneOverride[picked.ashkol] ?? picked.done) ? " · בוצע" : ""}
+                </p>
+              )}
+              {(doneOverride[picked.ashkol] ?? picked.done) &&
+                !(picked.linked || linkedOverride.has(picked.ashkol)) && (
+                  <p className="link-success-note">אשכול בוצע</p>
+                )}
             </>
           ) : (
             <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LinksNav } from "@/components/LinksNav";
+import { matchesSearch } from "@/lib/text-search";
 
 type LinkedCluster = {
   ashkol: string;
@@ -10,6 +11,9 @@ type LinkedCluster = {
   right_pct: number;
   turnout_pct: number;
   bzb: number;
+  street_total?: number;
+  street_done?: number;
+  done?: boolean;
 };
 
 type Institution = {
@@ -17,12 +21,27 @@ type Institution = {
   name: string;
   kind: string | null;
   settlement_name: string | null;
+  contacts?: { full_name?: string; phone?: string }[] | string;
   linked_clusters?: LinkedCluster[] | string;
 };
 
 function parseClusters(value: LinkedCluster[] | string | undefined): LinkedCluster[] {
   if (!value) return [];
   if (typeof value === "string") return JSON.parse(value) as LinkedCluster[];
+  return value;
+}
+
+function parseContacts(
+  value: Institution["contacts"],
+): { full_name?: string; phone?: string }[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as { full_name?: string; phone?: string }[];
+    } catch {
+      return [];
+    }
+  }
   return value;
 }
 
@@ -33,10 +52,12 @@ export default function InstitutionClustersLinksPage() {
   const [ashkolDraft, setAshkolDraft] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
+  const [flashId, setFlashId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    setLoading(true);
+  async function load(opts?: { quiet?: boolean }) {
+    if (!opts?.quiet) setLoading(true);
     const [meRes, instRes] = await Promise.all([
       fetch("/api/auth/me"),
       fetch("/api/institutions"),
@@ -49,6 +70,7 @@ export default function InstitutionClustersLinksPage() {
     }
     const data = await instRes.json();
     if (!instRes.ok) {
+      setMsgKind("err");
       setMsg(data.error || "אין הרשאה");
       setInstitutions([]);
       setLoading(false);
@@ -70,11 +92,11 @@ export default function InstitutionClustersLinksPage() {
   async function linkAshkol(institutionId: number) {
     const ashkol = (ashkolDraft[institutionId] ?? "").trim();
     if (!ashkol) {
+      setMsgKind("err");
       setMsg("הזינו מספר אשכול");
       return;
     }
     setBusyId(institutionId);
-    setMsg(null);
     try {
       const res = await fetch(`/api/institutions/${institutionId}/clusters`, {
         method: "POST",
@@ -83,12 +105,18 @@ export default function InstitutionClustersLinksPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        setMsgKind("err");
         setMsg(data.error || "שגיאה בקישור");
         return;
       }
+      const instName =
+        institutions.find((i) => i.id === institutionId)?.name ?? "המוסד";
       setAshkolDraft((p) => ({ ...p, [institutionId]: "" }));
-      setMsg(`אשכול ${ashkol} קושר למוסד`);
-      await load();
+      setMsgKind("ok");
+      setMsg(`✓ הקישור הצליח — אשכול ${ashkol} קושר ל«${instName}»`);
+      setFlashId(institutionId);
+      window.setTimeout(() => setFlashId((id) => (id === institutionId ? null : id)), 4000);
+      await load({ quiet: true });
     } finally {
       setBusyId(null);
     }
@@ -96,7 +124,6 @@ export default function InstitutionClustersLinksPage() {
 
   async function unlinkAshkol(institutionId: number, ashkol: string) {
     setBusyId(institutionId);
-    setMsg(null);
     try {
       const res = await fetch(
         `/api/institutions/${institutionId}/clusters?ashkol=${encodeURIComponent(ashkol)}`,
@@ -104,25 +131,36 @@ export default function InstitutionClustersLinksPage() {
       );
       const data = await res.json();
       if (!res.ok) {
+        setMsgKind("err");
         setMsg(data.error || "שגיאה בהסרה");
         return;
       }
-      setMsg(`אשכול ${ashkol} הוסר`);
-      await load();
+      setMsgKind("ok");
+      setMsg(`אשכול ${ashkol} הוסר מהמוסד`);
+      await load({ quiet: true });
     } finally {
       setBusyId(null);
     }
   }
 
-  const filtered = institutions.filter((i) => {
+  const filtered = useMemo(() => {
     const needle = q.trim();
-    if (!needle) return true;
-    const clusters = (i.linked_clusters as LinkedCluster[]) ?? [];
-    const hay = [i.name, i.kind, i.settlement_name, ...clusters.map((c) => c.ashkol)]
-      .filter(Boolean)
-      .join(" ");
-    return hay.includes(needle);
-  });
+    if (!needle) return institutions;
+    return institutions.filter((i) => {
+      const clusters = (i.linked_clusters as LinkedCluster[]) ?? [];
+      const contacts = parseContacts(i.contacts);
+      const hay = [
+        i.name,
+        i.kind,
+        i.settlement_name,
+        ...clusters.map((c) => `${c.ashkol} ${c.settlement_name}`),
+        ...contacts.map((c) => `${c.full_name ?? ""} ${c.phone ?? ""}`),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return matchesSearch(hay, needle);
+    });
+  }, [institutions, q]);
 
   return (
     <main>
@@ -132,29 +170,40 @@ export default function InstitutionClustersLinksPage() {
             <p className="eyebrow">קישורים</p>
             <h1>מוסד ↔ אשכולות</h1>
             <p className="lede">
-              הוסיפו או הסירו אשכולות ממוסד. אחרי הקישור — בטבלת הרכז לחיצה על האשכול
-              מציגה אותו במפה.
+              חפשו לפי כל חלק משם המוסד, יישוב או אשכול. אחרי קישור מוצלח תופיע הודעת
+              אישור, ואשכולות שבוצעו מסומנים.
             </p>
           </div>
         </header>
         <LinksNav />
         {loading && <p className="lede">טוען…</p>}
-        {!loading && msg && <p className="form-msg">{msg}</p>}
+        {msg && (
+          <p className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}>
+            {msg}
+          </p>
+        )}
         {!loading && (
           <label className="panel-form" style={{ display: "block" }}>
-            סינון
+            חיפוש מוסד
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="שם מוסד, יישוב, אשכול…"
+              placeholder="כל חלק מהשם, יישוב, איש קשר או אשכול…"
+              autoComplete="off"
             />
           </label>
+        )}
+        {!loading && filtered.length === 0 && (
+          <p className="lede">אין מוסדות התואמים לחיפוש</p>
         )}
         {!loading &&
           filtered.map((inst) => {
             const clusters = (inst.linked_clusters as LinkedCluster[]) ?? [];
             return (
-              <section key={inst.id} className="panel-form links-panel">
+              <section
+                key={inst.id}
+                className={`panel-form links-panel${flashId === inst.id ? " links-panel-flash" : ""}`}
+              >
                 <div className="links-panel-head">
                   <h2>{inst.name}</h2>
                   <p className="lede">
@@ -170,6 +219,12 @@ export default function InstitutionClustersLinksPage() {
                       setAshkolDraft((p) => ({ ...p, [inst.id]: e.target.value }))
                     }
                     disabled={busyId === inst.id}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void linkAshkol(inst.id);
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -194,6 +249,7 @@ export default function InstitutionClustersLinksPage() {
                           <th>% ימין</th>
                           <th>הצבעה</th>
                           <th>בז״ב</th>
+                          <th>סטטוס</th>
                           <th></th>
                         </tr>
                       </thead>
@@ -205,6 +261,17 @@ export default function InstitutionClustersLinksPage() {
                             <td>{Number(c.right_pct).toFixed(1)}</td>
                             <td>{Number(c.turnout_pct).toFixed(1)}</td>
                             <td>{c.bzb}</td>
+                            <td>
+                              {c.done ? (
+                                <span className="status-pill status-done">בוצע</span>
+                              ) : (c.street_total ?? 0) > 0 ? (
+                                <span className="status-pill status-open">
+                                  {c.street_done ?? 0}/{c.street_total} רחובות
+                                </span>
+                              ) : (
+                                <span className="status-pill status-open">מקושר</span>
+                              )}
+                            </td>
                             <td>
                               <button
                                 type="button"
