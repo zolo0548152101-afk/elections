@@ -474,13 +474,35 @@ tbody tr.cluster-row-selected:hover {
   color: #9a3412;
 }
 
-.cluster-link-search {
-  flex-wrap: wrap;
+.cluster-link-block {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
 }
 
-.cluster-link-search input[type="search"] {
-  flex: 1 1 100%;
+.cluster-link-combo {
+  position: relative;
+  align-items: flex-end;
+}
+
+.inst-combo {
+  position: relative;
+  flex: 1 1 220px;
   min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.inst-combo input {
+  width: 100%;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.inst-hits {
+  max-height: 240px;
 }
 
 .link-success-note {
@@ -488,6 +510,7 @@ tbody tr.cluster-row-selected:hover {
   font-size: 0.85rem;
   font-weight: 600;
   color: #14532d;
+  grid-column: 1 / -1;
 }
 
 .password-field {

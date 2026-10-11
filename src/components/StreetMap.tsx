@@ -43,7 +43,34 @@ type MeUser = {
   institution_id: number | null;
 };
 
-type Institution = { id: number; name: string };
+type Institution = {
+  id: number;
+  name: string;
+  settlement_name?: string | null;
+  linked_clusters?: { ashkol: string }[] | string;
+};
+type PickableCoordinator = {
+  id: number;
+  full_name: string;
+  email: string;
+  institution_id: number | null;
+};
+
+function institutionOptionLabel(inst: Institution): string {
+  let ashkols: string[] = [];
+  const raw = inst.linked_clusters;
+  if (Array.isArray(raw)) ashkols = raw.map((c) => String(c.ashkol)).filter(Boolean);
+  else if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw) as { ashkol: string }[];
+      if (Array.isArray(parsed)) ashkols = parsed.map((c) => String(c.ashkol)).filter(Boolean);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (ashkols.length === 0) return inst.name;
+  return `${inst.name} · אשכול ${ashkols.slice(0, 3).join(", ")}`;
+}
 
 type MapFocus = { lat: number; lng: number };
 
@@ -163,13 +190,23 @@ export function StreetMap({
   const [assignId, setAssignId] = useState("");
   const [me, setMe] = useState<MeUser | null>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [availableCoordinators, setAvailableCoordinators] = useState<
+    PickableCoordinator[]
+  >([]);
   const [linkInstitutionId, setLinkInstitutionId] = useState("");
   const [instQuery, setInstQuery] = useState("");
+  const [instHitsOpen, setInstHitsOpen] = useState(false);
+  const [activeInstHit, setActiveInstHit] = useState(0);
+  const [linkCoordId, setLinkCoordId] = useState("");
+  const [linkedInstitutionByAshkol, setLinkedInstitutionByAshkol] = useState<
+    Record<string, number>
+  >({});
   const [linkedOverride, setLinkedOverride] = useState<Set<string>>(() => new Set());
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
   const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
+  const instComboRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -187,14 +224,31 @@ export function StreetMap({
       .then((data) => {
         const list = (data.institutions ?? []) as Institution[];
         setInstitutions(list);
+        setAvailableCoordinators(
+          (data.available_coordinators ?? []) as PickableCoordinator[],
+        );
         if (me.role === "coordinator") {
           const preferred =
             list.find((i) => i.id === me.institution_id)?.id ?? list[0]?.id;
-          if (preferred) setLinkInstitutionId(String(preferred));
+          if (preferred) {
+            setLinkInstitutionId(String(preferred));
+            const inst = list.find((i) => i.id === preferred);
+            if (inst) setInstQuery(inst.name);
+          }
         }
       })
       .catch(() => {});
   }, [me]);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!instComboRef.current?.contains(e.target as Node)) {
+        setInstHitsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
   async function loadStreetAssign(streetId: string) {
     const res = await fetch(`/api/streets/${encodeURIComponent(streetId)}/coordinators`);
@@ -736,7 +790,7 @@ export function StreetMap({
     if (!picked) return;
     const institutionId = Number(linkInstitutionId) || me?.institution_id;
     if (!institutionId) {
-      setStatus("בחרו מוסד לקישור האשכול");
+      setStatus("בחרו מוסד מהרשימה לקישור האשכול");
       return;
     }
     const instName =
@@ -752,10 +806,47 @@ export function StreetMap({
       setStatus(data.error || "שגיאה בקישור אשכול");
       return;
     }
-    setStatus(`✓ הקישור הצליח — אשכול ${picked.ashkol} קושר ל«${instName}»`);
+    setStatus(`✓ הקישור הצליח — אשכול ${picked.ashkol} קושר ל«${instName}». אפשר לקשר רכז למוסד.`);
     setPicked({ ...picked, linked: true });
     setLinkedOverride((prev) => new Set(prev).add(picked.ashkol));
+    setLinkedInstitutionByAshkol((prev) => ({
+      ...prev,
+      [picked.ashkol]: institutionId,
+    }));
+    setLinkCoordId("");
+    setInstHitsOpen(false);
     refreshStreetTiles();
+  }
+
+  async function linkCoordinatorToInstitution() {
+    const ashkol = picked?.ashkol;
+    const institutionId =
+      (ashkol ? linkedInstitutionByAshkol[ashkol] : undefined) ||
+      Number(linkInstitutionId) ||
+      me?.institution_id;
+    const userId = Number(linkCoordId);
+    if (!institutionId || !Number.isInteger(userId)) {
+      setStatus("בחרו רכז לקישור למוסד");
+      return;
+    }
+    const coord = availableCoordinators.find((c) => c.id === userId);
+    const instName =
+      institutions.find((i) => i.id === institutionId)?.name ?? "המוסד";
+    setStatus("מקשר רכז למוסד…");
+    const res = await fetch(`/api/institutions/${institutionId}/coordinators`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.error || "שגיאה בקישור רכז");
+      return;
+    }
+    setStatus(
+      `✓ הרכז ${coord?.full_name ?? ""} קושר ל«${instName}»`,
+    );
+    setLinkCoordId("");
   }
 
   async function markClusterStreets(done: boolean) {
@@ -795,14 +886,53 @@ export function StreetMap({
   const canLinkCluster =
     me && (me.role === "super_admin" || me.role === "area_manager");
 
-  const filteredInstitutions = (() => {
-    const matched = institutions.filter((i) => matchesSearch(i.name, instQuery));
-    const selected = institutions.find((i) => String(i.id) === linkInstitutionId);
-    if (selected && !matched.some((i) => i.id === selected.id)) {
-      return [selected, ...matched];
+  const filteredInstitutions = institutions
+    .filter((i) => {
+      if (!instQuery.trim()) return true;
+      const hay = `${i.name} ${i.settlement_name ?? ""} ${institutionOptionLabel(i)}`;
+      return matchesSearch(hay, instQuery);
+    })
+    .slice(0, 40);
+
+  const selectedInstitution =
+    institutions.find((i) => String(i.id) === linkInstitutionId) ?? null;
+
+  const linkedInstIdForPicked = picked
+    ? linkedInstitutionByAshkol[picked.ashkol] ??
+      (Number(linkInstitutionId) || null)
+    : null;
+
+  const showCoordLink =
+    Boolean(canLinkCluster && picked && linkedInstIdForPicked);
+
+  function pickInstitution(inst: Institution) {
+    setLinkInstitutionId(String(inst.id));
+    setInstQuery(inst.name);
+    setInstHitsOpen(false);
+    setActiveInstHit(0);
+  }
+
+  function onInstKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!instHitsOpen || filteredInstitutions.length === 0) {
+      if (e.key === "Escape") setInstHitsOpen(false);
+      return;
     }
-    return matched;
-  })();
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveInstHit((i) => (i + 1) % filteredInstitutions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveInstHit(
+        (i) => (i - 1 + filteredInstitutions.length) % filteredInstitutions.length,
+      );
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const hit = filteredInstitutions[activeInstHit];
+      if (hit) pickInstitution(hit);
+    } else if (e.key === "Escape") {
+      setInstHitsOpen(false);
+    }
+  }
 
   function activateHit(index: number) {
     const item = hitItems[index];
@@ -1028,43 +1158,95 @@ export function StreetMap({
                 <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
               </div>
               {canLinkCluster && (
-                <div className="cluster-link-row cluster-link-search">
-                  {(me?.role === "super_admin" || me?.role === "area_manager") && (
-                    <>
+                <div className="cluster-link-block">
+                  <div className="cluster-link-row cluster-link-combo" ref={instComboRef}>
+                    <label className="inst-combo">
+                      מוסד לקישור
                       <input
                         type="search"
                         value={instQuery}
-                        onChange={(e) => setInstQuery(e.target.value)}
-                        placeholder="חיפוש מוסד (כל חלק מהשם)…"
+                        onChange={(e) => {
+                          setInstQuery(e.target.value);
+                          setLinkInstitutionId("");
+                          setInstHitsOpen(true);
+                          setActiveInstHit(0);
+                        }}
+                        onFocus={() => setInstHitsOpen(true)}
+                        onKeyDown={onInstKeyDown}
+                        placeholder="הקלידו שם מוסד…"
                         autoComplete="off"
+                        role="combobox"
+                        aria-expanded={instHitsOpen}
+                        aria-autocomplete="list"
                       />
-                      <select
-                        value={linkInstitutionId}
-                        onChange={(e) => setLinkInstitutionId(e.target.value)}
-                      >
-                        <option value="">מוסד לקישור</option>
-                        {filteredInstitutions.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.name}
-                          </option>
-                        ))}
-                      </select>
-                    </>
+                      {instHitsOpen && (
+                        <ul className="search-hits inst-hits" role="listbox">
+                          {filteredInstitutions.length === 0 ? (
+                            <li className="search-hint">אין מוסדות תואמים</li>
+                          ) : (
+                            filteredInstitutions.map((inst, idx) => (
+                              <li key={inst.id} role="option">
+                                <button
+                                  type="button"
+                                  className={idx === activeInstHit ? "active" : undefined}
+                                  onMouseEnter={() => setActiveInstHit(idx)}
+                                  onClick={() => pickInstitution(inst)}
+                                >
+                                  {institutionOptionLabel(inst)}
+                                </button>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      )}
+                    </label>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!linkInstitutionId && !me?.institution_id}
+                      onClick={() => void linkClusterToInstitution()}
+                    >
+                      קשר למוסד
+                    </button>
+                  </div>
+                  {selectedInstitution && (
+                    <p className="lede" style={{ margin: 0, fontSize: "0.85rem" }}>
+                      נבחר: {institutionOptionLabel(selectedInstitution)}
+                    </p>
                   )}
-                  <button
-                    type="button"
-                    className="export"
-                    onClick={() => void linkClusterToInstitution()}
-                  >
-                    קשר למוסד
-                  </button>
                 </div>
               )}
               {(picked.linked || linkedOverride.has(picked.ashkol)) && (
                 <p className="link-success-note">
                   מקושר למוסד
+                  {linkedInstIdForPicked
+                    ? ` «${institutions.find((i) => i.id === linkedInstIdForPicked)?.name ?? ""}»`
+                    : ""}
                   {(doneOverride[picked.ashkol] ?? picked.done) ? " · בוצע" : ""}
                 </p>
+              )}
+              {showCoordLink && (
+                <div className="cluster-link-row assign-add">
+                  <select
+                    value={linkCoordId}
+                    onChange={(e) => setLinkCoordId(e.target.value)}
+                  >
+                    <option value="">קשר רכז למוסד…</option>
+                    {availableCoordinators.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.full_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="export"
+                    disabled={!linkCoordId || !linkedInstIdForPicked}
+                    onClick={() => void linkCoordinatorToInstitution()}
+                  >
+                    קשר רכז
+                  </button>
+                </div>
               )}
               {(doneOverride[picked.ashkol] ?? picked.done) &&
                 !(picked.linked || linkedOverride.has(picked.ashkol)) && (
