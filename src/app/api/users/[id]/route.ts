@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { validatePassword } from "@/lib/passwords";
+import { syncPrimaryInstitution } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,7 @@ export async function PATCH(
     password?: string;
     role?: string;
     institution_id?: number | null;
+    institution_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
@@ -77,8 +79,22 @@ export async function PATCH(
   }
 
   let role = body.role ?? target.role;
+  const hasInstitutionIds = Array.isArray(body.institution_ids);
+  const institutionIds = hasInstitutionIds
+    ? [
+        ...new Set(
+          body.institution_ids!
+            .map((n) => Number(n))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : null;
   let institution_id =
-    body.institution_id !== undefined ? body.institution_id : target.institution_id;
+    institutionIds != null
+      ? (institutionIds[0] ?? null)
+      : body.institution_id !== undefined
+        ? body.institution_id
+        : target.institution_id;
   let settlement_name =
     body.settlement_name !== undefined
       ? body.settlement_name?.trim() || null
@@ -164,14 +180,29 @@ export async function PATCH(
       `;
     }
 
-    // Users form still has a single institution picker — ensure join table stays in sync
-    // when that primary value is set (additive; does not wipe other m2m links).
-    if (role === "coordinator" && institution_id) {
+    if (role === "coordinator" && institutionIds != null) {
+      await sql`DELETE FROM institution_coordinators WHERE user_id = ${id}`;
+      for (const institutionId of institutionIds) {
+        await sql`
+          INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+          VALUES (${institutionId}, ${id}, ${user!.id})
+          ON CONFLICT DO NOTHING
+        `;
+      }
+      const primary = await syncPrimaryInstitution(sql, id);
+      if (row) row.institution_id = primary;
+    } else if (role === "coordinator" && body.institution_id !== undefined && institution_id) {
+      // Legacy single-id add (does not clear other links).
       await sql`
         INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
         VALUES (${institution_id}, ${id}, ${user!.id})
         ON CONFLICT DO NOTHING
       `;
+      await syncPrimaryInstitution(sql, id);
+    } else if (role !== "coordinator") {
+      await sql`DELETE FROM institution_coordinators WHERE user_id = ${id}`;
+      await sql`UPDATE users SET institution_id = NULL WHERE id = ${id}`;
+      if (row) row.institution_id = null;
     }
 
     return NextResponse.json({ user: row });

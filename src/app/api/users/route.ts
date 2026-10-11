@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, hashPassword, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { validatePassword } from "@/lib/passwords";
+import { syncPrimaryInstitution } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,16 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                i.name
-             ) AS institution_names
+             ) AS institution_names,
+             coalesce(
+               (
+                 SELECT json_agg(link.institution_id ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               '[]'
+             ) AS institution_ids
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       LEFT JOIN users m ON m.id = u.manager_id
@@ -46,7 +56,16 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                i.name
-             ) AS institution_names
+             ) AS institution_names,
+             coalesce(
+               (
+                 SELECT json_agg(link.institution_id ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               '[]'
+             ) AS institution_ids
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.manager_id = ${user.id}
@@ -73,6 +92,7 @@ export async function POST(req: NextRequest) {
     password?: string;
     role?: string;
     institution_id?: number | null;
+    institution_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
@@ -82,7 +102,11 @@ export async function POST(req: NextRequest) {
   const password = body.password ?? "";
   const mobile = body.mobile?.trim() ?? "";
   let role = body.role ?? "coordinator";
-  let institution_id = body.institution_id ?? null;
+  const institutionIds = normalizeInstitutionIds(
+    body.institution_ids,
+    body.institution_id,
+  );
+  let institution_id = institutionIds[0] ?? body.institution_id ?? null;
   let settlement_name = body.settlement_name?.trim() || null;
   let manager_id = body.manager_id ?? null;
 
@@ -128,12 +152,12 @@ export async function POST(req: NextRequest) {
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
                 settlement_name
     `) as { id: number; institution_id: number | null }[];
-    if (row && role === "coordinator" && institution_id) {
-      await sql`
-        INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
-        VALUES (${institution_id}, ${row.id}, ${user!.id})
-        ON CONFLICT DO NOTHING
-      `;
+    if (row && role === "coordinator") {
+      await replaceUserInstitutions(sql, row.id, user!.id, institutionIds);
+      const primary = await syncPrimaryInstitution(sql, row.id);
+      return NextResponse.json({
+        user: { ...row, institution_id: primary },
+      });
     }
     return NextResponse.json({ user: row });
   } catch (e) {
@@ -142,5 +166,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "אימייל כבר קיים" }, { status: 409 });
     }
     throw e;
+  }
+}
+
+function normalizeInstitutionIds(
+  ids: number[] | undefined,
+  legacy: number | null | undefined,
+): number[] {
+  const fromArray = (ids ?? [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (fromArray.length > 0) return [...new Set(fromArray)];
+  if (legacy != null && Number.isInteger(Number(legacy)) && Number(legacy) > 0) {
+    return [Number(legacy)];
+  }
+  return [];
+}
+
+async function replaceUserInstitutions(
+  sql: ReturnType<typeof getSql>,
+  userId: number,
+  actorId: number,
+  institutionIds: number[],
+) {
+  await sql`DELETE FROM institution_coordinators WHERE user_id = ${userId}`;
+  for (const institutionId of institutionIds) {
+    await sql`
+      INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+      VALUES (${institutionId}, ${userId}, ${actorId})
+      ON CONFLICT DO NOTHING
+    `;
   }
 }

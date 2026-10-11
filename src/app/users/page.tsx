@@ -13,6 +13,7 @@ type UserRow = {
   institution_id: number | null;
   institution_name?: string;
   institution_names?: string | null;
+  institution_ids?: number[] | string;
   manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
@@ -24,10 +25,23 @@ const emptyForm = {
   email: "",
   password: "",
   role: "coordinator",
-  institution_id: "",
+  institution_ids: [] as number[],
   settlement_name: "",
   manager_id: "",
 };
+
+function parseIds(value: number[] | string | undefined, fallback?: number | null) {
+  if (Array.isArray(value)) return value.map(Number).filter((n) => Number.isInteger(n));
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as number[];
+      if (Array.isArray(parsed)) return parsed.map(Number).filter((n) => Number.isInteger(n));
+    } catch {
+      /* ignore */
+    }
+  }
+  return fallback ? [fallback] : [];
+}
 
 const roleHe: Record<string, string> = {
   super_admin: "מנהל",
@@ -48,6 +62,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [addInstitutionId, setAddInstitutionId] = useState("");
 
   async function load() {
     const [u, me] = await Promise.all([
@@ -77,6 +92,7 @@ export default function UsersPage() {
     setForm(emptyForm);
     setEditId(null);
     setShowPassword(false);
+    setAddInstitutionId("");
   }
 
   function startEdit(u: UserRow) {
@@ -87,13 +103,28 @@ export default function UsersPage() {
       email: u.email,
       password: "",
       role: u.role,
-      institution_id: u.institution_id ? String(u.institution_id) : "",
+      institution_ids: parseIds(u.institution_ids, u.institution_id),
       settlement_name: u.settlement_name ?? "",
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
+    setAddInstitutionId("");
     setShowPassword(false);
     setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function addInstitution() {
+    const id = Number(addInstitutionId);
+    if (!Number.isInteger(id) || form.institution_ids.includes(id)) return;
+    setForm({ ...form, institution_ids: [...form.institution_ids, id] });
+    setAddInstitutionId("");
+  }
+
+  function removeInstitution(id: number) {
+    setForm({
+      ...form,
+      institution_ids: form.institution_ids.filter((x) => x !== id),
+    });
   }
 
   async function saveUser(e: React.FormEvent) {
@@ -116,7 +147,9 @@ export default function UsersPage() {
       mobile: form.mobile,
       email: form.email,
       role,
-      institution_id: form.institution_id ? Number(form.institution_id) : null,
+      institution_ids: role === "coordinator" ? form.institution_ids : [],
+      institution_id:
+        role === "coordinator" ? (form.institution_ids[0] ?? null) : null,
       settlement_name: form.settlement_name.trim() || null,
       manager_id:
         role === "coordinator" && form.manager_id
@@ -294,22 +327,57 @@ export default function UsersPage() {
                   </select>
                 </label>
               )}
-              <label className="field-wide">
-                מוסד
-                <select
-                  value={form.institution_id}
-                  onChange={(e) =>
-                    setForm({ ...form, institution_id: e.target.value })
-                  }
-                >
-                  <option value="">—</option>
-                  {institutions.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {(form.role === "coordinator" || meRole === "area_manager") && (
+                <div className="field-wide institution-multi">
+                  <span className="field-label">מוסדות</span>
+                  {form.institution_ids.length === 0 ? (
+                    <p className="lede" style={{ margin: "0.35rem 0" }}>
+                      אין מוסדות משויכים
+                    </p>
+                  ) : (
+                    <ul className="coord-link-list">
+                      {form.institution_ids.map((id) => {
+                        const inst = institutions.find((i) => i.id === id);
+                        return (
+                          <li key={id}>
+                            <span>{inst?.name ?? `מוסד #${id}`}</span>
+                            <button
+                              type="button"
+                              className="linkish"
+                              onClick={() => removeInstitution(id)}
+                            >
+                              הסר
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
+                    <select
+                      value={addInstitutionId}
+                      onChange={(e) => setAddInstitutionId(e.target.value)}
+                    >
+                      <option value="">הוספת מוסד…</option>
+                      {institutions
+                        .filter((i) => !form.institution_ids.includes(i.id))
+                        .map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.name}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!addInstitutionId}
+                      onClick={addInstitution}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+                </div>
+              )}
               {showSettlement && (
                 <label className="field-wide">
                   יישוב (לרכז){form.role === "coordinator" ? " *" : ""}
