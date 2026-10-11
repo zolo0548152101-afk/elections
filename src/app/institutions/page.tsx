@@ -51,10 +51,15 @@ export default function InstitutionsPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [kind, setKind] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [createCoordId, setCreateCoordId] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  /** "" = all, linked = has coordinator, unlinked = אין רכז */
+  const [linkFilter, setLinkFilter] = useState<"" | "linked" | "unlinked">("");
   const [loading, setLoading] = useState(true);
   const [linkPick, setLinkPick] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -103,7 +108,13 @@ export default function InstitutionsPage() {
     const res = await fetch("/api/institutions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, kind: kind || null }),
+      body: JSON.stringify({
+        name,
+        kind: kind || null,
+        contact_name: contactName.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        coordinator_user_id: createCoordId ? Number(createCoordId) : null,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -112,6 +123,9 @@ export default function InstitutionsPage() {
     }
     setName("");
     setKind("");
+    setContactName("");
+    setContactPhone("");
+    setCreateCoordId("");
     setMsg("נוסף");
     void load();
   }
@@ -164,9 +178,12 @@ export default function InstitutionsPage() {
   }
 
   const filtered = institutions.filter((i) => {
+    const coords = (i.coordinators as Coord[]) ?? [];
+    const hasCoord = coords.length > 0;
+    if (linkFilter === "linked" && !hasCoord) return false;
+    if (linkFilter === "unlinked" && hasCoord) return false;
     const needle = q.trim();
     if (!needle) return true;
-    const coords = (i.coordinators as Coord[]) ?? [];
     const hay = [
       i.name,
       i.kind,
@@ -291,19 +308,67 @@ export default function InstitutionsPage() {
                     ))}
                   </select>
                 </label>
+                <label>
+                  איש קשר
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="שם"
+                  />
+                </label>
+                <label>
+                  נייד
+                  <input
+                    dir="ltr"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="05…"
+                    inputMode="tel"
+                  />
+                </label>
+                <label className="field-wide">
+                  קישור רכז
+                  <select
+                    value={createCoordId}
+                    onChange={(e) => setCreateCoordId(e.target.value)}
+                  >
+                    <option value="">ללא — ניתן לשייך אחר כך</option>
+                    {availableCoords.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.full_name}
+                        {c.institution_id ? " (+ מוסדות אחרים)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <button type="submit" className="export">
                 הוספה
               </button>
             </form>
-            <label className="panel-form" style={{ display: "block" }}>
-              סינון
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="שם, יישוב, מחוז, רכז…"
-              />
-            </label>
+            <div className="panel-form users-filters">
+              <label>
+                סינון
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="שם, יישוב, מחוז, רכז…"
+                />
+              </label>
+              <label>
+                קישור רכז
+                <select
+                  value={linkFilter}
+                  onChange={(e) =>
+                    setLinkFilter(e.target.value as "" | "linked" | "unlinked")
+                  }
+                >
+                  <option value="">הכל</option>
+                  <option value="linked">קושר</option>
+                  <option value="unlinked">לא קושר</option>
+                </select>
+              </label>
+            </div>
           </>
         )}
 

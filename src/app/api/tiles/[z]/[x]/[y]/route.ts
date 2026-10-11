@@ -47,7 +47,11 @@ export async function GET(
     vis.active
       ? await sql`
           SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
-                 COALESCE(m.done, false) AS done
+                 COALESCE(m.done, false) AS done,
+                 EXISTS (
+                   SELECT 1 FROM institution_clusters ic
+                   WHERE ic.ashkol = s.ashkol
+                 ) AS linked
           FROM streets s
           LEFT JOIN street_marks m
             ON m.street_id = s.id AND m.user_id = ${user.id}
@@ -59,7 +63,11 @@ export async function GET(
         `
       : await sql`
           SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
-                 COALESCE(m.done, false) AS done
+                 COALESCE(m.done, false) AS done,
+                 EXISTS (
+                   SELECT 1 FROM institution_clusters ic
+                   WHERE ic.ashkol = s.ashkol
+                 ) AS linked
           FROM streets s
           LEFT JOIN street_marks m
             ON m.street_id = s.id AND m.user_id = ${user.id}
@@ -68,7 +76,9 @@ export async function GET(
           ORDER BY s.id
           LIMIT ${limit}
         `
-  ) as Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done">[];
+  ) as (Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done"> & {
+    linked: boolean;
+  })[];
 
   const fc = {
     type: "FeatureCollection" as const,
@@ -79,6 +89,7 @@ export async function GET(
         name_he: s.name_he,
         ashkol: s.ashkol ?? "",
         done: s.done ? 1 : 0,
+        linked: s.linked ? 1 : 0,
       },
       geometry: JSON.parse(s.geom_geojson),
     })),

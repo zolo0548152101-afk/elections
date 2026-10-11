@@ -6,7 +6,10 @@ import {
   type SessionUser,
 } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
 import { validatePassword } from "@/lib/passwords";
+import { syncPrimaryInstitution } from "@/lib/streets-access";
+import { replaceAreaManagerCoordinators } from "@/lib/user-links";
 
 export const runtime = "nodejs";
 
@@ -63,22 +66,49 @@ export async function PATCH(
     password?: string;
     role?: string;
     institution_id?: number | null;
+    institution_ids?: number[];
+    coordinator_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
 
   const full_name = body.full_name?.trim() ?? "";
-  const email = body.email?.trim().toLowerCase() ?? "";
-  const mobile = body.mobile?.trim() ?? "";
+  let email = body.email?.trim().toLowerCase() ?? "";
+  const mobileNorm = normalizeMobileLocal(body.mobile ?? "");
   const password = body.password?.trim() ?? "";
 
-  if (!full_name || !email) {
-    return NextResponse.json({ error: "שם ואימייל חובה" }, { status: 400 });
+  if (!full_name || !mobileNorm) {
+    return NextResponse.json({ error: "שם ונייד חובה" }, { status: 400 });
   }
+  if (!email) email = `${mobileNorm}@users.local`;
 
   let role = body.role ?? target.role;
+  const hasInstitutionIds = Array.isArray(body.institution_ids);
+  const institutionIds = hasInstitutionIds
+    ? [
+        ...new Set(
+          body.institution_ids!
+            .map((n) => Number(n))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : null;
+  const hasCoordinatorIds = Array.isArray(body.coordinator_ids);
+  const coordinatorIds = hasCoordinatorIds
+    ? [
+        ...new Set(
+          body.coordinator_ids!
+            .map((n) => Number(n))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : null;
   let institution_id =
-    body.institution_id !== undefined ? body.institution_id : target.institution_id;
+    institutionIds != null
+      ? (institutionIds[0] ?? null)
+      : body.institution_id !== undefined
+        ? body.institution_id
+        : target.institution_id;
   let settlement_name =
     body.settlement_name !== undefined
       ? body.settlement_name?.trim() || null
@@ -95,10 +125,6 @@ export async function PATCH(
     return NextResponse.json({ error: "תפקיד לא חוקי" }, { status: 400 });
   }
 
-  if (role === "coordinator" && !settlement_name) {
-    return NextResponse.json({ error: "לרכז חובה לבחור יישוב" }, { status: 400 });
-  }
-
   const sql = getSql();
 
   if (target.role === "super_admin" && role !== "super_admin") {
@@ -113,21 +139,23 @@ export async function PATCH(
     }
   }
 
-  if (settlement_name) {
-    const [known] = (await sql`
-      SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
-    `) as { name_he: string }[];
-    if (!known) {
-      return NextResponse.json(
-        { error: "יישוב לא נמצא ברשימת היישובים" },
-        { status: 400 },
-      );
-    }
-  }
-
   if (password) {
     const pwErr = validatePassword(password);
     if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
+  }
+
+  const mobileVariants = mobileMatchVariants(mobileNorm);
+  const [dup] = (await sql`
+    SELECT id FROM users
+    WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${mobileVariants})
+      AND id <> ${id}
+    LIMIT 1
+  `) as { id: number }[];
+  if (dup) {
+    return NextResponse.json(
+      { error: "מספר נייד כבר משויך למשתמש אחר" },
+      { status: 409 },
+    );
   }
 
   try {
@@ -137,9 +165,10 @@ export async function PATCH(
       [row] = await sql`
         UPDATE users SET
           full_name = ${full_name},
-          mobile = ${mobile},
+          mobile = ${mobileNorm},
           email = ${email},
           password_hash = ${hash},
+          login_password = ${password},
           role = ${role},
           institution_id = ${institution_id},
           manager_id = ${manager_id},
@@ -152,7 +181,7 @@ export async function PATCH(
       [row] = await sql`
         UPDATE users SET
           full_name = ${full_name},
-          mobile = ${mobile},
+          mobile = ${mobileNorm},
           email = ${email},
           role = ${role},
           institution_id = ${institution_id},
@@ -164,14 +193,36 @@ export async function PATCH(
       `;
     }
 
-    // Users form still has a single institution picker — ensure join table stays in sync
-    // when that primary value is set (additive; does not wipe other m2m links).
-    if (role === "coordinator" && institution_id) {
+    if (role === "coordinator" && institutionIds != null) {
+      await sql`DELETE FROM institution_coordinators WHERE user_id = ${id}`;
+      for (const institutionId of institutionIds) {
+        await sql`
+          INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+          VALUES (${institutionId}, ${id}, ${user!.id})
+          ON CONFLICT DO NOTHING
+        `;
+      }
+      const primary = await syncPrimaryInstitution(sql, id);
+      if (row) row.institution_id = primary;
+    } else if (role === "coordinator" && body.institution_id !== undefined && institution_id) {
+      // Legacy single-id add (does not clear other links).
       await sql`
         INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
         VALUES (${institution_id}, ${id}, ${user!.id})
         ON CONFLICT DO NOTHING
       `;
+      await syncPrimaryInstitution(sql, id);
+    } else if (role !== "coordinator") {
+      await sql`DELETE FROM institution_coordinators WHERE user_id = ${id}`;
+      await sql`UPDATE users SET institution_id = NULL WHERE id = ${id}`;
+      if (row) row.institution_id = null;
+    }
+
+    if (role === "area_manager" && coordinatorIds != null) {
+      await replaceAreaManagerCoordinators(sql, id, coordinatorIds);
+    } else if (role !== "area_manager" && target.role === "area_manager") {
+      // Demoted from area manager — detach former reports.
+      await replaceAreaManagerCoordinators(sql, id, []);
     }
 
     return NextResponse.json({ user: row });

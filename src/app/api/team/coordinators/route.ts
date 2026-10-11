@@ -82,6 +82,15 @@ export async function GET() {
       progress = row ?? progress;
     }
 
+    const clusters = (await sql`
+      SELECT DISTINCT cl.ashkol, cl.settlement_name
+      FROM institution_coordinators link
+      JOIN institution_clusters ic ON ic.institution_id = link.institution_id
+      JOIN clusters cl ON cl.ashkol = ic.ashkol
+      WHERE link.user_id = ${c.id}
+      ORDER BY cl.settlement_name, cl.ashkol
+    `) as { ashkol: string; settlement_name: string }[];
+
     // Ashkols linked to their institutions where every street is marked done by them.
     const doneClusters = (await sql`
       SELECT cl.ashkol, cl.settlement_name,
@@ -113,6 +122,8 @@ export async function GET() {
     out.push({
       ...c,
       institutions,
+      clusters,
+      cluster_count: clusters.length,
       progress: { ...progress, pct },
       done_clusters: doneClusters,
     });

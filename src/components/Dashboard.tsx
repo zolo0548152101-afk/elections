@@ -32,15 +32,22 @@ export function Dashboard() {
   const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedAshkol, setSelectedAshkol] = useState("");
   const [tableFocusToken, setTableFocusToken] = useState(0);
+  const [role, setRole] = useState<string | null>(null);
+
+  const isCoordinator = role === "coordinator";
+  const effectiveMinRight = isCoordinator ? 0 : minRight;
+  const effectiveMaxTurnout = isCoordinator ? 100 : maxTurnout;
+  const effectiveMinBzb = isCoordinator ? 0 : minBzb;
 
   const load = useCallback(async () => {
+    if (role === null) return;
     setLoading(true);
     setError(null);
     try {
       const q = new URLSearchParams({
-        minRight: String(minRight),
-        maxTurnout: String(maxTurnout),
-        minBzb: String(minBzb),
+        minRight: String(effectiveMinRight),
+        maxTurnout: String(effectiveMaxTurnout),
+        minBzb: String(effectiveMinBzb),
         sort,
         dir,
       });
@@ -54,7 +61,7 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [minRight, maxTurnout, minBzb, sort, dir]);
+  }, [role, effectiveMinRight, effectiveMaxTurnout, effectiveMinBzb, sort, dir]);
 
   useEffect(() => {
     const t = setTimeout(load, 150);
@@ -65,11 +72,15 @@ export function Dashboard() {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
+        setRole(d.user?.role ?? "");
         if (d.settlement?.lat != null && d.settlement?.lng != null) {
           setFocus({ lat: Number(d.settlement.lat), lng: Number(d.settlement.lng) });
         }
       })
-      .catch(() => setFocus(null));
+      .catch(() => {
+        setRole("");
+        setFocus(null);
+      });
   }, []);
 
   function onSort(key: SortKey) {
@@ -81,6 +92,8 @@ export function Dashboard() {
   }
 
   const withMap = clusters.filter((c) => c.map_lat != null).length;
+  const linkedCount = clusters.filter((c) => c.linked).length;
+  const doneCount = clusters.filter((c) => c.done).length;
 
   return (
     <div className="dash">
@@ -89,102 +102,113 @@ export function Dashboard() {
           <p className="eyebrow">ניהול יום בחירות</p>
           <h1>אשכולות לפי הצבעה וימין</h1>
           <p className="lede">
-            מפת הרחובות והאשכולות יחד. הסינון (ימין, הצבעה, בז״ב) חל על הנקודות, הטבלה
-            והייצוא. לחצו על נקודה לנתוני הבוחרים ועל קו רחוב לסימון בוצע.
+            {isCoordinator
+              ? "מפת הרחובות והאשכולות של המוסד. לחצו על נקודה לנתוני הבוחרים ועל קו רחוב לסימון בוצע."
+              : "מפת הרחובות והאשכולות יחד. הסינון (ימין, הצבעה, בז״ב) חל על הנקודות, הטבלה והייצוא. לחצו על נקודה לנתוני הבוחרים ועל קו רחוב לסימון בוצע."}
           </p>
         </div>
         <div className="stats">
           <div>
-            <span className="stat-n">{loading ? "…" : count}</span>
-            <span className="stat-l">אשכולות</span>
-          </div>
-          <div>
             <span className="stat-n">{loading ? "…" : withMap}</span>
             <span className="stat-l">על המפה</span>
+          </div>
+          <div>
+            <span className="stat-n">
+              {loading ? "…" : `${linkedCount}/${count || 0}`}
+            </span>
+            <span className="stat-l">תואמו</span>
+          </div>
+          <div>
+            <span className="stat-n">
+              {loading ? "…" : `${doneCount}/${count || 0}`}
+            </span>
+            <span className="stat-l">בוצעו</span>
           </div>
         </div>
       </header>
 
-      <section className="filters">
-        <label>
-          מינימום % ימין
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={minRight}
-            onChange={(e) => setMinRight(Number(e.target.value))}
-          />
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={minRight}
-            onChange={(e) => setMinRight(Number(e.target.value))}
-          />
-        </label>
-        <label>
-          מקסימום % הצבעה
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={maxTurnout}
-            onChange={(e) => setMaxTurnout(Number(e.target.value))}
-          />
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={maxTurnout}
-            onChange={(e) => setMaxTurnout(Number(e.target.value))}
-          />
-        </label>
-        <label>
-          מינימום בז״ב
-          <input
-            type="range"
-            min={0}
-            max={5000}
-            step={50}
-            value={minBzb}
-            onChange={(e) => setMinBzb(Number(e.target.value))}
-          />
-          <input
-            type="number"
-            min={0}
-            step={50}
-            value={minBzb}
-            onChange={(e) => setMinBzb(Number(e.target.value))}
-          />
-        </label>
-        <div className="filter-actions">
-          <button
-            type="button"
-            className="reset"
-            onClick={() => {
-              setMinRight(70);
-              setMaxTurnout(60);
-              setMinBzb(300);
-            }}
-          >
-            ברירת מחדל 70 / 60 / 300
-          </button>
-          <button
-            type="button"
-            className="export"
-            disabled={loading || clusters.length === 0}
-            onClick={() =>
-              downloadClustersCsv(
-                clusters,
-                `ashkolot-yamin${minRight}-turnout${maxTurnout}-bzb${minBzb}.csv`,
-              )
-            }
-          >
-            ייצוא CSV ({loading ? "…" : clusters.length})
-          </button>
-        </div>
-      </section>
+      {role !== null && !isCoordinator && (
+        <section className="filters">
+          <label>
+            מינימום % ימין
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={minRight}
+              onChange={(e) => setMinRight(Number(e.target.value))}
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={minRight}
+              onChange={(e) => setMinRight(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            מקסימום % הצבעה
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={maxTurnout}
+              onChange={(e) => setMaxTurnout(Number(e.target.value))}
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={maxTurnout}
+              onChange={(e) => setMaxTurnout(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            מינימום בז״ב
+            <input
+              type="range"
+              min={0}
+              max={5000}
+              step={50}
+              value={minBzb}
+              onChange={(e) => setMinBzb(Number(e.target.value))}
+            />
+            <input
+              type="number"
+              min={0}
+              step={50}
+              value={minBzb}
+              onChange={(e) => setMinBzb(Number(e.target.value))}
+            />
+          </label>
+          <div className="filter-actions">
+            <button
+              type="button"
+              className="reset"
+              onClick={() => {
+                setMinRight(70);
+                setMaxTurnout(60);
+                setMinBzb(300);
+              }}
+            >
+              ברירת מחדל 70 / 60 / 300
+            </button>
+            <button
+              type="button"
+              className="export"
+              disabled={loading || clusters.length === 0}
+              onClick={() =>
+                downloadClustersCsv(
+                  clusters,
+                  `ashkolot-yamin${minRight}-turnout${maxTurnout}-bzb${minBzb}.csv`,
+                )
+              }
+            >
+              ייצוא CSV ({loading ? "…" : clusters.length})
+            </button>
+          </div>
+        </section>
+      )}
 
       {error && <p className="error">{error}</p>}
       {!loading && !error && count === 0 && (

@@ -3,6 +3,10 @@ import { getSessionUser } from "@/lib/auth";
 import { getSql, type ClusterRow } from "@/lib/db";
 import { offsetWithinSettlement } from "@/lib/geo";
 import { visibleClusterAshkols } from "@/lib/streets-access";
+import {
+  ashkolStreetStatsForUser,
+  linkedAshkolSet,
+} from "@/lib/cluster-status";
 
 export const runtime = "nodejs";
 
@@ -92,12 +96,26 @@ export async function GET(req: NextRequest) {
     return dir === "ASC" ? an - bn : bn - an;
   });
 
+  const linked = await linkedAshkolSet(sql);
+  const doneStats = await ashkolStreetStatsForUser(
+    sql,
+    sorted.map((c) => c.ashkol),
+    user.id,
+  );
+
   const withMap = sorted.map((c) => {
+    const st = doneStats.get(c.ashkol);
+    const status = {
+      linked: linked.has(c.ashkol),
+      done: st?.done ?? false,
+      street_total: st?.street_total ?? 0,
+      street_done: st?.street_done ?? 0,
+    };
     if (c.lat == null || c.lng == null) {
-      return { ...c, map_lat: null, map_lng: null };
+      return { ...c, map_lat: null, map_lng: null, ...status };
     }
     const p = offsetWithinSettlement(c.lat, c.lng, c.ashkol);
-    return { ...c, map_lat: p.lat, map_lng: p.lng };
+    return { ...c, map_lat: p.lat, map_lng: p.lng, ...status };
   });
 
   return NextResponse.json({

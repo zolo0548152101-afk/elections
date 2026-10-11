@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, hashPassword, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
 import { validatePassword } from "@/lib/passwords";
+import { syncPrimaryInstitution } from "@/lib/streets-access";
+import { replaceAreaManagerCoordinators } from "@/lib/user-links";
 
 export const runtime = "nodejs";
 
@@ -24,7 +27,32 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                i.name
-             ) AS institution_names
+             ) AS institution_names,
+             coalesce(
+               (
+                 SELECT json_agg(link.institution_id ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               '[]'
+             ) AS institution_ids,
+             coalesce(
+               (
+                 SELECT string_agg(c.full_name, ' · ' ORDER BY c.full_name)
+                 FROM users c
+                 WHERE c.manager_id = u.id AND c.role = 'coordinator'
+               ),
+               NULL
+             ) AS coordinator_names,
+             coalesce(
+               (
+                 SELECT json_agg(c.id ORDER BY c.full_name)
+                 FROM users c
+                 WHERE c.manager_id = u.id AND c.role = 'coordinator'
+               ),
+               '[]'
+             ) AS coordinator_ids
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       LEFT JOIN users m ON m.id = u.manager_id
@@ -46,7 +74,16 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                i.name
-             ) AS institution_names
+             ) AS institution_names,
+             coalesce(
+               (
+                 SELECT json_agg(link.institution_id ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               '[]'
+             ) AS institution_ids
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.manager_id = ${user.id}
@@ -73,22 +110,30 @@ export async function POST(req: NextRequest) {
     password?: string;
     role?: string;
     institution_id?: number | null;
+    institution_ids?: number[];
+    coordinator_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
 
   const full_name = body.full_name?.trim() ?? "";
-  const email = body.email?.trim().toLowerCase() ?? "";
   const password = body.password ?? "";
-  const mobile = body.mobile?.trim() ?? "";
+  const mobileNorm = normalizeMobileLocal(body.mobile ?? "");
+  let email = body.email?.trim().toLowerCase() ?? "";
   let role = body.role ?? "coordinator";
-  let institution_id = body.institution_id ?? null;
+  const institutionIds = normalizeInstitutionIds(
+    body.institution_ids,
+    body.institution_id,
+  );
+  const coordinatorIds = normalizeIdList(body.coordinator_ids);
+  let institution_id = institutionIds[0] ?? body.institution_id ?? null;
   let settlement_name = body.settlement_name?.trim() || null;
   let manager_id = body.manager_id ?? null;
 
-  if (!full_name || !email || !password) {
-    return NextResponse.json({ error: "שם, אימייל וסיסמה חובה" }, { status: 400 });
+  if (!full_name || !mobileNorm || !password) {
+    return NextResponse.json({ error: "שם, נייד וסיסמה חובה" }, { status: 400 });
   }
+  if (!email) email = `${mobileNorm}@users.local`;
 
   const pwErr = validatePassword(password);
   if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
@@ -102,38 +147,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "תפקיד לא חוקי" }, { status: 400 });
   }
 
-  if (role === "coordinator" && !settlement_name) {
-    return NextResponse.json({ error: "לרכז חובה לבחור יישוב" }, { status: 400 });
+  const sql = getSql();
+  const mobileVariants = mobileMatchVariants(mobileNorm);
+  const [dup] = (await sql`
+    SELECT id FROM users
+    WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${mobileVariants})
+    LIMIT 1
+  `) as { id: number }[];
+  if (dup) {
+    return NextResponse.json(
+      { error: "מספר נייד כבר משויך למשתמש אחר" },
+      { status: 409 },
+    );
   }
 
-  const sql = getSql();
-  if (settlement_name) {
-    const [known] = (await sql`
-      SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
-    `) as { name_he: string }[];
-    if (!known) {
-      return NextResponse.json({ error: "יישוב לא נמצא ברשימת היישובים" }, { status: 400 });
-    }
-  }
+  // settlement_name is optional / legacy; not required for coordinators.
   const hash = hashPassword(password);
   try {
     const [row] = (await sql`
       INSERT INTO users (
-        full_name, mobile, email, password_hash, role,
+        full_name, mobile, email, password_hash, login_password, role,
         institution_id, manager_id, settlement_name
       ) VALUES (
-        ${full_name}, ${mobile}, ${email}, ${hash}, ${role},
+        ${full_name}, ${mobileNorm}, ${email}, ${hash}, ${password}, ${role},
         ${institution_id}, ${manager_id}, ${settlement_name}
       )
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
                 settlement_name
     `) as { id: number; institution_id: number | null }[];
-    if (row && role === "coordinator" && institution_id) {
-      await sql`
-        INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
-        VALUES (${institution_id}, ${row.id}, ${user!.id})
-        ON CONFLICT DO NOTHING
-      `;
+    if (row && role === "coordinator") {
+      await replaceUserInstitutions(sql, row.id, user!.id, institutionIds);
+      const primary = await syncPrimaryInstitution(sql, row.id);
+      return NextResponse.json({
+        user: { ...row, institution_id: primary },
+      });
+    }
+    if (row && role === "area_manager" && Array.isArray(body.coordinator_ids)) {
+      await replaceAreaManagerCoordinators(sql, row.id, coordinatorIds);
     }
     return NextResponse.json({ user: row });
   } catch (e) {
@@ -144,3 +194,42 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 }
+
+function normalizeIdList(ids: number[] | undefined): number[] {
+  return [
+    ...new Set(
+      (ids ?? [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ];
+}
+
+function normalizeInstitutionIds(
+  ids: number[] | undefined,
+  legacy: number | null | undefined,
+): number[] {
+  const fromArray = normalizeIdList(ids);
+  if (fromArray.length > 0) return fromArray;
+  if (legacy != null && Number.isInteger(Number(legacy)) && Number(legacy) > 0) {
+    return [Number(legacy)];
+  }
+  return [];
+}
+
+async function replaceUserInstitutions(
+  sql: ReturnType<typeof getSql>,
+  userId: number,
+  actorId: number,
+  institutionIds: number[],
+) {
+  await sql`DELETE FROM institution_coordinators WHERE user_id = ${userId}`;
+  for (const institutionId of institutionIds) {
+    await sql`
+      INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+      VALUES (${institutionId}, ${userId}, ${actorId})
+      ON CONFLICT DO NOTHING
+    `;
+  }
+}
+

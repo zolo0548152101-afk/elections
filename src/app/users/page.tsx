@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SettlementPicker } from "@/components/SettlementPicker";
+import { useEffect, useMemo, useState } from "react";
+import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
+import { matchesSearch } from "@/lib/text-search";
 
-type Institution = { id: number; name: string };
+type LinkedCluster = { ashkol: string; settlement_name?: string };
+type Institution = {
+  id: number;
+  name: string;
+  settlement_name?: string | null;
+  linked_clusters?: LinkedCluster[] | string;
+};
 type UserRow = {
   id: number;
   full_name: string;
@@ -13,21 +20,82 @@ type UserRow = {
   institution_id: number | null;
   institution_name?: string;
   institution_names?: string | null;
+  institution_ids?: number[] | string;
+  coordinator_ids?: number[] | string;
+  coordinator_names?: string | null;
   manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
 };
 
-const emptyForm = {
-  full_name: "",
-  mobile: "",
-  email: "",
-  password: "",
-  role: "coordinator",
-  institution_id: "",
-  settlement_name: "",
-  manager_id: "",
+type UserForm = {
+  full_name: string;
+  mobile: string;
+  email: string;
+  password: string;
+  role: string;
+  institution_ids: number[];
+  coordinator_ids: number[];
+  manager_id: string;
 };
+
+function freshForm(): UserForm {
+  return {
+    full_name: "",
+    mobile: "",
+    email: "",
+    password: "",
+    role: "coordinator",
+    institution_ids: [],
+    coordinator_ids: [],
+    manager_id: "",
+  };
+}
+
+function parseIds(value: number[] | string | undefined, fallback?: number | null) {
+  if (Array.isArray(value)) {
+    return value.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return fallback != null && Number.isInteger(Number(fallback)) && Number(fallback) > 0
+    ? [Number(fallback)]
+    : [];
+}
+
+function parseClusters(value: LinkedCluster[] | string | undefined): LinkedCluster[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value) as LinkedCluster[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function institutionClusters(inst: Institution | undefined): LinkedCluster[] {
+  if (!inst) return [];
+  return parseClusters(inst.linked_clusters).filter((c) =>
+    String(c.ashkol ?? "").trim(),
+  );
+}
+
+/** e.g. אב"ע אורות מודיעין · 3000381 · מודיעין, 3000376 · כפר סבא */
+function institutionLabel(inst: Institution | undefined, fallbackId?: number): string {
+  if (!inst) return fallbackId ? `מוסד #${fallbackId}` : "—";
+  const labels = formatAshkolLabels(institutionClusters(inst));
+  if (!labels) return inst.name;
+  return `${inst.name} · ${labels}`;
+}
 
 const roleHe: Record<string, string> = {
   super_admin: "מנהל",
@@ -38,16 +106,21 @@ const roleHe: Record<string, string> = {
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
-  const [settlements, setSettlements] = useState<string[]>([]);
   const [meRole, setMeRole] = useState<string>("");
   const [meId, setMeId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<UserForm>(freshForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgKind, setMsgKind] = useState<"ok" | "err" | "info">("info");
   const [saving, setSaving] = useState(false);
+  const [sendingId, setSendingId] = useState<number | null>(null);
+  const [sentOkId, setSentOkId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [addInstitutionId, setAddInstitutionId] = useState("");
+  const [instPickerQ, setInstPickerQ] = useState("");
+  const [addCoordinatorId, setAddCoordinatorId] = useState("");
 
   async function load() {
     const [u, me] = await Promise.all([
@@ -58,14 +131,8 @@ export default function UsersPage() {
     setMeRole(me.user?.role ?? "");
     setMeId(me.user?.id ?? null);
     if (me.user?.role === "super_admin" || me.user?.role === "area_manager") {
-      const [i, s] = await Promise.all([
-        fetch("/api/institutions").then((r) => r.json()),
-        fetch("/api/settlements").then((r) => r.json()),
-      ]);
+      const i = await fetch("/api/institutions").then((r) => r.json());
       setInstitutions(i.institutions ?? []);
-      setSettlements(
-        (s.settlements ?? []).map((row: { name_he: string }) => row.name_he),
-      );
     }
   }
 
@@ -73,10 +140,18 @@ export default function UsersPage() {
     void load();
   }, []);
 
+  function flash(kind: "ok" | "err" | "info", text: string) {
+    setMsgKind(kind);
+    setMsg(text);
+  }
+
   function resetForm() {
-    setForm(emptyForm);
+    setForm(freshForm());
     setEditId(null);
     setShowPassword(false);
+    setAddInstitutionId("");
+    setInstPickerQ("");
+    setAddCoordinatorId("");
   }
 
   function startEdit(u: UserRow) {
@@ -87,13 +162,62 @@ export default function UsersPage() {
       email: u.email,
       password: "",
       role: u.role,
-      institution_id: u.institution_id ? String(u.institution_id) : "",
-      settlement_name: u.settlement_name ?? "",
+      institution_ids: parseIds(u.institution_ids, u.institution_id),
+      coordinator_ids: parseIds(u.coordinator_ids),
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
+    setAddInstitutionId("");
+    setInstPickerQ("");
+    setAddCoordinatorId("");
     setShowPassword(false);
-    setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
+    flash("info", "עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function addInstitution() {
+    const id = Number(addInstitutionId);
+    if (!Number.isInteger(id) || id <= 0) return;
+    setForm((prev) =>
+      prev.institution_ids.includes(id)
+        ? prev
+        : { ...prev, institution_ids: [...prev.institution_ids, id] },
+    );
+    setAddInstitutionId("");
+  }
+
+  function removeInstitution(id: number) {
+    setForm((prev) => ({
+      ...prev,
+      institution_ids: prev.institution_ids.filter((x) => x !== id),
+    }));
+  }
+
+  function addCoordinator() {
+    const id = Number(addCoordinatorId);
+    if (!Number.isInteger(id) || id <= 0) return;
+    setForm((prev) =>
+      prev.coordinator_ids.includes(id)
+        ? prev
+        : { ...prev, coordinator_ids: [...prev.coordinator_ids, id] },
+    );
+    setAddCoordinatorId("");
+  }
+
+  function removeCoordinator(id: number) {
+    setForm((prev) => ({
+      ...prev,
+      coordinator_ids: prev.coordinator_ids.filter((x) => x !== id),
+    }));
+  }
+
+  /** Include dropdown selection even if הוסף wasn't clicked. */
+  function effectiveInstitutionIds(): number[] {
+    const ids = [...form.institution_ids];
+    const pending = Number(addInstitutionId);
+    if (Number.isInteger(pending) && pending > 0 && !ids.includes(pending)) {
+      ids.push(pending);
+    }
+    return ids;
   }
 
   async function saveUser(e: React.FormEvent) {
@@ -101,14 +225,17 @@ export default function UsersPage() {
     setMsg(null);
 
     const role = meRole === "area_manager" ? "coordinator" : form.role;
-    if (role === "coordinator" && !form.settlement_name.trim()) {
-      setMsg("לרכז חובה לבחור יישוב מהרשימה");
+    if (!form.full_name.trim() || !form.mobile.trim()) {
+      flash("err", "שם ונייד חובה");
       return;
     }
     if (!editId && !form.password.trim()) {
-      setMsg("סיסמה חובה");
+      flash("err", "סיסמה חובה");
       return;
     }
+
+    const institutionIds =
+      role === "coordinator" ? effectiveInstitutionIds() : [];
 
     setSaving(true);
     const payload = {
@@ -116,8 +243,10 @@ export default function UsersPage() {
       mobile: form.mobile,
       email: form.email,
       role,
-      institution_id: form.institution_id ? Number(form.institution_id) : null,
-      settlement_name: form.settlement_name.trim() || null,
+      institution_ids: institutionIds,
+      institution_id: institutionIds[0] ?? null,
+      coordinator_ids: role === "area_manager" ? form.coordinator_ids : undefined,
+      settlement_name: null,
       manager_id:
         role === "coordinator" && form.manager_id
           ? Number(form.manager_id)
@@ -133,10 +262,21 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg(data.error || "שגיאה");
+        flash("err", data.error || "שגיאה");
         return;
       }
-      setMsg(editId ? "עודכן בהצלחה" : "נוצר בהצלחה");
+      const savedNames = institutionIds
+        .map((id) => institutions.find((i) => i.id === id)?.name)
+        .filter(Boolean)
+        .join(" · ");
+      flash(
+        "ok",
+        editId
+          ? role === "coordinator"
+            ? `עודכן בהצלחה${savedNames ? ` · מוסדות: ${savedNames}` : " · ללא מוסדות"}`
+            : "עודכן בהצלחה"
+          : "נוצר בהצלחה",
+      );
       resetForm();
       await load();
     } finally {
@@ -146,29 +286,106 @@ export default function UsersPage() {
 
   async function deleteUser(u: UserRow) {
     if (u.id === meId) {
-      setMsg("לא ניתן למחוק את המשתמש המחובר");
+      flash("err", "לא ניתן למחוק את המשתמש המחובר");
       return;
     }
     const ok = window.confirm(
-      `למחוק את ${u.full_name} (${u.email})? הפעולה אינה ניתנת לביטול.`,
+      `למחוק את ${u.full_name} (${u.mobile || u.email})? הפעולה אינה ניתנת לביטול.`,
     );
     if (!ok) return;
     setMsg(null);
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
-      setMsg(data.error || "שגיאה במחיקה");
+      flash("err", data.error || "שגיאה במחיקה");
       return;
     }
     if (editId === u.id) resetForm();
-    setMsg("נמחק בהצלחה");
+    flash("ok", "נמחק בהצלחה");
     await load();
+  }
+
+  async function sendCredentials(u: UserRow) {
+    if (!u.mobile?.trim()) {
+      flash("err", "למשתמש אין מספר נייד");
+      return;
+    }
+    const ok = window.confirm(
+      `לשלוח ל-${u.full_name} (${u.mobile}) את פרטי ההתחברות הקבועים ב-WhatsApp?`,
+    );
+    if (!ok) return;
+    setSendingId(u.id);
+    setSentOkId(null);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/users/${u.id}/send-credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!res.ok) {
+        flash("err", data.error || "שגיאה בשליחה");
+        return;
+      }
+      setSentOkId(u.id);
+      flash(
+        "ok",
+        `✓ ההודעה נשלחה בהצלחה ב-WhatsApp אל ${u.full_name} (${u.mobile})`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.setTimeout(() => {
+        setSentOkId((cur) => (cur === u.id ? null : cur));
+      }, 4000);
+    } catch (err) {
+      flash(
+        "err",
+        err instanceof Error
+          ? `שגיאת רשת בשליחה: ${err.message}`
+          : "שגיאת רשת בשליחה",
+      );
+    } finally {
+      setSendingId(null);
+    }
   }
 
   const canManage = meRole === "super_admin" || meRole === "area_manager";
   const editingUser = editId ? users.find((u) => u.id === editId) : null;
-  const showSettlement =
-    form.role === "coordinator" || meRole === "area_manager";
+
+  const institutionById = useMemo(() => {
+    const map = new Map<number, Institution>();
+    for (const inst of institutions) map.set(inst.id, inst);
+    return map;
+  }, [institutions]);
+
+  function userInstitutionLabel(u: UserRow): string {
+    if (u.role === "area_manager") return u.coordinator_names || "—";
+    const ids = parseIds(u.institution_ids, u.institution_id);
+    if (ids.length === 0) return u.institution_names || u.institution_name || "—";
+    return ids
+      .map((id) => institutionLabel(institutionById.get(id), id))
+      .join(" · ");
+  }
+
+  const pickerInstitutions = useMemo(() => {
+    return institutions
+      .filter((i) => !form.institution_ids.includes(i.id))
+      .filter((i) => {
+        if (!instPickerQ.trim()) return true;
+        const clusters = institutionClusters(i);
+        const hay = [
+          i.name,
+          i.settlement_name,
+          ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
+          ...clusters.map((c) => c.settlement_name),
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return matchesSearch(hay, instPickerQ);
+      });
+  }, [institutions, form.institution_ids, instPickerQ]);
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
@@ -180,13 +397,14 @@ export default function UsersPage() {
       u.mobile,
       u.institution_name,
       u.institution_names,
-      u.settlement_name,
+      u.coordinator_names,
       u.manager_name,
+      userInstitutionLabel(u),
       roleHe[u.role],
     ]
       .filter(Boolean)
       .join(" ");
-    return hay.includes(needle);
+    return matchesSearch(hay, needle);
   });
 
   return (
@@ -197,7 +415,7 @@ export default function UsersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
             <p className="lede">
-              הוספה ועריכה — יישוב בהקלדה, סיסמה נשמרת רק כ־hash (לא מוצגת אחרי שמירה)
+              הוספה ועריכה — סיסמה נשמרת גם לשליחה חוזרת ב-WhatsApp (לא מוצגת אחרי שמירה)
             </p>
           </div>
         </header>
@@ -211,7 +429,7 @@ export default function UsersPage() {
             </h2>
             {editId && (
               <p className="edit-banner">
-                עורכים את {editingUser?.email}. בחרו יישוב ולחצו עדכון.
+                עורכים את {editingUser?.mobile || editingUser?.email}. לחצו עדכון לשמירה.
               </p>
             )}
             <div className="form-grid">
@@ -225,20 +443,24 @@ export default function UsersPage() {
                 />
               </label>
               <label>
-                נייד
+                נייד (התחברות)
                 <input
+                  type="tel"
+                  dir="ltr"
+                  inputMode="tel"
                   value={form.mobile}
                   onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                  required
+                  placeholder="05…"
                 />
               </label>
               <label>
-                אימייל
+                אימייל (אופציונלי)
                 <input
                   type="email"
                   dir="ltr"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
                 />
               </label>
               <label className="field-wide field-password">
@@ -294,34 +516,124 @@ export default function UsersPage() {
                   </select>
                 </label>
               )}
-              <label className="field-wide">
-                מוסד
-                <select
-                  value={form.institution_id}
-                  onChange={(e) =>
-                    setForm({ ...form, institution_id: e.target.value })
-                  }
-                >
-                  <option value="">—</option>
-                  {institutions.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {showSettlement && (
-                <label className="field-wide">
-                  יישוב (לרכז){form.role === "coordinator" ? " *" : ""}
-                  <SettlementPicker
-                    value={form.settlement_name}
-                    options={settlements}
-                    required={form.role === "coordinator"}
-                    onChange={(settlement_name) =>
-                      setForm({ ...form, settlement_name })
-                    }
-                  />
-                </label>
+              {(form.role === "coordinator" || meRole === "area_manager") && (
+                <div className="field-wide institution-multi">
+                  <span className="field-label">מוסדות</span>
+                  {form.institution_ids.length === 0 ? (
+                    <p className="lede" style={{ margin: "0.35rem 0" }}>
+                      אין מוסדות משויכים — בחרו מוסד ולחצו הוסף (או שמירה ישירות)
+                    </p>
+                  ) : (
+                    <ul className="coord-link-list">
+                      {form.institution_ids.map((id) => {
+                        const inst = institutionById.get(id);
+                        return (
+                          <li key={id}>
+                            <span>{institutionLabel(inst, id)}</span>
+                            <button
+                              type="button"
+                              className="linkish"
+                              onClick={() => removeInstitution(id)}
+                            >
+                              הסר
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
+                    <input
+                      type="search"
+                      value={instPickerQ}
+                      onChange={(e) => setInstPickerQ(e.target.value)}
+                      placeholder="חיפוש מוסד או אשכול…"
+                      autoComplete="off"
+                    />
+                    <select
+                      value={addInstitutionId}
+                      onChange={(e) => setAddInstitutionId(e.target.value)}
+                    >
+                      <option value="">הוספת מוסד…</option>
+                      {pickerInstitutions.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {institutionLabel(i)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!addInstitutionId}
+                      onClick={addInstitution}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+                </div>
+              )}
+              {meRole === "super_admin" && form.role === "area_manager" && (
+                <div className="field-wide institution-multi">
+                  <span className="field-label">רכזים תחתיו</span>
+                  {form.coordinator_ids.length === 0 ? (
+                    <p className="lede" style={{ margin: "0.35rem 0" }}>
+                      אין רכזים משויכים
+                    </p>
+                  ) : (
+                    <ul className="coord-link-list">
+                      {form.coordinator_ids.map((id) => {
+                        const coord = users.find((u) => u.id === id);
+                        return (
+                          <li key={id}>
+                            <span>
+                              {coord
+                                ? `${coord.full_name} (${coord.email})`
+                                : `רכז #${id}`}
+                            </span>
+                            <button
+                              type="button"
+                              className="linkish"
+                              onClick={() => removeCoordinator(id)}
+                            >
+                              הסר
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
+                    <select
+                      value={addCoordinatorId}
+                      onChange={(e) => setAddCoordinatorId(e.target.value)}
+                    >
+                      <option value="">הוספת רכז…</option>
+                      {users
+                        .filter(
+                          (u) =>
+                            u.role === "coordinator" &&
+                            !form.coordinator_ids.includes(u.id) &&
+                            u.id !== editId,
+                        )
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.full_name}
+                            {u.manager_id && u.manager_id !== editId
+                              ? ` · כבר תחת ${u.manager_name ?? "אחר"}`
+                              : ""}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!addCoordinatorId}
+                      onClick={addCoordinator}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
             <div className="form-actions">
@@ -334,8 +646,23 @@ export default function UsersPage() {
                 </button>
               )}
             </div>
-            {msg && <p className="form-msg">{msg}</p>}
           </form>
+        )}
+
+        {msg && (
+          <p
+            className={`form-msg ${
+              msgKind === "ok"
+                ? "form-msg-ok"
+                : msgKind === "err"
+                  ? "form-msg-err"
+                  : ""
+            }`}
+            role="status"
+            style={{ marginBottom: "0.75rem" }}
+          >
+            {msg}
+          </p>
         )}
 
         <div className="panel-form users-filters">
@@ -344,7 +671,7 @@ export default function UsersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="שם, אימייל, מוסד, יישוב…"
+              placeholder="שם, אימייל, מוסד…"
             />
           </label>
           <label>
@@ -369,8 +696,7 @@ export default function UsersPage() {
                 <th>אימייל</th>
                 <th>נייד</th>
                 <th>תפקיד</th>
-                <th>מוסד</th>
-                <th>יישוב</th>
+                <th>מוסד / רכזים</th>
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
@@ -381,8 +707,7 @@ export default function UsersPage() {
                   <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>{u.institution_names || u.institution_name || "—"}</td>
-                  <td>{u.settlement_name || "—"}</td>
+                  <td>{userInstitutionLabel(u)}</td>
                   {canManage && (
                     <td className="actions-cell">
                       <button
@@ -391,6 +716,23 @@ export default function UsersPage() {
                         onClick={() => startEdit(u)}
                       >
                         עריכה
+                      </button>
+                      <button
+                        type="button"
+                        className="export"
+                        disabled={!u.mobile?.trim() || sendingId === u.id}
+                        onClick={() => void sendCredentials(u)}
+                        title={
+                          u.mobile?.trim()
+                            ? "שליחת פרטי התחברות ב-WhatsApp"
+                            : "אין נייד"
+                        }
+                      >
+                        {sendingId === u.id
+                          ? "שולח…"
+                          : sentOkId === u.id
+                            ? "נשלח ✓"
+                            : "שלח בוואטסאפ"}
                       </button>
                       <button
                         type="button"

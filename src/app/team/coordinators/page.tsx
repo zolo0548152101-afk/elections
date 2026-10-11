@@ -2,24 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
+import { matchesSearch } from "@/lib/text-search";
 
-type DoneCluster = {
-  ashkol: string;
-  settlement_name: string;
-  street_total: number;
-  street_done: number;
-};
+type ClusterRef = { ashkol: string; settlement_name: string };
 
 type Coord = {
   id: number;
   full_name: string;
   email: string;
-  mobile: string | null;
-  settlement_name: string | null;
-  manager_name: string | null;
   institutions: { id: number; name: string; settlement_name: string | null }[];
+  clusters?: ClusterRef[];
+  cluster_count?: number;
   progress: { done: number; total: number; pct: number };
-  done_clusters: DoneCluster[];
 };
 
 export default function TeamCoordinatorsPage() {
@@ -54,17 +49,18 @@ export default function TeamCoordinatorsPage() {
   const filtered = rows.filter((c) => {
     const needle = q.trim();
     if (!needle) return true;
+    const ashkols = (c.clusters ?? []).map((d) =>
+      formatAshkolLabel(d.ashkol, d.settlement_name),
+    );
     const hay = [
       c.full_name,
-      c.email,
-      c.settlement_name,
-      c.manager_name,
       ...c.institutions.map((i) => i.name),
-      ...c.done_clusters.map((d) => d.ashkol),
+      ...ashkols,
+      ...(c.clusters ?? []).map((d) => d.settlement_name),
     ]
       .filter(Boolean)
       .join(" ");
-    return hay.includes(needle);
+    return matchesSearch(hay, needle);
   });
 
   return (
@@ -76,8 +72,8 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
               {meRole === "super_admin"
-                ? "כל הרכזים במערכת — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."
-                : "כל הרכזים המקושרים אליכם — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."}
+                ? "כל הרכזים במערכת — מוסדות, אשכולות והתקדמות."
+                : "רכזים תחתיכם — מוסדות, אשכולות והתקדמות."}
             </p>
           </div>
         </header>
@@ -89,61 +85,54 @@ export default function TeamCoordinatorsPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="שם, יישוב, מוסד, אשכול…"
+              placeholder="שם, מוסד, אשכול…"
             />
           </label>
         )}
-        {!loading &&
-          filtered.map((c) => (
-            <section key={c.id} className="panel-form links-panel">
-              <div className="links-panel-head">
-                <h2>{c.full_name}</h2>
-                <p className="lede">
-                  {[c.settlement_name, c.email, c.manager_name ? `רכז על: ${c.manager_name}` : null]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              </div>
-              <p className="lede" style={{ marginBottom: "0.5rem" }}>
-                מוסדות:{" "}
-                {c.institutions.length
-                  ? c.institutions.map((i) => i.name).join(" · ")
-                  : "אין"}
-              </p>
-              <p className="lede" style={{ marginBottom: "0.75rem" }}>
-                התקדמות רחובות: {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
-              </p>
-              <strong>אשכולות שבוצעו ({c.done_clusters.length})</strong>
-              {c.done_clusters.length === 0 ? (
-                <p className="lede" style={{ marginTop: "0.35rem" }}>
-                  עדיין אין אשכול שסומן במלואו
-                </p>
-              ) : (
-                <div className="table-wrap" style={{ marginTop: "0.5rem" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>אשכול</th>
-                        <th>יישוב</th>
-                        <th>רחובות</th>
+        {!loading && filtered.length > 0 && (
+          <section className="panel-form links-panel">
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>שם</th>
+                    <th>מוסדות</th>
+                    <th>אשכולות</th>
+                    <th>התקדמות</th>
+                    <th>כמות אשכולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((c) => {
+                    const clusters = c.clusters ?? [];
+                    const ashkolText = formatAshkolLabels(clusters);
+                    const count = c.cluster_count ?? clusters.length;
+                    return (
+                      <tr key={c.id}>
+                        <td>{c.full_name}</td>
+                        <td>
+                          {c.institutions.length
+                            ? c.institutions.map((i) => i.name).join(" · ")
+                            : "—"}
+                        </td>
+                        <td title={ashkolText || undefined}>
+                          {ashkolText || "—"}
+                        </td>
+                        <td>
+                          {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
+                        </td>
+                        <td>{count}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {c.done_clusters.map((d) => (
-                        <tr key={d.ashkol}>
-                          <td className="mono">{d.ashkol}</td>
-                          <td>{d.settlement_name}</td>
-                          <td>
-                            {d.street_done}/{d.street_total}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          ))}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="map-credit" style={{ marginTop: "0.75rem" }}>
+              מציג {filtered.length} / {rows.length}
+            </p>
+          </section>
+        )}
         {!loading && filtered.length === 0 && (
           <p className="lede">אין רכזים להצגה</p>
         )}
