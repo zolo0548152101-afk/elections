@@ -13,7 +13,8 @@
     "build:streets": "node scripts/build-streets.mjs",
     "import:cluster-streets": "node scripts/import-cluster-streets.mjs",
     "db:search-index": "node scripts/ensure-street-search-index.mjs",
-    "db:schema": "node scripts/apply-schema.mjs"
+    "db:schema": "node scripts/apply-schema.mjs",
+    "import:institutions": "node scripts/import-institutions.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
