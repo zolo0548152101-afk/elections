@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 type Inst = {
   id: number;
@@ -70,19 +69,13 @@ export default function TeamInstitutionsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">הצוות</p>
+            <p className="eyebrow">ניהול</p>
             <h1>מוסדות הצוות</h1>
             <p className="lede">
               מוסדות המקושרים לרכזים שלכם (רכז יכול להיות משויך לכמה מוסדות).
             </p>
           </div>
         </header>
-        <nav className="links-subnav" aria-label="הצוות">
-          <Link href="/team/coordinators">רכזים</Link>
-          <Link href="/team/institutions" className="active">
-            מוסדות הצוות
-          </Link>
-        </nav>
         {loading && <p className="lede">טוען…</p>}
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading && (

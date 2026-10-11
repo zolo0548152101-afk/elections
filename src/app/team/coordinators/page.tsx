@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 type DoneCluster = {
   ashkol: string;
@@ -29,11 +28,13 @@ export default function TeamCoordinatorsPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [meRole, setMeRole] = useState<string>("");
 
   useEffect(() => {
     void (async () => {
       const me = await fetch("/api/auth/me").then((r) => r.json());
       const role = me.user?.role;
+      setMeRole(role ?? "");
       if (role !== "super_admin" && role !== "area_manager") {
         router.replace("/");
         return;
@@ -71,19 +72,15 @@ export default function TeamCoordinatorsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">הצוות</p>
-            <h1>רכזים שלי</h1>
+            <p className="eyebrow">ניהול</p>
+            <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
-              כל הרכזים המקושרים אליכם — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו.
+              {meRole === "super_admin"
+                ? "כל הרכזים במערכת — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."
+                : "כל הרכזים המקושרים אליכם — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."}
             </p>
           </div>
         </header>
-        <nav className="links-subnav" aria-label="הצוות">
-          <Link href="/team/coordinators" className="active">
-            רכזים
-          </Link>
-          <Link href="/team/institutions">מוסדות הצוות</Link>
-        </nav>
         {loading && <p className="lede">טוען…</p>}
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading && (
