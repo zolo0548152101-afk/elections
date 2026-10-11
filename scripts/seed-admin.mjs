@@ -73,7 +73,7 @@ const existingId = byMobile[0]?.id ?? byAdmin[0]?.id ?? null;
 if (existingId) {
   await sql`
     UPDATE users SET
-      full_name = COALESCE(NULLIF(full_name, ''), 'מנהל על'),
+      full_name = 'מנהל על',
       mobile = ${mobile},
       email = ${email},
       password_hash = ${hash},
@@ -81,12 +81,12 @@ if (existingId) {
       institution_id = ${inst.id}
     WHERE id = ${existingId}
   `;
-  console.log({ admin_mobile: mobile, id: existingId, password: "updated" });
+  console.log({ admin_mobile: mobile, id: existingId, full_name: "מנהל על", password: "updated" });
 } else {
   const [row] = await sql`
     INSERT INTO users (full_name, mobile, email, password_hash, role, institution_id)
     VALUES ('מנהל על', ${mobile}, ${email}, ${hash}, 'super_admin', ${inst.id})
     RETURNING id
   `;
-  console.log({ admin_mobile: mobile, id: row.id, password: "created" });
+  console.log({ admin_mobile: mobile, id: row.id, full_name: "מנהל על", password: "created" });
 }
