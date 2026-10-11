@@ -180,7 +180,7 @@ export function StreetMap({
       const p = e.features?.[0]?.properties;
       if (!p) return;
       const html = `<div dir="rtl" class="popup"><strong>${esc(p.settlement_name)}</strong><div>אשכול ${esc(p.ashkol)}</div><div>% ימין ${Number(p.right_pct).toFixed(1)}</div><div>% הצבעה ${Number(p.turnout_pct).toFixed(1)}</div></div>`;
-      new Popup({ closeButton: true, maxWidth: "240px" })
+      new Popup({ closeButton: true, closeOnClick: false, maxWidth: "240px" })
         .setLngLat(e.lngLat)
         .setHTML(html)
         .addTo(map);

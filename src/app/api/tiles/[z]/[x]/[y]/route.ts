@@ -69,7 +69,7 @@ export async function GET(
       headers: { "Content-Type": "application/x-protobuf" },
     });
   }
-  const buf = Buffer.from(vtpbf.fromGeojsonVt({ streets: tile }));
+  const buf = Buffer.from(vtpbf.fromGeojsonVt({ streets: tile }, { version: 2 }));
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/x-protobuf",
