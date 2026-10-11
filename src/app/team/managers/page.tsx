@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { matchesSearch } from "@/lib/text-search";
 
 type Coord = {
   id: number;
   full_name: string;
   email: string;
-  settlement_name: string | null;
   institution_names: string;
+  ashkols?: string;
+  cluster_count?: number;
   progress: { done: number; total: number; pct: number };
 };
 
@@ -56,13 +58,13 @@ export default function TeamManagersPage() {
       m.mobile,
       ...m.coordinators.flatMap((c) => [
         c.full_name,
-        c.settlement_name,
         c.institution_names,
+        c.ashkols,
       ]),
     ]
       .filter(Boolean)
       .join(" ");
-    return hay.includes(needle);
+    return matchesSearch(hay, needle);
   });
 
   return (
@@ -73,7 +75,7 @@ export default function TeamManagersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>רכזי על</h1>
             <p className="lede">
-              כל רכזי העל והרכזים המשויכים אליהם — עם התקדמות סימון הרחובות.
+              כל רכזי העל והרכזים המשויכים אליהם — מוסדות, אשכולות והתקדמות.
             </p>
           </div>
         </header>
@@ -85,7 +87,7 @@ export default function TeamManagersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="רכז על, רכז, מוסד…"
+              placeholder="רכז על, רכז, מוסד, אשכול…"
             />
           </label>
         )}
@@ -107,21 +109,25 @@ export default function TeamManagersPage() {
                   <table>
                     <thead>
                       <tr>
-                        <th>רכז</th>
-                        <th>יישוב</th>
+                        <th>שם</th>
                         <th>מוסדות</th>
+                        <th>אשכולות</th>
                         <th>התקדמות</th>
+                        <th>כמות אשכולות</th>
                       </tr>
                     </thead>
                     <tbody>
                       {m.coordinators.map((c) => (
                         <tr key={c.id}>
                           <td>{c.full_name}</td>
-                          <td>{c.settlement_name || "—"}</td>
                           <td>{c.institution_names || "—"}</td>
+                          <td title={c.ashkols || undefined}>
+                            {c.ashkols || "—"}
+                          </td>
                           <td>
                             {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
                           </td>
+                          <td>{c.cluster_count ?? 0}</td>
                         </tr>
                       ))}
                     </tbody>

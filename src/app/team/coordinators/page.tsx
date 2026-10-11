@@ -4,23 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { matchesSearch } from "@/lib/text-search";
 
-type DoneCluster = {
-  ashkol: string;
-  settlement_name: string;
-  street_total: number;
-  street_done: number;
-};
+type ClusterRef = { ashkol: string; settlement_name: string };
 
 type Coord = {
   id: number;
   full_name: string;
   email: string;
-  mobile: string | null;
-  settlement_name: string | null;
-  manager_name: string | null;
   institutions: { id: number; name: string; settlement_name: string | null }[];
+  clusters?: ClusterRef[];
+  cluster_count?: number;
   progress: { done: number; total: number; pct: number };
-  done_clusters: DoneCluster[];
 };
 
 export default function TeamCoordinatorsPage() {
@@ -52,19 +45,14 @@ export default function TeamCoordinatorsPage() {
     })();
   }, [router]);
 
-  const showManagerCol = meRole === "super_admin";
-
   const filtered = rows.filter((c) => {
     const needle = q.trim();
     if (!needle) return true;
+    const ashkols = (c.clusters ?? []).map((d) => d.ashkol);
     const hay = [
       c.full_name,
-      c.email,
-      c.mobile,
-      c.settlement_name,
-      c.manager_name,
-      ...c.institutions.map((i) => `${i.name} ${i.settlement_name ?? ""}`),
-      ...c.done_clusters.map((d) => `${d.ashkol} ${d.settlement_name}`),
+      ...c.institutions.map((i) => i.name),
+      ...ashkols,
     ]
       .filter(Boolean)
       .join(" ");
@@ -80,8 +68,8 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
               {meRole === "super_admin"
-                ? "כל הרכזים במערכת — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."
-                : "כל הרכזים המקושרים אליכם — התקדמות סימון רחובות ואשכולות שסומנו כבוצעו."}
+                ? "כל הרכזים במערכת — מוסדות, אשכולות והתקדמות."
+                : "רכזים תחתיכם — מוסדות, אשכולות והתקדמות."}
             </p>
           </div>
         </header>
@@ -93,7 +81,7 @@ export default function TeamCoordinatorsPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="שם, רכז על, מוסד, אשכול…"
+              placeholder="שם, מוסד, אשכול…"
             />
           </label>
         )}
@@ -103,47 +91,35 @@ export default function TeamCoordinatorsPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>רכז</th>
-                    {showManagerCol && <th>רכז על</th>}
-                    <th>יישוב</th>
+                    <th>שם</th>
                     <th>מוסדות</th>
+                    <th>אשכולות</th>
                     <th>התקדמות</th>
-                    <th>אשכולות שבוצעו</th>
+                    <th>כמות אשכולות</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <div>{c.full_name}</div>
-                        <div className="lede" style={{ margin: 0, fontSize: "0.85rem" }}>
-                          {c.email}
-                        </div>
-                      </td>
-                      {showManagerCol && <td>{c.manager_name || "—"}</td>}
-                      <td>{c.settlement_name || "—"}</td>
-                      <td>
-                        {c.institutions.length
-                          ? c.institutions.map((i) => i.name).join(" · ")
-                          : "—"}
-                      </td>
-                      <td>
-                        {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
-                      </td>
-                      <td>
-                        {c.done_clusters.length === 0 ? (
-                          "—"
-                        ) : (
-                          <span title={c.done_clusters.map((d) => d.ashkol).join(", ")}>
-                            {c.done_clusters.length}
-                            {c.done_clusters.length <= 3
-                              ? ` (${c.done_clusters.map((d) => d.ashkol).join(", ")})`
-                              : ""}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((c) => {
+                    const ashkols = (c.clusters ?? []).map((d) => d.ashkol);
+                    const count = c.cluster_count ?? ashkols.length;
+                    return (
+                      <tr key={c.id}>
+                        <td>{c.full_name}</td>
+                        <td>
+                          {c.institutions.length
+                            ? c.institutions.map((i) => i.name).join(" · ")
+                            : "—"}
+                        </td>
+                        <td title={ashkols.join(", ")}>
+                          {ashkols.length ? ashkols.join(", ") : "—"}
+                        </td>
+                        <td>
+                          {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
+                        </td>
+                        <td>{count}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

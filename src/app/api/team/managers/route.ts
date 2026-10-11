@@ -32,7 +32,7 @@ export async function GET() {
   const out = [];
   for (const m of managers) {
     const coords = (await sql`
-      SELECT u.id, u.full_name, u.email, u.settlement_name,
+      SELECT u.id, u.full_name, u.email,
              coalesce(
                (
                  SELECT string_agg(i.name, ' · ' ORDER BY i.name)
@@ -41,7 +41,29 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                ''
-             ) AS institution_names
+             ) AS institution_names,
+             coalesce(
+               (
+                 SELECT string_agg(ashkol, ', ' ORDER BY settlement_name, ashkol)
+                 FROM (
+                   SELECT DISTINCT cl.ashkol, cl.settlement_name
+                   FROM institution_coordinators link
+                   JOIN institution_clusters ic ON ic.institution_id = link.institution_id
+                   JOIN clusters cl ON cl.ashkol = ic.ashkol
+                   WHERE link.user_id = u.id
+                 ) distinct_ashkols
+               ),
+               ''
+             ) AS ashkols,
+             coalesce(
+               (
+                 SELECT count(DISTINCT ic.ashkol)::int
+                 FROM institution_coordinators link
+                 JOIN institution_clusters ic ON ic.institution_id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               0
+             ) AS cluster_count
       FROM users u
       WHERE u.role = 'coordinator' AND u.manager_id = ${m.id}
       ORDER BY u.full_name
@@ -49,8 +71,9 @@ export async function GET() {
       id: number;
       full_name: string;
       email: string;
-      settlement_name: string | null;
       institution_names: string;
+      ashkols: string;
+      cluster_count: number;
     }[];
 
     const withProgress = [];
