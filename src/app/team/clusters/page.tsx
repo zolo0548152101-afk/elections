@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
@@ -8,9 +8,13 @@ import { matchesSearch } from "@/lib/text-search";
 type Row = {
   ashkol: string;
   settlement_name: string;
-  institution_id: number;
-  institution_name: string;
+  bzb: number;
+  turnout_pct: number;
+  right_pct: number;
+  likud_pct: number;
+  institution_names: string;
   coordinator_names: string;
+  linked: boolean;
   done: boolean;
 };
 
@@ -18,7 +22,12 @@ export default function TeamClustersPage() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
+  const [linkFilter, setLinkFilter] = useState<"" | "linked" | "open">("");
   const [status, setStatus] = useState<"" | "open" | "done">("");
+  const [minRight, setMinRight] = useState(0);
+  const [maxTurnout, setMaxTurnout] = useState(100);
+  const [minBzb, setMinBzb] = useState(0);
+  const [minLikud, setMinLikud] = useState(0);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
@@ -47,23 +56,41 @@ export default function TeamClustersPage() {
     void load();
   }, [load]);
 
-  const filtered = rows.filter((r) => {
-    if (status === "done" && !r.done) return false;
-    if (status === "open" && r.done) return false;
-    const needle = q.trim();
-    if (!needle) return true;
-    const hay = [
-      r.ashkol,
-      r.settlement_name,
-      r.institution_name,
-      r.coordinator_names,
-      formatAshkolLabel(r.ashkol, r.settlement_name),
-      r.done ? "בוצע" : "לא בוצע",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return matchesSearch(hay, needle);
-  });
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (linkFilter === "linked" && !r.linked) return false;
+      if (linkFilter === "open" && r.linked) return false;
+      if (status === "done" && !r.done) return false;
+      if (status === "open" && r.done) return false;
+      if (r.right_pct < minRight) return false;
+      if (r.turnout_pct > maxTurnout) return false;
+      if (r.bzb < minBzb) return false;
+      if ((r.likud_pct ?? 0) < minLikud) return false;
+      const needle = q.trim();
+      if (!needle) return true;
+      const hay = [
+        r.ashkol,
+        r.settlement_name,
+        r.institution_names,
+        r.coordinator_names,
+        formatAshkolLabel(r.ashkol, r.settlement_name),
+        r.linked ? "מקושר" : "לא מקושר",
+        r.done ? "בוצע" : "לא בוצע",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return matchesSearch(hay, needle);
+    });
+  }, [
+    rows,
+    q,
+    linkFilter,
+    status,
+    minRight,
+    maxTurnout,
+    minBzb,
+    minLikud,
+  ]);
 
   async function setDone(ashkol: string, done: boolean) {
     setBusyAshkol(ashkol);
@@ -94,6 +121,16 @@ export default function TeamClustersPage() {
     }
   }
 
+  function resetFilters() {
+    setQ("");
+    setLinkFilter("");
+    setStatus("");
+    setMinRight(0);
+    setMaxTurnout(100);
+    setMinBzb(0);
+    setMinLikud(0);
+  }
+
   return (
     <main>
       <div className="dash">
@@ -102,7 +139,8 @@ export default function TeamClustersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>אשכולות</h1>
             <p className="lede">
-              אשכולות שקושרו למוסד — סננו לפי סטטוס וסמנו בוצע / לא בוצע.
+              כל האשכולות במערכת — סננו לפי קישור, סטטוס ומצביעים, וסמנו בוצע /
+              לא בוצע.
             </p>
           </div>
         </header>
@@ -116,7 +154,7 @@ export default function TeamClustersPage() {
           </p>
         )}
         {!loading && (
-          <div className="panel-form users-filters">
+          <div className="panel-form team-clusters-filters">
             <label>
               חיפוש
               <input
@@ -124,6 +162,19 @@ export default function TeamClustersPage() {
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="אשכול, יישוב, מוסד, רכז…"
               />
+            </label>
+            <label>
+              קישור
+              <select
+                value={linkFilter}
+                onChange={(e) =>
+                  setLinkFilter(e.target.value as "" | "linked" | "open")
+                }
+              >
+                <option value="">הכל</option>
+                <option value="linked">מקושר למוסד</option>
+                <option value="open">לא מקושר</option>
+              </select>
             </label>
             <label>
               סטטוס
@@ -138,6 +189,50 @@ export default function TeamClustersPage() {
                 <option value="done">בוצע</option>
               </select>
             </label>
+            <label>
+              מינימום % ימין
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={minRight}
+                onChange={(e) => setMinRight(Number(e.target.value) || 0)}
+              />
+            </label>
+            <label>
+              מקסימום % הצבעה
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={maxTurnout}
+                onChange={(e) => setMaxTurnout(Number(e.target.value) || 0)}
+              />
+            </label>
+            <label>
+              מינימום בז״ב
+              <input
+                type="number"
+                min={0}
+                value={minBzb}
+                onChange={(e) => setMinBzb(Number(e.target.value) || 0)}
+              />
+            </label>
+            <label>
+              מינימום % מחל
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={minLikud}
+                onChange={(e) => setMinLikud(Number(e.target.value) || 0)}
+              />
+            </label>
+            <div className="form-actions" style={{ alignSelf: "end" }}>
+              <button type="button" className="reset" onClick={resetFilters}>
+                נקה פילטרים
+              </button>
+            </div>
           </div>
         )}
         {!loading && filtered.length > 0 && (
@@ -146,20 +241,28 @@ export default function TeamClustersPage() {
               <thead>
                 <tr>
                   <th>אשכול</th>
+                  <th>קישור</th>
                   <th>מוסד</th>
                   <th>רכז</th>
+                  <th>% ימין</th>
+                  <th>% מחל</th>
+                  <th>% הצבעה</th>
                   <th>סטטוס</th>
                   <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r) => (
-                  <tr key={`${r.ashkol}:${r.institution_id}`}>
+                  <tr key={r.ashkol}>
                     <td className="mono">
                       {formatAshkolLabel(r.ashkol, r.settlement_name)}
                     </td>
-                    <td>{r.institution_name || "—"}</td>
+                    <td>{r.linked ? "מקושר" : "לא מקושר"}</td>
+                    <td>{r.institution_names || "—"}</td>
                     <td>{r.coordinator_names || "—"}</td>
+                    <td>{r.right_pct.toFixed(1)}%</td>
+                    <td>{(r.likud_pct ?? 0).toFixed(1)}%</td>
+                    <td>{r.turnout_pct.toFixed(1)}%</td>
                     <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
                     <td className="actions-cell">
                       <button
@@ -196,7 +299,7 @@ export default function TeamClustersPage() {
           <p className="lede">
             {rows.length === 0
               ? "אין אשכולות להצגה"
-              : "אין תוצאות לפילטר הנוכחי — נסו חיפוש או סטטוס אחר"}
+              : "אין תוצאות לפילטר הנוכחי — נסו חיפוש או פילטר אחר"}
           </p>
         )}
       </div>
