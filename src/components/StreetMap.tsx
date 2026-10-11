@@ -912,7 +912,7 @@ export function StreetMap({
                 )}
                 {allowed.length === 0 && (
                   <p className="assign-empty">
-                    אין רכז מותר לשיוך בעיר הזו (בדקו קבוצה עם יישוב מקושר).
+                    אין רכז מותר לשיוך בעיר הזו (בדקו מוסד עם יישוב מקושר).
                   </p>
                 )}
               </div>

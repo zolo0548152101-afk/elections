@@ -14,16 +14,15 @@ export function AppNav({
   const path = usePathname();
   const router = useRouter();
 
-  const links = [{ href: "/", label: "מפה" }];
+  const links = [
+    { href: "/", label: "מפה" },
+    {
+      href: "/institutions",
+      label: user.role === "coordinator" ? "המוסד שלי" : "מוסדות",
+    },
+  ];
   if (user.role === "super_admin" || user.role === "area_manager") {
-    links.push(
-      { href: "/users", label: "משתמשים" },
-      { href: "/institutions", label: "קטלוג מוסדות" },
-      { href: "/groups", label: "מוסדות הצוות" },
-    );
-  } else {
-    // Same entity as institutions — coordinator only sees their linked מוסד.
-    links.push({ href: "/groups", label: "המוסד שלי" });
+    links.splice(1, 0, { href: "/users", label: "משתמשים" });
   }
 
   async function logout() {

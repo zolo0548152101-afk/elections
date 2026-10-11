@@ -38,24 +38,23 @@ This document compares **what was on `main` before the street-map work** with **
 
 | Role | Can do |
 |------|--------|
-| `super_admin` | Everything: users, institutions, groups, assign any street to any coordinator, link any cluster to any institution |
-| `area_manager` | Manage own coordinators; groups for their team; assign streets to coordinators under them (city + institution rules); link clusters to those institutions |
-| `coordinator` | Own **institution** (nav «המוסד שלי»); mark streets; assign streets to **self** in institution/group cities; map/table clusters = only ashkols linked to their institution |
+| `super_admin` | Everything: users, institutions catalog, assign any street, link any cluster to any institution |
+| `area_manager` | Manage own coordinators; see their institutions; assign streets (city + institution rules); link clusters to those institutions |
+| `coordinator` | Own **institution** (nav «המוסד שלי»); mark streets; assign to **self** in institution city; map/table = only ashkols linked to their institution |
 
 Sessions: email/password cookie `edo_session`. Admin via `ADMIN_EMAIL` / `ADMIN_PASSWORD` only (no code defaults). `npm run seed:admin` never resets an existing password unless `FORCE_ADMIN_PASSWORD=1`. Do not share secrets in chat.
 
-Pages: `/login`, `/` (map), `/users`, `/institutions` (full catalog), `/groups` (role-scoped institutions — same מוסד entity; coordinator sees «המוסד שלי»).
+Pages: `/login`, `/` (map), `/users`, `/institutions`. **No groups** — only institutions from חוברת2, linked to coordinators via `users.institution_id`. `/groups` redirects to `/institutions`.
 
-Users page: admins can **edit** / **delete** users and set a **new** password (min 8 chars). Passwords are bcrypt-only — never stored or returned in plaintext.
+Users page: admins can **edit** / **delete** users and set a **new** password (min 8 chars). Passwords are bcrypt-only — never stored or returned in plaintext. Assign each coordinator an institution here.
 
-### New data model (additive — nothing truncated)
+### New data model (additive — streets/clusters not truncated)
 
-- `groups.settlement_name` → FK to `settlements` (city used for “who may receive this street”).
-- `groups.created_by` → keeps empty groups visible to the area manager who created them.
 - `street_coordinators` — many-to-many street ↔ coordinator (`assigned_by`, `assigned_at`).
 - `street_marks` — per-user done state `(street_id, user_id)`.
-- `institutions` enriched from חוברת2 (`kind`, `settlement_name`, `district`, `lat`/`lng`, `key_people_raw`) + `institution_contacts`.
-- `institution_clusters` — institution ↔ ashkol. Coordinators/area managers only see those ashkols on the map/table (not every city). Street vector visibility also scopes to those ashkols once `streets.ashkol` is filled.
+- `institutions` from חוברת2 (`kind`, `settlement_name`, `district`, `lat`/`lng`, `key_people_raw`) + `institution_contacts`.
+- `institution_clusters` — institution ↔ ashkol. Coordinators only see those ashkols on the map/table.
+- Legacy `groups` / `group_coordinators` tables are dropped (`npm run db:schema`).
 
 ### Scripts coworkers may need
 
@@ -76,11 +75,11 @@ Do **not** run `npm run seed` unless you intend to wipe settlements/clusters.
 ## 3. Assignment rules (product)
 
 1. A street can belong to **more than one** coordinator.
-2. **Coordinator** may add a street only to themselves, and only if the street’s nearest city is a `settlement_name` of a group they are linked to.
-3. **Area manager** may add a street to a coordinator under them who has an `institution_id`, in a city of that coordinator’s groups.
+2. **Coordinator** may add a street only to themselves, and only if the street’s nearest city matches their institution (or user) settlement.
+3. **Area manager** may add a street to a coordinator under them who has an `institution_id`, in that coordinator’s institution city.
 4. **Admin** may add any street to any coordinator.
 5. Street↔cluster id is **absolute data** (like the street name). No manual street→cluster editor. Import will fill `streets.ashkol`. Until then the popup simply omits the ashkol line.
-6. Coordinators **link clusters to their institution** (“קשר למוסד”). Streets for those clusters appear for that institution only **after** the import.
+6. Coordinators **link clusters to their institution** (“קשר למוסד”). Those ashkols are what appear on their map.
 
 ---
 

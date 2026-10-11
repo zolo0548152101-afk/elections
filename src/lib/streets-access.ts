@@ -18,8 +18,8 @@ export async function nearestSettlementName(
   return rows[0]?.name_he ?? null;
 }
 
-/** Distinct settlement cities from the coordinator's institution + legacy groups. */
-export async function coordinatorGroupCities(
+/** Settlement cities from the coordinator's linked institution (+ user settlement). */
+export async function coordinatorInstitutionCities(
   sql: Sql,
   coordinatorId: number,
 ): Promise<string[]> {
@@ -31,15 +31,17 @@ export async function coordinatorGroupCities(
       WHERE u.id = ${coordinatorId}
         AND i.settlement_name IS NOT NULL
       UNION
-      SELECT g.settlement_name AS name
-      FROM groups g
-      JOIN group_coordinators gc ON gc.group_id = g.id
-      WHERE gc.user_id = ${coordinatorId}
-        AND g.settlement_name IS NOT NULL
+      SELECT u.settlement_name AS name
+      FROM users u
+      WHERE u.id = ${coordinatorId}
+        AND u.settlement_name IS NOT NULL
     ) cities
   `) as { name: string }[];
   return rows.map((r) => r.name);
 }
+
+/** @deprecated use coordinatorInstitutionCities */
+export const coordinatorGroupCities = coordinatorInstitutionCities;
 
 /**
  * Ashkols the viewer may see as voter clusters on the map/table.
@@ -90,8 +92,6 @@ export async function streetNearestCity(
 /**
  * When false, the caller sees every street.
  * When true, only streets whose ashkol is in `ashkols` are visible.
- * Stays off until some streets have ashkol AND the viewer has linked
- * clusters that already match at least one of those streets.
  */
 export async function streetVisibilityFilter(
   sql: Sql,
@@ -128,7 +128,6 @@ export async function streetVisibilityFilter(
     ashkols = rows.map((r) => r.ashkol);
   }
 
-  // Once the viewer has linked clusters (and streets have ashkol data), always scope.
   if (ashkols.length === 0) {
     return { active: false, ashkols: [] };
   }
@@ -143,7 +142,6 @@ export async function canAccessAshkol(
   ashkol: string,
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
-  // Cluster list/link scope: only institution-linked ashkols for non-admins.
   const linked = await visibleClusterAshkols(sql, user);
   if (linked !== null) {
     return linked.includes(ashkol);
@@ -153,8 +151,8 @@ export async function canAccessAshkol(
 
 /**
  * Whether the user may mark this street done.
- * Super admin: yes. Coordinator: assigned to them OR nearest city in their group cities.
- * Area manager: street city in any of their coordinators' group cities.
+ * Super admin: yes. Coordinator: assigned OR nearest city in institution cities.
+ * Area manager: street city in any of their coordinators' institution cities.
  */
 export async function canMarkStreet(
   sql: Sql,
@@ -174,11 +172,8 @@ export async function canMarkStreet(
   if (assigned.length > 0) return true;
 
   if (user.role === "coordinator") {
-    const cities = await coordinatorGroupCities(sql, user.id);
-    if (cities.includes(loc.city)) return true;
-    // Fallback: user's own settlement_name
-    if (user.settlement_name && user.settlement_name === loc.city) return true;
-    return false;
+    const cities = await coordinatorInstitutionCities(sql, user.id);
+    return cities.includes(loc.city);
   }
 
   if (user.role === "area_manager") {
@@ -187,7 +182,7 @@ export async function canMarkStreet(
       WHERE role = 'coordinator' AND manager_id = ${user.id}
     `) as { id: number }[];
     for (const c of coords) {
-      const cities = await coordinatorGroupCities(sql, c.id);
+      const cities = await coordinatorInstitutionCities(sql, c.id);
       if (cities.includes(loc.city)) return true;
     }
     return false;
@@ -197,8 +192,8 @@ export async function canMarkStreet(
 }
 
 /**
- * Coordinator may only link clusters whose settlement is in their group cities
- * (or their user settlement). Super admin: any. Area manager: settlements of team.
+ * Coordinator may only link clusters in their institution city (or user settlement).
+ * Super admin: any. Area manager: settlements of team institutions.
  */
 export async function canLinkClusterAshkol(
   sql: Sql,
@@ -214,17 +209,15 @@ export async function canLinkClusterAshkol(
   const settlement = cluster[0].settlement_name;
 
   if (user.role === "coordinator") {
-    const cities = await coordinatorGroupCities(sql, user.id);
-    if (cities.includes(settlement)) return true;
-    return user.settlement_name === settlement;
+    const cities = await coordinatorInstitutionCities(sql, user.id);
+    return cities.includes(settlement);
   }
 
   if (user.role === "area_manager") {
     const rows = (await sql`
-      SELECT DISTINCT COALESCE(g.settlement_name, u.settlement_name) AS name
+      SELECT DISTINCT COALESCE(i.settlement_name, u.settlement_name) AS name
       FROM users u
-      LEFT JOIN group_coordinators gc ON gc.user_id = u.id
-      LEFT JOIN groups g ON g.id = gc.group_id
+      LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
     `) as { name: string | null }[];
     return rows.some((r) => r.name === settlement);
@@ -258,8 +251,8 @@ export async function allowedAssignTargets(
   }
 
   if (user.role === "coordinator") {
-    const cities = await coordinatorGroupCities(sql, user.id);
-    if (!cities.includes(loc.city) && user.settlement_name !== loc.city) {
+    const cities = await coordinatorInstitutionCities(sql, user.id);
+    if (!cities.includes(loc.city)) {
       return [];
     }
     return [
@@ -282,7 +275,7 @@ export async function allowedAssignTargets(
     `) as AssignTarget[];
     const out: AssignTarget[] = [];
     for (const c of coords) {
-      const cities = await coordinatorGroupCities(sql, c.id);
+      const cities = await coordinatorInstitutionCities(sql, c.id);
       if (cities.includes(loc.city)) out.push(c);
     }
     return out;

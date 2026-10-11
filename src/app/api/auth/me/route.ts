@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { coordinatorGroupCities } from "@/lib/streets-access";
+import { coordinatorInstitutionCities } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -15,10 +15,7 @@ export async function GET() {
   let progress = { done: 0, total: 0 };
 
   if (user.role === "coordinator") {
-    const cities = await coordinatorGroupCities(sql, user.id);
-    const citySet = new Set(cities);
-    if (user.settlement_name) citySet.add(user.settlement_name);
-    const cityList = [...citySet];
+    const cityList = await coordinatorInstitutionCities(sql, user.id);
 
     if (cityList.length > 0) {
       const [row] = (await sql`
@@ -48,9 +45,8 @@ export async function GET() {
         count(DISTINCT s.id)::int AS total,
         count(DISTINCT m.street_id) FILTER (WHERE m.done)::int AS done
       FROM users u
-      LEFT JOIN group_coordinators gc ON gc.user_id = u.id
-      LEFT JOIN groups g ON g.id = gc.group_id
-      JOIN settlements st ON st.name_he = COALESCE(g.settlement_name, u.settlement_name)
+      LEFT JOIN institutions i ON i.id = u.institution_id
+      JOIN settlements st ON st.name_he = COALESCE(i.settlement_name, u.settlement_name)
       JOIN streets s ON s.lat BETWEEN st.lat - ${CITY_PAD} AND st.lat + ${CITY_PAD}
                     AND s.lng BETWEEN st.lng - ${CITY_PAD} AND st.lng + ${CITY_PAD}
       LEFT JOIN street_marks m
