@@ -29,8 +29,8 @@ const emptyForm = {
 };
 
 const roleHe: Record<string, string> = {
-  super_admin: "מנהל על",
-  area_manager: "מנהל אזור",
+  super_admin: "מנהל",
+  area_manager: "רכז על",
   coordinator: "רכז",
 };
 
@@ -249,14 +249,14 @@ export default function UsersPage() {
                     onChange={(e) => setForm({ ...form, role: e.target.value })}
                   >
                     <option value="coordinator">רכז</option>
-                    <option value="area_manager">מנהל אזור</option>
-                    <option value="super_admin">מנהל על</option>
+                    <option value="area_manager">רכז על</option>
+                    <option value="super_admin">מנהל</option>
                   </select>
                 </label>
               )}
               {meRole === "super_admin" && form.role === "coordinator" && (
                 <label>
-                  מנהל אזור
+                  רכז על
                   <select
                     value={form.manager_id}
                     onChange={(e) => setForm({ ...form, manager_id: e.target.value })}

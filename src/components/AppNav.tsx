@@ -23,6 +23,7 @@ export function AppNav({
   ];
   if (user.role === "super_admin" || user.role === "area_manager") {
     links.splice(1, 0, { href: "/users", label: "משתמשים" });
+    links.push({ href: "/links", label: "קישורים" });
   }
 
   async function logout() {
@@ -40,7 +41,15 @@ export function AppNav({
     <nav className="app-nav">
       <div className="app-nav-links">
         {links.map((l) => (
-          <Link key={l.href} href={l.href} className={path === l.href ? "active" : ""}>
+          <Link
+            key={l.href}
+            href={l.href}
+            className={
+              path === l.href || (l.href !== "/" && path.startsWith(l.href + "/"))
+                ? "active"
+                : ""
+            }
+          >
             {l.label}
           </Link>
         ))}
@@ -63,7 +72,7 @@ export function AppNav({
 }
 
 function roleLabel(role: SessionUser["role"]) {
-  if (role === "super_admin") return "מנהל על";
-  if (role === "area_manager") return "מנהל אזור";
+  if (role === "super_admin") return "מנהל";
+  if (role === "area_manager") return "רכז על";
   return "רכז";
 }
