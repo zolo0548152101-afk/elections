@@ -40,11 +40,11 @@ This document compares **what was on `main` before the street-map work** with **
 |------|--------|
 | `super_admin` | Everything: users, institutions, groups, assign any street to any coordinator, link any cluster to any institution |
 | `area_manager` | Manage own coordinators; groups for their team; assign streets to coordinators under them (city + institution rules); link clusters to those institutions |
-| `coordinator` | Own groups; mark streets; assign streets to **self** only in cities of their groups; link clusters to **own institution** |
+| `coordinator` | Own **institution** (nav «המוסד שלי»); mark streets; assign streets to **self** in institution/group cities; map/table clusters = only ashkols linked to their institution |
 
 Sessions: email/password cookie `edo_session`. Admin via `ADMIN_EMAIL` / `ADMIN_PASSWORD` only (no code defaults). `npm run seed:admin` never resets an existing password unless `FORCE_ADMIN_PASSWORD=1`. Do not share secrets in chat.
 
-Pages: `/login`, `/` (map), `/users`, `/institutions`, `/groups`.
+Pages: `/login`, `/` (map), `/users`, `/institutions` (full catalog), `/groups` (role-scoped institutions — same מוסד entity; coordinator sees «המוסד שלי»).
 
 Users page: admins can **edit** / **delete** users and set a **new** password (min 8 chars). Passwords are bcrypt-only — never stored or returned in plaintext.
 
@@ -55,7 +55,7 @@ Users page: admins can **edit** / **delete** users and set a **new** password (m
 - `street_coordinators` — many-to-many street ↔ coordinator (`assigned_by`, `assigned_at`).
 - `street_marks` — per-user done state `(street_id, user_id)`.
 - `institutions` enriched from חוברת2 (`kind`, `settlement_name`, `district`, `lat`/`lng`, `key_people_raw`) + `institution_contacts`.
-- `institution_clusters` — institution ↔ ashkol. When the viewer has linked clusters and streets have `ashkol`, street visibility is scoped to those ashkols.
+- `institution_clusters` — institution ↔ ashkol. Coordinators/area managers only see those ashkols on the map/table (not every city). Street vector visibility also scopes to those ashkols once `streets.ashkol` is filled.
 
 ### Scripts coworkers may need
 

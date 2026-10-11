@@ -1,103 +1,78 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
-type Coord = { id: number; full_name: string };
-type Settlement = { name_he: string; lat: number; lng: number };
-type Group = {
+type Contact = {
   id: number;
-  name: string;
-  location_text: string;
-  settlement_name: string | null;
-  headcount: number;
-  gender: string;
-  type: string;
-  coordinators: Coord[];
+  full_name: string;
+  role_title: string;
+  phone: string;
 };
 
-export default function GroupsPage() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [coords, setCoords] = useState<Coord[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[]>([]);
-  const [canEdit, setCanEdit] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    location_text: "",
-    settlement_name: "",
-    headcount: 10,
-    gender: "",
-    type: "yeshiva",
-    coordinator_ids: [] as number[],
-  });
-  const [msg, setMsg] = useState<string | null>(null);
+type LinkedCluster = {
+  ashkol: string;
+  settlement_name: string;
+  right_pct: number;
+  turnout_pct: number;
+  bzb: number;
+};
 
-  async function load() {
-    const [g, me, u, s] = await Promise.all([
-      fetch("/api/groups").then((r) => r.json()),
-      fetch("/api/auth/me").then((r) => r.json()),
-      fetch("/api/users").then((r) => r.json()),
-      fetch("/api/settlements").then((r) => r.json()),
-    ]);
-    setGroups(
-      (g.groups ?? []).map((x: Group & { coordinators: unknown }) => ({
-        ...x,
-        coordinators:
-          typeof x.coordinators === "string"
-            ? JSON.parse(x.coordinators)
-            : x.coordinators ?? [],
-      })),
-    );
-    const role = me.user?.role;
-    setCanEdit(role === "super_admin" || role === "area_manager");
-    setCoords(
-      (u.users ?? [])
-        .filter((x: { role: string }) => x.role === "coordinator")
-        .map((x: { id: number; full_name: string }) => ({
-          id: x.id,
-          full_name: x.full_name,
-        })),
-    );
-    setSettlements(s.settlements ?? []);
-  }
+type Institution = {
+  id: number;
+  name: string;
+  kind: string | null;
+  settlement_name: string | null;
+  district: string | null;
+  contacts?: Contact[] | string;
+  linked_clusters?: LinkedCluster[] | string;
+};
+
+/**
+ * Product: "קבוצות" = the coordinator's institution (חוברת2 מוסד).
+ * Admins manage the full catalog on /institutions; this page shows the
+ * institution(s) relevant to the signed-in role plus linked clusters.
+ */
+export default function GroupsPage() {
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    load();
+    void (async () => {
+      setLoading(true);
+      const [instRes, meRes] = await Promise.all([
+        fetch("/api/institutions"),
+        fetch("/api/auth/me"),
+      ]);
+      const instData = await instRes.json();
+      const meData = await meRes.json();
+      setRole(meData.user?.role ?? null);
+      if (!instRes.ok) {
+        setMessage(instData.error || "אין הרשאה");
+        setInstitutions([]);
+      } else {
+        setMessage(instData.message ?? null);
+        setInstitutions(
+          (instData.institutions ?? []).map((i: Institution) => ({
+            ...i,
+            contacts:
+              typeof i.contacts === "string"
+                ? JSON.parse(i.contacts)
+                : i.contacts ?? [],
+            linked_clusters:
+              typeof i.linked_clusters === "string"
+                ? JSON.parse(i.linked_clusters)
+                : i.linked_clusters ?? [],
+          })),
+        );
+      }
+      setLoading(false);
+    })();
   }, []);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    const res = await fetch("/api/groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setMsg(data.error || "שגיאה");
-      return;
-    }
-    setMsg("הקבוצה נשמרה");
-    setForm({
-      name: "",
-      location_text: "",
-      settlement_name: "",
-      headcount: 10,
-      gender: "",
-      type: "yeshiva",
-      coordinator_ids: [],
-    });
-    load();
-  }
-
-  function toggleCoord(id: number) {
-    setForm((f) => ({
-      ...f,
-      coordinator_ids: f.coordinator_ids.includes(id)
-        ? f.coordinator_ids.filter((x) => x !== id)
-        : [...f.coordinator_ids, id],
-    }));
-  }
+  const isAdmin = role === "super_admin" || role === "area_manager";
 
   return (
     <main>
@@ -105,127 +80,91 @@ export default function GroupsPage() {
         <header className="hero">
           <div>
             <p className="eyebrow">ניהול</p>
-            <h1>קבוצות</h1>
-            <p className="lede">ישיבה / גרעין / מכינה — קישור לרכזים וליישוב</p>
+            <h1>{isAdmin ? "מוסדות הצוות" : "המוסד שלי"}</h1>
+            <p className="lede">
+              המוסד מהקטלוג (חוברת2) — אשכולות מקושרים מופיעים במפה לרכז
+            </p>
           </div>
+          {isAdmin && (
+            <Link href="/institutions" className="export">
+              לקטלוג המלא
+            </Link>
+          )}
         </header>
 
-        {canEdit && (
-          <form className="panel-form" onSubmit={onSubmit}>
-            <div className="form-grid">
-              <label>
-                שם
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                מיקום בישראל
-                <input
-                  value={form.location_text}
-                  onChange={(e) => setForm({ ...form, location_text: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                יישוב (לשיוך רחובות)
-                <select
-                  value={form.settlement_name}
-                  onChange={(e) =>
-                    setForm({ ...form, settlement_name: e.target.value })
-                  }
-                  required
-                >
-                  <option value="">בחרו יישוב</option>
-                  {settlements.map((s) => (
-                    <option key={s.name_he} value={s.name_he}>
-                      {s.name_he}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                כמות אנשים
-                <input
-                  type="number"
-                  min={0}
-                  value={form.headcount}
-                  onChange={(e) =>
-                    setForm({ ...form, headcount: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                מגדר
-                <input
-                  value={form.gender}
-                  onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                />
-              </label>
-              <label>
-                סוג
-                <select
-                  value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value })}
-                >
-                  <option value="yeshiva">ישיבה</option>
-                  <option value="garin">גרעין</option>
-                  <option value="mechina">מכינה</option>
-                </select>
-              </label>
-            </div>
-            <fieldset className="coord-set">
-              <legend>רכזים מקושרים</legend>
-              {coords.map((c) => (
-                <label key={c.id} className="check">
-                  <input
-                    type="checkbox"
-                    checked={form.coordinator_ids.includes(c.id)}
-                    onChange={() => toggleCoord(c.id)}
-                  />
-                  {c.full_name}
-                </label>
-              ))}
-            </fieldset>
-            <button type="submit" className="export">
-              שמירת קבוצה
-            </button>
-            {msg && <p>{msg}</p>}
-          </form>
+        {loading && <p className="lede">טוען…</p>}
+        {!loading && message && (
+          <p className="lede" style={{ color: "var(--sand)" }}>
+            {message}
+          </p>
+        )}
+        {!loading && !message && institutions.length === 0 && (
+          <p className="lede" style={{ color: "var(--sand)" }}>
+            לא שויך מוסד. מנהל צריך לבחור מוסד למשתמש במסך משתמשים.
+          </p>
         )}
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>שם</th>
-                <th>מיקום</th>
-                <th>יישוב</th>
-                <th>כמות</th>
-                <th>מגדר</th>
-                <th>סוג</th>
-                <th>רכזים</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) => (
-                <tr key={g.id}>
-                  <td>{g.name}</td>
-                  <td>{g.location_text}</td>
-                  <td>{g.settlement_name ?? "—"}</td>
-                  <td>{g.headcount}</td>
-                  <td>{g.gender}</td>
-                  <td>{g.type}</td>
-                  <td>
-                    {(g.coordinators ?? []).map((c) => c.full_name).join(", ")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {institutions.map((inst) => {
+          const contacts = (inst.contacts ?? []) as Contact[];
+          const clusters = (inst.linked_clusters ?? []) as LinkedCluster[];
+          return (
+            <section key={inst.id} className="panel-form" style={{ marginBottom: "1.25rem" }}>
+              <h2 style={{ margin: "0 0 0.35rem", fontSize: "1.25rem" }}>{inst.name}</h2>
+              <p className="lede" style={{ marginBottom: "0.75rem" }}>
+                {[inst.kind, inst.settlement_name, inst.district]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </p>
+
+              {contacts.length > 0 && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <strong>אנשי מפתח</strong>
+                  <ul style={{ margin: "0.35rem 0 0", paddingInlineStart: "1.2rem" }}>
+                    {contacts.map((c) => (
+                      <li key={c.id}>
+                        {c.full_name}
+                        {c.role_title ? ` (${c.role_title})` : ""}
+                        {c.phone ? ` · ${c.phone}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <strong>אשכולות מקושרים ({clusters.length})</strong>
+              {clusters.length === 0 ? (
+                <p className="lede" style={{ marginTop: "0.35rem" }}>
+                  עדיין אין אשכולות — במפה לחצו על אשכול ואז «קשר למוסד».
+                </p>
+              ) : (
+                <div className="table-wrap" style={{ marginTop: "0.5rem" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>אשכול</th>
+                        <th>יישוב</th>
+                        <th>% ימין</th>
+                        <th>הצבעה</th>
+                        <th>בז״ב</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clusters.map((c) => (
+                        <tr key={c.ashkol}>
+                          <td>{c.ashkol}</td>
+                          <td>{c.settlement_name}</td>
+                          <td>{Number(c.right_pct).toFixed(1)}</td>
+                          <td>{Number(c.turnout_pct).toFixed(1)}</td>
+                          <td>{c.bzb}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
     </main>
   );

@@ -15,30 +15,156 @@ const KINDS = [
 
 export async function GET() {
   const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const sql = getSql();
+
+  if (user.role === "coordinator") {
+    if (!user.institution_id) {
+      return NextResponse.json({
+        institutions: [],
+        kinds: KINDS,
+        message: "לא שויך מוסד למשתמש זה — פנו למנהל",
+      });
+    }
+    const rows = await sql`
+      SELECT i.id, i.name, i.kind, i.settlement_name, i.district, i.lat, i.lng,
+             i.key_people_raw, i.created_at,
+             coalesce(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'id', c.id,
+                     'full_name', c.full_name,
+                     'role_title', c.role_title,
+                     'phone', c.phone
+                   )
+                   ORDER BY c.sort_order, c.id
+                 )
+                 FROM institution_contacts c
+                 WHERE c.institution_id = i.id
+               ),
+               '[]'
+             ) AS contacts,
+             coalesce(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'ashkol', ic.ashkol,
+                     'settlement_name', cl.settlement_name,
+                     'right_pct', cl.right_pct,
+                     'turnout_pct', cl.turnout_pct,
+                     'bzb', cl.bzb
+                   )
+                   ORDER BY cl.settlement_name, ic.ashkol
+                 )
+                 FROM institution_clusters ic
+                 JOIN clusters cl ON cl.ashkol = ic.ashkol
+                 WHERE ic.institution_id = i.id
+               ),
+               '[]'
+             ) AS linked_clusters
+      FROM institutions i
+      WHERE i.id = ${user.institution_id}
+    `;
+    return NextResponse.json({ institutions: rows, kinds: KINDS });
+  }
+
+  if (user.role === "area_manager") {
+    const rows = await sql`
+      SELECT i.id, i.name, i.kind, i.settlement_name, i.district, i.lat, i.lng,
+             i.key_people_raw, i.created_at,
+             coalesce(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'id', c.id,
+                     'full_name', c.full_name,
+                     'role_title', c.role_title,
+                     'phone', c.phone
+                   )
+                   ORDER BY c.sort_order, c.id
+                 )
+                 FROM institution_contacts c
+                 WHERE c.institution_id = i.id
+               ),
+               '[]'
+             ) AS contacts,
+             coalesce(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'ashkol', ic.ashkol,
+                     'settlement_name', cl.settlement_name,
+                     'right_pct', cl.right_pct,
+                     'turnout_pct', cl.turnout_pct,
+                     'bzb', cl.bzb
+                   )
+                   ORDER BY cl.settlement_name, ic.ashkol
+                 )
+                 FROM institution_clusters ic
+                 JOIN clusters cl ON cl.ashkol = ic.ashkol
+                 WHERE ic.institution_id = i.id
+               ),
+               '[]'
+             ) AS linked_clusters
+      FROM institutions i
+      WHERE i.id IN (
+        SELECT DISTINCT u.institution_id
+        FROM users u
+        WHERE u.role = 'coordinator'
+          AND u.manager_id = ${user.id}
+          AND u.institution_id IS NOT NULL
+      )
+      ORDER BY i.name
+    `;
+    return NextResponse.json({ institutions: rows, kinds: KINDS });
+  }
+
   try {
-    requireRole(user, ["super_admin", "area_manager"]);
+    requireRole(user, ["super_admin"]);
   } catch {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const sql = getSql();
+
   const rows = await sql`
     SELECT i.id, i.name, i.kind, i.settlement_name, i.district, i.lat, i.lng,
            i.key_people_raw, i.created_at,
            coalesce(
-             json_agg(
-               json_build_object(
-                 'id', c.id,
-                 'full_name', c.full_name,
-                 'role_title', c.role_title,
-                 'phone', c.phone
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'id', c.id,
+                   'full_name', c.full_name,
+                   'role_title', c.role_title,
+                   'phone', c.phone
+                 )
+                 ORDER BY c.sort_order, c.id
                )
-               ORDER BY c.sort_order, c.id
-             ) FILTER (WHERE c.id IS NOT NULL),
+               FROM institution_contacts c
+               WHERE c.institution_id = i.id
+             ),
              '[]'
-           ) AS contacts
+           ) AS contacts,
+           coalesce(
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'ashkol', ic.ashkol,
+                   'settlement_name', cl.settlement_name,
+                   'right_pct', cl.right_pct,
+                   'turnout_pct', cl.turnout_pct,
+                   'bzb', cl.bzb
+                 )
+                 ORDER BY cl.settlement_name, ic.ashkol
+               )
+               FROM institution_clusters ic
+               JOIN clusters cl ON cl.ashkol = ic.ashkol
+               WHERE ic.institution_id = i.id
+             ),
+             '[]'
+           ) AS linked_clusters
     FROM institutions i
-    LEFT JOIN institution_contacts c ON c.institution_id = i.id
-    GROUP BY i.id
     ORDER BY i.name
   `;
   return NextResponse.json({ institutions: rows, kinds: KINDS });

@@ -18,19 +18,60 @@ export async function nearestSettlementName(
   return rows[0]?.name_he ?? null;
 }
 
-/** Distinct settlement cities from groups linked to this coordinator. */
+/** Distinct settlement cities from the coordinator's institution + legacy groups. */
 export async function coordinatorGroupCities(
   sql: Sql,
   coordinatorId: number,
 ): Promise<string[]> {
   const rows = (await sql`
-    SELECT DISTINCT g.settlement_name AS name
-    FROM groups g
-    JOIN group_coordinators gc ON gc.group_id = g.id
-    WHERE gc.user_id = ${coordinatorId}
-      AND g.settlement_name IS NOT NULL
+    SELECT DISTINCT name FROM (
+      SELECT i.settlement_name AS name
+      FROM users u
+      JOIN institutions i ON i.id = u.institution_id
+      WHERE u.id = ${coordinatorId}
+        AND i.settlement_name IS NOT NULL
+      UNION
+      SELECT g.settlement_name AS name
+      FROM groups g
+      JOIN group_coordinators gc ON gc.group_id = g.id
+      WHERE gc.user_id = ${coordinatorId}
+        AND g.settlement_name IS NOT NULL
+    ) cities
   `) as { name: string }[];
   return rows.map((r) => r.name);
+}
+
+/**
+ * Ashkols the viewer may see as voter clusters on the map/table.
+ * `null` = unrestricted (super_admin). Empty = none.
+ * Coordinators: only ashkols linked to their institution.
+ */
+export async function visibleClusterAshkols(
+  sql: Sql,
+  user: SessionUser,
+): Promise<string[] | null> {
+  if (user.role === "super_admin") return null;
+
+  if (user.role === "coordinator") {
+    if (!user.institution_id) return [];
+    const rows = (await sql`
+      SELECT ashkol FROM institution_clusters
+      WHERE institution_id = ${user.institution_id}
+    `) as { ashkol: string }[];
+    return rows.map((r) => r.ashkol);
+  }
+
+  if (user.role === "area_manager") {
+    const rows = (await sql`
+      SELECT DISTINCT ic.ashkol
+      FROM institution_clusters ic
+      JOIN users u ON u.institution_id = ic.institution_id
+      WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
+    `) as { ashkol: string }[];
+    return rows.map((r) => r.ashkol);
+  }
+
+  return [];
 }
 
 export async function streetNearestCity(
@@ -102,12 +143,12 @@ export async function canAccessAshkol(
   ashkol: string,
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
-  const vis = await streetVisibilityFilter(sql, user);
-  if (!vis.active) {
-    // Pre-import: allow, but coordinators still limited by city for marking.
-    return true;
+  // Cluster list/link scope: only institution-linked ashkols for non-admins.
+  const linked = await visibleClusterAshkols(sql, user);
+  if (linked !== null) {
+    return linked.includes(ashkol);
   }
-  return vis.ashkols.includes(ashkol);
+  return true;
 }
 
 /**

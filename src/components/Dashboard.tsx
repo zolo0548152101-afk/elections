@@ -185,6 +185,12 @@ export function Dashboard() {
       </section>
 
       {error && <p className="error">{error}</p>}
+      {!loading && !error && count === 0 && (
+        <p className="lede" style={{ color: "var(--sand)" }}>
+          אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד»
+          על האשכולות הרלוונטיים — רק הם יופיעו כאן.
+        </p>
+      )}
 
       <div className="unified">
         <StreetMap clusters={clusters} focus={focus} />

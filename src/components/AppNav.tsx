@@ -18,11 +18,12 @@ export function AppNav({
   if (user.role === "super_admin" || user.role === "area_manager") {
     links.push(
       { href: "/users", label: "משתמשים" },
-      { href: "/institutions", label: "מוסדות" },
-      { href: "/groups", label: "קבוצות" },
+      { href: "/institutions", label: "קטלוג מוסדות" },
+      { href: "/groups", label: "מוסדות הצוות" },
     );
   } else {
-    links.push({ href: "/groups", label: "קבוצות" });
+    // Same entity as institutions — coordinator only sees their linked מוסד.
+    links.push({ href: "/groups", label: "המוסד שלי" });
   }
 
   async function logout() {

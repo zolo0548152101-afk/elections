@@ -2,36 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql, type ClusterRow } from "@/lib/db";
 import { offsetWithinSettlement } from "@/lib/geo";
-import { coordinatorGroupCities } from "@/lib/streets-access";
+import { visibleClusterAshkols } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
-
-async function allowedSettlements(
-  sql: ReturnType<typeof getSql>,
-  user: NonNullable<Awaited<ReturnType<typeof getSessionUser>>>,
-): Promise<string[] | null> {
-  if (user.role === "super_admin") return null; // all
-
-  if (user.role === "coordinator") {
-    const cities = await coordinatorGroupCities(sql, user.id);
-    const set = new Set(cities);
-    if (user.settlement_name) set.add(user.settlement_name);
-    return [...set];
-  }
-
-  if (user.role === "area_manager") {
-    const rows = (await sql`
-      SELECT DISTINCT COALESCE(g.settlement_name, u.settlement_name) AS name
-      FROM users u
-      LEFT JOIN group_coordinators gc ON gc.user_id = u.id
-      LEFT JOIN groups g ON g.id = gc.group_id
-      WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
-    `) as { name: string | null }[];
-    return rows.map((r) => r.name).filter((n): n is string => Boolean(n));
-  }
-
-  return [];
-}
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
@@ -56,10 +29,10 @@ export async function GET(req: NextRequest) {
   const sortCol = allowedSort.has(sort) ? sort : "right_pct";
 
   const sql = getSql();
-  const settlements = await allowedSettlements(sql, user);
+  const ashkols = await visibleClusterAshkols(sql, user);
 
   const rows = (
-    settlements === null
+    ashkols === null
       ? await sql`
           SELECT
             c.ashkol,
@@ -80,7 +53,7 @@ export async function GET(req: NextRequest) {
             AND c.turnout_pct < ${maxTurnout}
             AND c.bzb >= ${minBzb}
         `
-      : settlements.length === 0
+      : ashkols.length === 0
         ? []
         : await sql`
           SELECT
@@ -101,7 +74,7 @@ export async function GET(req: NextRequest) {
           WHERE c.right_pct >= ${minRight}
             AND c.turnout_pct < ${maxTurnout}
             AND c.bzb >= ${minBzb}
-            AND c.settlement_name = ANY(${settlements})
+            AND c.ashkol = ANY(${ashkols})
         `
   ) as ClusterRow[];
 
@@ -133,5 +106,6 @@ export async function GET(req: NextRequest) {
     maxTurnout,
     minBzb,
     clusters: withMap,
+    scoped: ashkols !== null,
   });
 }
