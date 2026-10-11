@@ -796,11 +796,104 @@ tbody tr.cluster-row-selected:hover {
   margin-bottom: 1rem;
 }
 
+.institution-multi {
+  position: relative;
+  grid-column: 1 / -1;
+}
+
 .institution-multi .field-label {
   display: block;
   font-size: 0.85rem;
   margin-bottom: 0.25rem;
   color: var(--muted);
+}
+
+.inst-multi-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: text;
+}
+
+.inst-multi-box.is-open {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 1px;
+}
+
+.inst-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.2rem 0.35rem 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.12);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.inst-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18rem;
+}
+
+.inst-chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+}
+
+.inst-chip-remove:hover {
+  color: var(--accent);
+  background: rgba(196, 92, 38, 0.12);
+}
+
+.inst-multi-input {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0.35rem 0.25rem !important;
+  background: transparent;
+  font: inherit;
+  width: auto !important;
+}
+
+.inst-multi-hits {
+  margin-top: 0.35rem;
+}
+
+.coord-cluster-editor {
+  position: relative;
+  margin-top: 0.75rem;
+  max-width: 42rem;
+}
+
+.coord-cluster-editor .field-label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+}
+
+.coord-cluster-editor .inst-chip-text {
+  max-width: 22rem;
 }
 
 @media (max-width: 900px) {
