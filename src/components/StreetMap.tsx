@@ -121,6 +121,8 @@ export function StreetMap({
   const [me, setMe] = useState<MeUser | null>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [linkInstitutionId, setLinkInstitutionId] = useState("");
+  const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
+  const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
 
   useEffect(() => {
@@ -194,19 +196,25 @@ export function StreetMap({
             source: "streets",
             "source-layer": "streets",
             paint: {
+              // Neutral by default — blue only when street/cluster selected (updated via setPaintProperty).
               "line-color": [
                 "case",
                 ["==", ["get", "done"], 1],
                 "#16a34a",
-                "#2563eb",
+                "#94a3b8",
               ],
               "line-width": [
                 "case",
                 ["==", ["get", "done"], 1],
                 5,
-                3,
+                2,
               ],
-              "line-opacity": 0.85,
+              "line-opacity": [
+                "case",
+                ["==", ["get", "done"], 1],
+                0.9,
+                0.35,
+              ],
             },
           },
           {
@@ -301,9 +309,14 @@ export function StreetMap({
         const src = map.getSource("streets") as VectorTileSource & {
           setTiles?: (tiles: string[]) => void;
         };
-        src.setTiles?.([`${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`]);
+        src.setTiles?.([
+          `${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`,
+        ]);
         map.triggerRepaint();
         setPickedStreet({ ...street, done: !done });
+        setClusterStreets((list) =>
+          list.map((s) => (s.id === id ? { ...s, done: !done } : s)),
+        );
         setStatus(done ? `הוסר סימון: ${name}` : `סומן בוצע: ${name}`);
       } else {
         setStatus("שגיאה בסימון");
@@ -380,6 +393,107 @@ export function StreetMap({
     setPicked(null);
     setSelectedAshkol("");
   }, [clusters, picked]);
+
+  /** Neutral streets; blue only for selected cluster ashkol or selected street. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.getLayer("streets-line")) return;
+    const ashkol = selectedAshkol || "";
+    const streetId = pickedStreet?.id || "";
+    const apply = () => {
+      if (!map.getLayer("streets-line")) return;
+      map.setPaintProperty("streets-line", "line-color", [
+        "case",
+        ["==", ["get", "done"], 1],
+        "#16a34a",
+        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
+        "#2563eb",
+        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
+        "#2563eb",
+        "#94a3b8",
+      ]);
+      map.setPaintProperty("streets-line", "line-width", [
+        "case",
+        ["==", ["get", "done"], 1],
+        5,
+        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
+        5,
+        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
+        5,
+        2,
+      ]);
+      map.setPaintProperty("streets-line", "line-opacity", [
+        "case",
+        ["==", ["get", "done"], 1],
+        0.9,
+        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
+        0.95,
+        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
+        0.95,
+        0.35,
+      ]);
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [selectedAshkol, pickedStreet?.id]);
+
+  async function loadClusterStreets(ashkol: string) {
+    if (!ashkol) {
+      setClusterStreets([]);
+      return;
+    }
+    setClusterStreetsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/clusters/${encodeURIComponent(ashkol)}/streets`,
+      );
+      if (!res.ok) {
+        setClusterStreets([]);
+        return;
+      }
+      const data = await res.json();
+      setClusterStreets(data.streets ?? []);
+    } finally {
+      setClusterStreetsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadClusterStreets(selectedAshkol);
+  }, [selectedAshkol]);
+
+  function refreshStreetTiles() {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("streets") as VectorTileSource & {
+      setTiles?: (tiles: string[]) => void;
+    };
+    src.setTiles?.([
+      `${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`,
+    ]);
+    map.triggerRepaint();
+  }
+
+  async function toggleStreetDone(street: SearchStreet, done: boolean) {
+    setStatus(done ? `מסמן בוצע: ${street.name_he}` : `מסיר סימון: ${street.name_he}`);
+    const res = await fetch(`/api/streets/${encodeURIComponent(street.id)}/mark`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done }),
+    });
+    if (!res.ok) {
+      setStatus("שגיאה בסימון");
+      return;
+    }
+    setClusterStreets((list) =>
+      list.map((s) => (s.id === street.id ? { ...s, done } : s)),
+    );
+    if (pickedStreet?.id === street.id) {
+      setPickedStreet({ ...pickedStreet, done });
+    }
+    refreshStreetTiles();
+    setStatus(done ? `סומן בוצע: ${street.name_he}` : `הוסר סימון: ${street.name_he}`);
+  }
 
   useEffect(() => {
     const map = mapRef.current;
@@ -576,13 +690,8 @@ export function StreetMap({
         ? `${done ? "סומנו" : "הוסרו"} ${data.updated} רחובות באשכול ${selectedAshkol}`
         : data.message || "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)",
     );
-    const map = mapRef.current;
-    if (map) {
-      const src = map.getSource("streets") as VectorTileSource & {
-        setTiles?: (tiles: string[]) => void;
-      };
-      src.setTiles?.([`${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`]);
-    }
+    refreshStreetTiles();
+    if (selectedAshkol) void loadClusterStreets(selectedAshkol);
   }
 
   type HitItem =
@@ -593,11 +702,10 @@ export function StreetMap({
     ...streetHits.map((street) => ({ kind: "street" as const, street })),
   ];
   const showHits = searchOpen && (hitItems.length > 0 || searchBusy || q.trim().length >= 1);
+  // Coordinators link clusters from the institutions flow / map without a button —
+  // «קשר למוסד» is admin/manager only.
   const canLinkCluster =
-    me &&
-    (me.role === "super_admin" ||
-      me.role === "area_manager" ||
-      (me.role === "coordinator" && me.institution_id));
+    me && (me.role === "super_admin" || me.role === "area_manager");
 
   function activateHit(index: number) {
     const item = hitItems[index];
@@ -852,13 +960,107 @@ export function StreetMap({
           )}
         </aside>
         <aside className="street-card" aria-live="polite">
-          {pickedStreet ? (
+          {selectedAshkol ? (
+            <>
+              <h2>
+                רחובות באשכול <bdi dir="ltr">{selectedAshkol}</bdi>
+              </h2>
+              {clusterStreetsLoading ? (
+                <p className="assign-empty">טוען רחובות…</p>
+              ) : clusterStreets.length === 0 ? (
+                <p className="assign-empty">
+                  אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור). כשיופיעו — ניתן
+                  לסמן בוצע ליד כל שם.
+                </p>
+              ) : (
+                <ul className="cluster-street-list">
+                  {clusterStreets.map((s) => (
+                    <li key={s.id}>
+                      <label className="cluster-street-item">
+                        <input
+                          type="checkbox"
+                          checked={s.done}
+                          onChange={(e) =>
+                            void toggleStreetDone(s, e.target.checked)
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="cluster-street-name"
+                          onClick={() => {
+                            setPickedStreet(s);
+                            void loadStreetAssign(s.id);
+                            mapRef.current?.flyTo({
+                              center: [s.lng, s.lat],
+                              zoom: 16,
+                            });
+                          }}
+                        >
+                          {s.name_he}
+                        </button>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {pickedStreet && (
+                <div className="assign-block" style={{ marginTop: "0.85rem" }}>
+                  <span>רכזים · {pickedStreet.name_he}</span>
+                  {assigned.length === 0 ? (
+                    <p className="assign-empty">אין שיוך עדיין</p>
+                  ) : (
+                    <ul className="assign-list">
+                      {assigned.map((a) => (
+                        <li key={a.id}>
+                          {a.full_name}
+                          {allowed.some((x) => x.id === a.id) && (
+                            <button
+                              type="button"
+                              className="reset"
+                              onClick={() => void removeCoordinator(a.id)}
+                            >
+                              הסר
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {allowed.length > 0 && (
+                    <div className="assign-add">
+                      <select
+                        value={assignId}
+                        onChange={(e) => setAssignId(e.target.value)}
+                      >
+                        <option value="">הוספה לרכז</option>
+                        {allowed.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="export"
+                        disabled={!assignId}
+                        onClick={() => void assignCoordinator()}
+                      >
+                        הוסף
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : pickedStreet ? (
             <>
               <h2>{pickedStreet.name_he}</h2>
               {pickedStreet.ashkol ? (
                 <div>
                   <span>אשכול</span>
-                  <strong><bdi dir="ltr">{pickedStreet.ashkol}</bdi></strong>
+                  <strong>
+                    <bdi dir="ltr">{pickedStreet.ashkol}</bdi>
+                  </strong>
                 </div>
               ) : null}
               <div>
@@ -918,7 +1120,10 @@ export function StreetMap({
               </div>
             </>
           ) : (
-            <p>לחצו על רחוב לסימון כבוצע, לראות את האשכול כשיקושר, ולהוסיף לרכז.</p>
+            <p>
+              בחרו אשכול כדי לראות את רחובותיו (כשיהיו מקושרים) ולסמן בוצע, או לחצו
+              על רחוב במפה.
+            </p>
           )}
         </aside>
       </div>

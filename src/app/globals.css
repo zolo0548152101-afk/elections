@@ -743,6 +743,44 @@ tbody tr:hover {
   font-size: 0.85rem;
 }
 
+.cluster-street-list {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.3rem;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.cluster-street-item {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.cluster-street-item input {
+  width: auto;
+  flex: 0 0 auto;
+  accent-color: var(--accent-2);
+}
+
+.cluster-street-name {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  padding: 0.15rem 0;
+}
+
+.cluster-street-name:hover {
+  color: var(--accent-2);
+}
+
 .street-map-canvas {
   height: min(70vh, 720px);
   border-radius: 18px;
