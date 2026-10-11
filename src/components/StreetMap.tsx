@@ -207,6 +207,7 @@ export function StreetMap({
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
   const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
 
@@ -266,8 +267,28 @@ export function StreetMap({
   }
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    const map = new MapLibreMap({
+    if (!containerRef.current || mapRef.current || mapFailed) return;
+
+    function supportsWebGL(): boolean {
+      try {
+        const canvas = document.createElement("canvas");
+        return Boolean(
+          canvas.getContext("webgl2") || canvas.getContext("webgl"),
+        );
+      } catch {
+        return false;
+      }
+    }
+
+    if (!supportsWebGL()) {
+      setMapFailed(true);
+      setStatus("המפה לא זמינה — אין תמיכה ב-WebGL");
+      return;
+    }
+
+    let map: MapLibreMap;
+    try {
+      map = new MapLibreMap({
       container: containerRef.current,
       style: {
         version: 8,
@@ -364,9 +385,29 @@ export function StreetMap({
       center: [34.8, 31.5],
       zoom: 8,
     });
+    } catch {
+      setMapFailed(true);
+      setStatus("המפה לא זמינה — אין תמיכה ב-WebGL");
+      return;
+    }
 
     map.addControl(new NavigationControl(), "top-left");
     map.on("load", () => setStatus("לחצו על רחוב לסימון · חיפוש עיר או רחוב"));
+    map.on("error", (e) => {
+      const msg = String(
+        (e as { error?: { message?: string } }).error?.message ?? "",
+      );
+      if (/webgl|context lost|failed to initialize/i.test(msg)) {
+        setMapFailed(true);
+        setStatus("המפה לא זמינה — אין תמיכה ב-WebGL");
+        try {
+          map.remove();
+        } catch {
+          /* ignore */
+        }
+        mapRef.current = null;
+      }
+    });
 
     map.on("click", "streets-line", async (e: MapLayerMouseEvent) => {
       const f = e.features?.[0];
@@ -454,7 +495,11 @@ export function StreetMap({
     mapRef.current = map;
     return () => {
       streetPopupRef.current?.remove();
-      map.remove();
+      try {
+        map.remove();
+      } catch {
+        /* already removed after WebGL failure */
+      }
       mapRef.current = null;
     };
   }, []);
@@ -1437,7 +1482,16 @@ export function StreetMap({
           )}
         </aside>
       </div>
-      <div ref={containerRef} className="street-map-canvas" />
+      {mapFailed ? (
+        <div className="street-map-canvas map-fallback" role="status">
+          <p>
+            לא ניתן להציג את המפה בסביבה זו (WebGL לא זמין). אפשר להמשיך עם
+            הטבלה והפילטרים.
+          </p>
+        </div>
+      ) : (
+        <div ref={containerRef} className="street-map-canvas" />
+      )}
       <p className="map-credit">
         © OpenStreetMap contributors · data available under ODbL · Hebrew names from OSM
       </p>

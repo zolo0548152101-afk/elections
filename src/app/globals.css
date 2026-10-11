@@ -991,6 +991,22 @@ tbody tr.cluster-row-selected:hover {
   box-shadow: var(--shadow);
 }
 
+.map-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  color: var(--ink);
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.map-fallback p {
+  margin: 0;
+  max-width: 28rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 .map-status {
   grid-column: 1 / -1;
   margin: 0;
