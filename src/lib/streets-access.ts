@@ -18,13 +18,39 @@ export async function nearestSettlementName(
   return rows[0]?.name_he ?? null;
 }
 
-/** Settlement cities from the coordinator's linked institution (+ user settlement). */
+/** Institution ids linked to a coordinator (join table + legacy FK). */
+export async function coordinatorInstitutionIds(
+  sql: Sql,
+  coordinatorId: number,
+): Promise<number[]> {
+  const rows = (await sql`
+    SELECT DISTINCT institution_id AS id FROM (
+      SELECT ic.institution_id
+      FROM institution_coordinators ic
+      WHERE ic.user_id = ${coordinatorId}
+      UNION
+      SELECT u.institution_id
+      FROM users u
+      WHERE u.id = ${coordinatorId}
+        AND u.institution_id IS NOT NULL
+    ) x
+  `) as { id: number }[];
+  return rows.map((r) => r.id);
+}
+
+/** Settlement cities from the coordinator's linked institutions (+ user settlement). */
 export async function coordinatorInstitutionCities(
   sql: Sql,
   coordinatorId: number,
 ): Promise<string[]> {
   const rows = (await sql`
     SELECT DISTINCT name FROM (
+      SELECT i.settlement_name AS name
+      FROM institution_coordinators ic
+      JOIN institutions i ON i.id = ic.institution_id
+      WHERE ic.user_id = ${coordinatorId}
+        AND i.settlement_name IS NOT NULL
+      UNION
       SELECT i.settlement_name AS name
       FROM users u
       JOIN institutions i ON i.id = u.institution_id
@@ -46,7 +72,7 @@ export const coordinatorGroupCities = coordinatorInstitutionCities;
 /**
  * Ashkols the viewer may see as voter clusters on the map/table.
  * `null` = unrestricted (super_admin). Empty = none.
- * Coordinators: only ashkols linked to their institution.
+ * Coordinators: ashkols linked to any of their institutions.
  */
 export async function visibleClusterAshkols(
   sql: Sql,
@@ -55,10 +81,11 @@ export async function visibleClusterAshkols(
   if (user.role === "super_admin") return null;
 
   if (user.role === "coordinator") {
-    if (!user.institution_id) return [];
+    const ids = await coordinatorInstitutionIds(sql, user.id);
+    if (ids.length === 0) return [];
     const rows = (await sql`
-      SELECT ashkol FROM institution_clusters
-      WHERE institution_id = ${user.institution_id}
+      SELECT DISTINCT ashkol FROM institution_clusters
+      WHERE institution_id = ANY(${ids})
     `) as { ashkol: string }[];
     return rows.map((r) => r.ashkol);
   }
@@ -67,7 +94,8 @@ export async function visibleClusterAshkols(
     const rows = (await sql`
       SELECT DISTINCT ic.ashkol
       FROM institution_clusters ic
-      JOIN users u ON u.institution_id = ic.institution_id
+      JOIN institution_coordinators link ON link.institution_id = ic.institution_id
+      JOIN users u ON u.id = link.user_id
       WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
     `) as { ashkol: string }[];
     return rows.map((r) => r.ashkol);
@@ -108,25 +136,8 @@ export async function streetVisibilityFilter(
     return { active: false, ashkols: [] };
   }
 
-  let ashkols: string[] = [];
-  if (user.role === "coordinator") {
-    if (!user.institution_id) {
-      return { active: false, ashkols: [] };
-    }
-    const rows = (await sql`
-      SELECT ashkol FROM institution_clusters
-      WHERE institution_id = ${user.institution_id}
-    `) as { ashkol: string }[];
-    ashkols = rows.map((r) => r.ashkol);
-  } else if (user.role === "area_manager") {
-    const rows = (await sql`
-      SELECT DISTINCT ic.ashkol
-      FROM institution_clusters ic
-      JOIN users u ON u.institution_id = ic.institution_id
-      WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
-    `) as { ashkol: string }[];
-    ashkols = rows.map((r) => r.ashkol);
-  }
+  const linked = await visibleClusterAshkols(sql, user);
+  const ashkols = linked ?? [];
 
   if (ashkols.length === 0) {
     return { active: false, ashkols: [] };
@@ -215,10 +226,19 @@ export async function canLinkClusterAshkol(
 
   if (user.role === "area_manager") {
     const rows = (await sql`
-      SELECT DISTINCT COALESCE(i.settlement_name, u.settlement_name) AS name
-      FROM users u
-      LEFT JOIN institutions i ON i.id = u.institution_id
-      WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
+      SELECT DISTINCT name FROM (
+        SELECT i.settlement_name AS name
+        FROM users u
+        JOIN institution_coordinators link ON link.user_id = u.id
+        JOIN institutions i ON i.id = link.institution_id
+        WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
+          AND i.settlement_name IS NOT NULL
+        UNION
+        SELECT u.settlement_name AS name
+        FROM users u
+        WHERE u.role = 'coordinator' AND u.manager_id = ${user.id}
+          AND u.settlement_name IS NOT NULL
+      ) cities
     `) as { name: string | null }[];
     return rows.some((r) => r.name === settlement);
   }
@@ -266,12 +286,12 @@ export async function allowedAssignTargets(
 
   if (user.role === "area_manager") {
     const coords = (await sql`
-      SELECT id, full_name, institution_id
-      FROM users
-      WHERE role = 'coordinator'
-        AND manager_id = ${user.id}
-        AND institution_id IS NOT NULL
-      ORDER BY full_name
+      SELECT DISTINCT u.id, u.full_name, u.institution_id
+      FROM users u
+      JOIN institution_coordinators link ON link.user_id = u.id
+      WHERE u.role = 'coordinator'
+        AND u.manager_id = ${user.id}
+      ORDER BY u.full_name
     `) as AssignTarget[];
     const out: AssignTarget[] = [];
     for (const c of coords) {
@@ -301,18 +321,39 @@ export async function canManageInstitutionCluster(
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
   if (user.role === "coordinator") {
-    return user.institution_id === institutionId;
+    const ids = await coordinatorInstitutionIds(sql, user.id);
+    return ids.includes(institutionId);
   }
   if (user.role === "area_manager") {
     const rows = (await sql`
       SELECT 1 AS ok
-      FROM users
-      WHERE role = 'coordinator'
-        AND manager_id = ${user.id}
-        AND institution_id = ${institutionId}
+      FROM institution_coordinators link
+      JOIN users u ON u.id = link.user_id
+      WHERE u.role = 'coordinator'
+        AND u.manager_id = ${user.id}
+        AND link.institution_id = ${institutionId}
       LIMIT 1
     `) as { ok: number }[];
     return rows.length > 0;
   }
   return false;
+}
+
+/** Sync users.institution_id to the first remaining join link (legacy mirror). */
+export async function syncPrimaryInstitution(
+  sql: Sql,
+  userId: number,
+): Promise<number | null> {
+  const [row] = (await sql`
+    SELECT institution_id
+    FROM institution_coordinators
+    WHERE user_id = ${userId}
+    ORDER BY linked_at, institution_id
+    LIMIT 1
+  `) as { institution_id: number }[];
+  const primary = row?.institution_id ?? null;
+  await sql`
+    UPDATE users SET institution_id = ${primary} WHERE id = ${userId}
+  `;
+  return primary;
 }

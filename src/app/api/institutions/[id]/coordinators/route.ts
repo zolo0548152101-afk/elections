@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { syncPrimaryInstitution } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
-/** Link or unlink a coordinator user to this institution (sets users.institution_id). */
+/** Link a coordinator to this institution (many-to-many; does not clear other links). */
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -48,14 +49,17 @@ export async function POST(
     return NextResponse.json({ error: "רכז מחוץ לצוות" }, { status: 403 });
   }
 
-  const [row] = await sql`
-    UPDATE users
-    SET institution_id = ${institutionId}
-    WHERE id = ${userId}
-    RETURNING id, full_name, email, institution_id
+  await sql`
+    INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+    VALUES (${institutionId}, ${userId}, ${user!.id})
+    ON CONFLICT DO NOTHING
   `;
+  const primary = await syncPrimaryInstitution(sql, userId);
 
-  return NextResponse.json({ user: row });
+  return NextResponse.json({
+    ok: true,
+    user: { id: userId, institution_id: primary },
+  });
 }
 
 export async function DELETE(
@@ -81,16 +85,20 @@ export async function DELETE(
 
   const sql = getSql();
   const [target] = (await sql`
-    SELECT id, role, manager_id, institution_id
-    FROM users WHERE id = ${userId} LIMIT 1
+    SELECT u.id, u.role, u.manager_id,
+           EXISTS (
+             SELECT 1 FROM institution_coordinators ic
+             WHERE ic.institution_id = ${institutionId} AND ic.user_id = u.id
+           ) AS linked
+    FROM users u WHERE u.id = ${userId} LIMIT 1
   `) as {
     id: number;
     role: string;
     manager_id: number | null;
-    institution_id: number | null;
+    linked: boolean;
   }[];
 
-  if (!target || target.institution_id !== institutionId) {
+  if (!target || !target.linked) {
     return NextResponse.json({ error: "הרכז לא משויך למוסד זה" }, { status: 404 });
   }
   if (user!.role === "area_manager" && target.manager_id !== user!.id) {
@@ -98,8 +106,10 @@ export async function DELETE(
   }
 
   await sql`
-    UPDATE users SET institution_id = NULL WHERE id = ${userId}
+    DELETE FROM institution_coordinators
+    WHERE institution_id = ${institutionId} AND user_id = ${userId}
   `;
+  await syncPrimaryInstitution(sql, userId);
 
   return NextResponse.json({ ok: true });
 }

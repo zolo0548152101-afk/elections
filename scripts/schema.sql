@@ -141,6 +141,26 @@ CREATE TABLE IF NOT EXISTS institution_clusters (
   PRIMARY KEY (institution_id, ashkol)
 );
 
+-- Many-to-many: a coordinator may belong to several institutions.
+CREATE TABLE IF NOT EXISTS institution_coordinators (
+  institution_id integer NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  linked_by integer REFERENCES users(id) ON DELETE SET NULL,
+  linked_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (institution_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS institution_coordinators_user_idx
+  ON institution_coordinators (user_id);
+
+-- Backfill from legacy users.institution_id (idempotent).
+INSERT INTO institution_coordinators (institution_id, user_id)
+SELECT u.institution_id, u.id
+FROM users u
+WHERE u.role = 'coordinator'
+  AND u.institution_id IS NOT NULL
+ON CONFLICT DO NOTHING;
+
 CREATE INDEX IF NOT EXISTS streets_ashkol_idx ON streets (ashkol);
 CREATE INDEX IF NOT EXISTS streets_bbox_idx ON streets (bbox_xmin, bbox_xmax, bbox_ymin, bbox_ymax);
 CREATE INDEX IF NOT EXISTS streets_name_he_idx ON streets (name_he);

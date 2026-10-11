@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole, type SessionUser } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { coordinatorInstitutionIds } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -43,7 +44,8 @@ export async function GET() {
   const sql = getSql();
 
   if (user.role === "coordinator") {
-    if (!user.institution_id) {
+    const ids = await coordinatorInstitutionIds(sql, user.id);
+    if (ids.length === 0) {
       return NextResponse.json({
         institutions: [],
         kinds: KINDS,
@@ -97,13 +99,15 @@ export async function GET() {
                    )
                    ORDER BY u.full_name
                  )
-                 FROM users u
-                 WHERE u.role = 'coordinator' AND u.institution_id = i.id
+                 FROM institution_coordinators link
+                 JOIN users u ON u.id = link.user_id
+                 WHERE link.institution_id = i.id AND u.role = 'coordinator'
                ),
                '[]'
              ) AS coordinators
       FROM institutions i
-      WHERE i.id = ${user.institution_id}
+      WHERE i.id = ANY(${ids})
+      ORDER BY i.name
     `;
     return NextResponse.json({ institutions: rows, kinds: KINDS });
   }
@@ -163,9 +167,10 @@ export async function GET() {
                        )
                        ORDER BY u.full_name
                      )
-                     FROM users u
-                     WHERE u.role = 'coordinator'
-                       AND u.institution_id = i.id
+                     FROM institution_coordinators link
+                     JOIN users u ON u.id = link.user_id
+                     WHERE link.institution_id = i.id
+                       AND u.role = 'coordinator'
                        AND u.manager_id = ${user.id}
                    ),
                    '[]'
@@ -220,8 +225,9 @@ export async function GET() {
                        )
                        ORDER BY u.full_name
                      )
-                     FROM users u
-                     WHERE u.role = 'coordinator' AND u.institution_id = i.id
+                     FROM institution_coordinators link
+                     JOIN users u ON u.id = link.user_id
+                     WHERE link.institution_id = i.id AND u.role = 'coordinator'
                    ),
                    '[]'
                  ) AS coordinators

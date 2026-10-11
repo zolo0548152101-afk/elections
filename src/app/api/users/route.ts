@@ -15,7 +15,16 @@ export async function GET() {
       SELECT u.id, u.full_name, u.mobile, u.email, u.role, u.institution_id,
              u.manager_id, u.settlement_name,
              i.name AS institution_name,
-             m.full_name AS manager_name
+             m.full_name AS manager_name,
+             coalesce(
+               (
+                 SELECT string_agg(inst.name, ' · ' ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               i.name
+             ) AS institution_names
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       LEFT JOIN users m ON m.id = u.manager_id
@@ -28,7 +37,16 @@ export async function GET() {
     const rows = await sql`
       SELECT u.id, u.full_name, u.mobile, u.email, u.role, u.institution_id,
              u.manager_id, u.settlement_name,
-             i.name AS institution_name
+             i.name AS institution_name,
+             coalesce(
+               (
+                 SELECT string_agg(inst.name, ' · ' ORDER BY inst.name)
+                 FROM institution_coordinators link
+                 JOIN institutions inst ON inst.id = link.institution_id
+                 WHERE link.user_id = u.id
+               ),
+               i.name
+             ) AS institution_names
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.manager_id = ${user.id}
@@ -99,7 +117,7 @@ export async function POST(req: NextRequest) {
   }
   const hash = hashPassword(password);
   try {
-    const [row] = await sql`
+    const [row] = (await sql`
       INSERT INTO users (
         full_name, mobile, email, password_hash, role,
         institution_id, manager_id, settlement_name
@@ -109,7 +127,14 @@ export async function POST(req: NextRequest) {
       )
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
                 settlement_name
-    `;
+    `) as { id: number; institution_id: number | null }[];
+    if (row && role === "coordinator" && institution_id) {
+      await sql`
+        INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+        VALUES (${institution_id}, ${row.id}, ${user!.id})
+        ON CONFLICT DO NOTHING
+      `;
+    }
     return NextResponse.json({ user: row });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error";

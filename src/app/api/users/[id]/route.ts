@@ -131,9 +131,10 @@ export async function PATCH(
   }
 
   try {
+    let row: Record<string, unknown> | undefined;
     if (password) {
       const hash = hashPassword(password);
-      const [row] = await sql`
+      [row] = await sql`
         UPDATE users SET
           full_name = ${full_name},
           mobile = ${mobile},
@@ -147,22 +148,32 @@ export async function PATCH(
         RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
                   settlement_name
       `;
-      return NextResponse.json({ user: row });
+    } else {
+      [row] = await sql`
+        UPDATE users SET
+          full_name = ${full_name},
+          mobile = ${mobile},
+          email = ${email},
+          role = ${role},
+          institution_id = ${institution_id},
+          manager_id = ${manager_id},
+          settlement_name = ${settlement_name}
+        WHERE id = ${id}
+        RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
+                  settlement_name
+      `;
     }
 
-    const [row] = await sql`
-      UPDATE users SET
-        full_name = ${full_name},
-        mobile = ${mobile},
-        email = ${email},
-        role = ${role},
-        institution_id = ${institution_id},
-        manager_id = ${manager_id},
-        settlement_name = ${settlement_name}
-      WHERE id = ${id}
-      RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
-                settlement_name
-    `;
+    // Users form still has a single institution picker — ensure join table stays in sync
+    // when that primary value is set (additive; does not wipe other m2m links).
+    if (role === "coordinator" && institution_id) {
+      await sql`
+        INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+        VALUES (${institution_id}, ${id}, ${user!.id})
+        ON CONFLICT DO NOTHING
+      `;
+    }
+
     return NextResponse.json({ user: row });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error";
