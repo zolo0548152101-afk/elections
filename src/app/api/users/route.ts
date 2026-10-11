@@ -3,6 +3,7 @@ import { getSessionUser, hashPassword, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { validatePassword } from "@/lib/passwords";
 import { syncPrimaryInstitution } from "@/lib/streets-access";
+import { replaceAreaManagerCoordinators } from "@/lib/user-links";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,23 @@ export async function GET() {
                  WHERE link.user_id = u.id
                ),
                '[]'
-             ) AS institution_ids
+             ) AS institution_ids,
+             coalesce(
+               (
+                 SELECT string_agg(c.full_name, ' · ' ORDER BY c.full_name)
+                 FROM users c
+                 WHERE c.manager_id = u.id AND c.role = 'coordinator'
+               ),
+               NULL
+             ) AS coordinator_names,
+             coalesce(
+               (
+                 SELECT json_agg(c.id ORDER BY c.full_name)
+                 FROM users c
+                 WHERE c.manager_id = u.id AND c.role = 'coordinator'
+               ),
+               '[]'
+             ) AS coordinator_ids
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
       LEFT JOIN users m ON m.id = u.manager_id
@@ -93,6 +110,7 @@ export async function POST(req: NextRequest) {
     role?: string;
     institution_id?: number | null;
     institution_ids?: number[];
+    coordinator_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
@@ -106,6 +124,7 @@ export async function POST(req: NextRequest) {
     body.institution_ids,
     body.institution_id,
   );
+  const coordinatorIds = normalizeIdList(body.coordinator_ids);
   let institution_id = institutionIds[0] ?? body.institution_id ?? null;
   let settlement_name = body.settlement_name?.trim() || null;
   let manager_id = body.manager_id ?? null;
@@ -148,6 +167,9 @@ export async function POST(req: NextRequest) {
         user: { ...row, institution_id: primary },
       });
     }
+    if (row && role === "area_manager" && Array.isArray(body.coordinator_ids)) {
+      await replaceAreaManagerCoordinators(sql, row.id, coordinatorIds);
+    }
     return NextResponse.json({ user: row });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error";
@@ -158,14 +180,22 @@ export async function POST(req: NextRequest) {
   }
 }
 
+function normalizeIdList(ids: number[] | undefined): number[] {
+  return [
+    ...new Set(
+      (ids ?? [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ];
+}
+
 function normalizeInstitutionIds(
   ids: number[] | undefined,
   legacy: number | null | undefined,
 ): number[] {
-  const fromArray = (ids ?? [])
-    .map((n) => Number(n))
-    .filter((n) => Number.isInteger(n) && n > 0);
-  if (fromArray.length > 0) return [...new Set(fromArray)];
+  const fromArray = normalizeIdList(ids);
+  if (fromArray.length > 0) return fromArray;
   if (legacy != null && Number.isInteger(Number(legacy)) && Number(legacy) > 0) {
     return [Number(legacy)];
   }
@@ -187,3 +217,4 @@ async function replaceUserInstitutions(
     `;
   }
 }
+

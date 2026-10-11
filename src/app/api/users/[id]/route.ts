@@ -8,6 +8,7 @@ import {
 import { getSql } from "@/lib/db";
 import { validatePassword } from "@/lib/passwords";
 import { syncPrimaryInstitution } from "@/lib/streets-access";
+import { replaceAreaManagerCoordinators } from "@/lib/user-links";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,7 @@ export async function PATCH(
     role?: string;
     institution_id?: number | null;
     institution_ids?: number[];
+    coordinator_ids?: number[];
     settlement_name?: string | null;
     manager_id?: number | null;
   };
@@ -84,6 +86,16 @@ export async function PATCH(
     ? [
         ...new Set(
           body.institution_ids!
+            .map((n) => Number(n))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+    : null;
+  const hasCoordinatorIds = Array.isArray(body.coordinator_ids);
+  const coordinatorIds = hasCoordinatorIds
+    ? [
+        ...new Set(
+          body.coordinator_ids!
             .map((n) => Number(n))
             .filter((n) => Number.isInteger(n) && n > 0),
         ),
@@ -187,6 +199,13 @@ export async function PATCH(
       await sql`DELETE FROM institution_coordinators WHERE user_id = ${id}`;
       await sql`UPDATE users SET institution_id = NULL WHERE id = ${id}`;
       if (row) row.institution_id = null;
+    }
+
+    if (role === "area_manager" && coordinatorIds != null) {
+      await replaceAreaManagerCoordinators(sql, id, coordinatorIds);
+    } else if (role !== "area_manager" && target.role === "area_manager") {
+      // Demoted from area manager — detach former reports.
+      await replaceAreaManagerCoordinators(sql, id, []);
     }
 
     return NextResponse.json({ user: row });

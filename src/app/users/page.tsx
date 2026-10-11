@@ -13,6 +13,8 @@ type UserRow = {
   institution_name?: string;
   institution_names?: string | null;
   institution_ids?: number[] | string;
+  coordinator_ids?: number[] | string;
+  coordinator_names?: string | null;
   manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
@@ -25,6 +27,7 @@ const emptyForm = {
   password: "",
   role: "coordinator",
   institution_ids: [] as number[],
+  coordinator_ids: [] as number[],
   manager_id: "",
 };
 
@@ -60,6 +63,7 @@ export default function UsersPage() {
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [addInstitutionId, setAddInstitutionId] = useState("");
+  const [addCoordinatorId, setAddCoordinatorId] = useState("");
 
   async function load() {
     const [u, me] = await Promise.all([
@@ -84,6 +88,7 @@ export default function UsersPage() {
     setEditId(null);
     setShowPassword(false);
     setAddInstitutionId("");
+    setAddCoordinatorId("");
   }
 
   function startEdit(u: UserRow) {
@@ -95,9 +100,11 @@ export default function UsersPage() {
       password: "",
       role: u.role,
       institution_ids: parseIds(u.institution_ids, u.institution_id),
+      coordinator_ids: parseIds(u.coordinator_ids),
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
     setAddInstitutionId("");
+    setAddCoordinatorId("");
     setShowPassword(false);
     setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -114,6 +121,20 @@ export default function UsersPage() {
     setForm({
       ...form,
       institution_ids: form.institution_ids.filter((x) => x !== id),
+    });
+  }
+
+  function addCoordinator() {
+    const id = Number(addCoordinatorId);
+    if (!Number.isInteger(id) || form.coordinator_ids.includes(id)) return;
+    setForm({ ...form, coordinator_ids: [...form.coordinator_ids, id] });
+    setAddCoordinatorId("");
+  }
+
+  function removeCoordinator(id: number) {
+    setForm({
+      ...form,
+      coordinator_ids: form.coordinator_ids.filter((x) => x !== id),
     });
   }
 
@@ -136,6 +157,7 @@ export default function UsersPage() {
       institution_ids: role === "coordinator" ? form.institution_ids : [],
       institution_id:
         role === "coordinator" ? (form.institution_ids[0] ?? null) : null,
+      coordinator_ids: role === "area_manager" ? form.coordinator_ids : undefined,
       settlement_name: null,
       manager_id:
         role === "coordinator" && form.manager_id
@@ -197,6 +219,7 @@ export default function UsersPage() {
       u.mobile,
       u.institution_name,
       u.institution_names,
+      u.coordinator_names,
       u.manager_name,
       roleHe[u.role],
     ]
@@ -361,6 +384,69 @@ export default function UsersPage() {
                   </div>
                 </div>
               )}
+              {meRole === "super_admin" && form.role === "area_manager" && (
+                <div className="field-wide institution-multi">
+                  <span className="field-label">רכזים תחתיו</span>
+                  {form.coordinator_ids.length === 0 ? (
+                    <p className="lede" style={{ margin: "0.35rem 0" }}>
+                      אין רכזים משויכים
+                    </p>
+                  ) : (
+                    <ul className="coord-link-list">
+                      {form.coordinator_ids.map((id) => {
+                        const coord = users.find((u) => u.id === id);
+                        return (
+                          <li key={id}>
+                            <span>
+                              {coord
+                                ? `${coord.full_name} (${coord.email})`
+                                : `רכז #${id}`}
+                            </span>
+                            <button
+                              type="button"
+                              className="linkish"
+                              onClick={() => removeCoordinator(id)}
+                            >
+                              הסר
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
+                    <select
+                      value={addCoordinatorId}
+                      onChange={(e) => setAddCoordinatorId(e.target.value)}
+                    >
+                      <option value="">הוספת רכז…</option>
+                      {users
+                        .filter(
+                          (u) =>
+                            u.role === "coordinator" &&
+                            !form.coordinator_ids.includes(u.id) &&
+                            u.id !== editId,
+                        )
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.full_name}
+                            {u.manager_id && u.manager_id !== editId
+                              ? ` · כבר תחת ${u.manager_name ?? "אחר"}`
+                              : ""}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!addCoordinatorId}
+                      onClick={addCoordinator}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="form-actions">
               <button type="submit" className="export" disabled={saving}>
@@ -407,7 +493,7 @@ export default function UsersPage() {
                 <th>אימייל</th>
                 <th>נייד</th>
                 <th>תפקיד</th>
-                <th>מוסד</th>
+                <th>מוסד / רכזים</th>
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
@@ -418,7 +504,11 @@ export default function UsersPage() {
                   <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>{u.institution_names || u.institution_name || "—"}</td>
+                  <td>
+                    {u.role === "area_manager"
+                      ? u.coordinator_names || "—"
+                      : u.institution_names || u.institution_name || "—"}
+                  </td>
                   {canManage && (
                     <td className="actions-cell">
                       <button
