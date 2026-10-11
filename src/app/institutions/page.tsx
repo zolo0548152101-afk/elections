@@ -8,10 +8,17 @@ export default function InstitutionsPage() {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [name, setName] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
 
   async function load() {
     const res = await fetch("/api/institutions");
     const data = await res.json();
+    if (res.status === 403) {
+      setForbidden(true);
+      setInstitutions([]);
+      return;
+    }
+    setForbidden(false);
     setInstitutions(data.institutions ?? []);
   }
 
@@ -46,6 +53,11 @@ export default function InstitutionsPage() {
             <h1>מוסדות</h1>
           </div>
         </header>
+        {forbidden ? (
+          <p className="lede" style={{ color: "var(--sand)" }}>
+            אין הרשאה לניהול מוסדות.
+          </p>
+        ) : (
         <form className="panel-form" onSubmit={onSubmit}>
           <label>
             שם מוסד
@@ -56,6 +68,7 @@ export default function InstitutionsPage() {
           </button>
           {msg && <p>{msg}</p>}
         </form>
+        )}
         <div className="table-wrap">
           <table>
             <thead>

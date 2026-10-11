@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
+  Popup,
   setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
@@ -23,9 +24,26 @@ type SearchHit = {
   lng: number;
   ashkol: string | null;
   done: boolean;
+  near_settlement?: string | null;
 };
 
-export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
+type MapFocus = { lat: number; lng: number };
+
+function esc(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function StreetMap({
+  clusters,
+  focus,
+}: {
+  clusters: ClusterView[];
+  focus?: MapFocus | null;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [q, setQ] = useState("");
@@ -94,7 +112,7 @@ export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
               "symbol-placement": "line",
               "text-field": ["get", "name_he"],
               "text-size": 12,
-              "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+              "text-font": ["Noto Sans Regular"],
             },
             paint: {
               "text-color": "#111827",
@@ -158,10 +176,26 @@ export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
       }
     });
 
+    map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
+      const p = e.features?.[0]?.properties;
+      if (!p) return;
+      const html = `<div dir="rtl" class="popup"><strong>${esc(p.settlement_name)}</strong><div>אשכול ${esc(p.ashkol)}</div><div>% ימין ${Number(p.right_pct).toFixed(1)}</div><div>% הצבעה ${Number(p.turnout_pct).toFixed(1)}</div></div>`;
+      new Popup({ closeButton: true, maxWidth: "240px" })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map);
+    });
+
     map.on("mouseenter", "streets-line", () => {
       map.getCanvas().style.cursor = "pointer";
     });
     map.on("mouseleave", "streets-line", () => {
+      map.getCanvas().style.cursor = "";
+    });
+    map.on("mouseenter", "clusters-circle", () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", "clusters-circle", () => {
       map.getCanvas().style.cursor = "";
     });
 
@@ -197,6 +231,16 @@ export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   }, [clusters]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    const apply = () => {
+      map.flyTo({ center: [focus.lng, focus.lat], zoom: 13 });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [focus]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -289,6 +333,7 @@ export function StreetMap({ clusters }: { clusters: ClusterView[] }) {
                 <li key={h.id}>
                   <button type="button" onClick={() => goToHit(h)}>
                     {h.name_he}
+                    {h.near_settlement ? ` · ${h.near_settlement}` : ""}
                     {h.done ? " ✓" : ""}
                     {h.ashkol ? ` · אשכול ${h.ashkol}` : ""}
                   </button>

@@ -8,7 +8,10 @@ const sql = neon(process.env.DATABASE_URL);
 const dir = "data/street_batches";
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 
-await sql`TRUNCATE street_marks, streets`;
+// Replacing the street table also deletes street_marks. Require an explicit flag.
+if (process.env.REPLACE_STREETS === "1") {
+  await sql`TRUNCATE street_marks, streets`;
+}
 
 let n = 0;
 for (const file of files) {

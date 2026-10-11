@@ -403,7 +403,7 @@ tbody tr:hover {
 
 .search-hits button {
   width: 100%;
-  text-align: right;
+  text-align: start;
   border: 0;
   background: transparent;
   padding: 0.45rem 0.55rem;

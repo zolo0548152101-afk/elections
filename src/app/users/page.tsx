@@ -18,6 +18,7 @@ type UserRow = {
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [settlements, setSettlements] = useState<string[]>([]);
   const [meRole, setMeRole] = useState<string>("");
   const [form, setForm] = useState({
     full_name: "",
@@ -39,8 +40,12 @@ export default function UsersPage() {
     setUsers(u.users ?? []);
     setMeRole(me.user?.role ?? "");
     if (me.user?.role === "super_admin" || me.user?.role === "area_manager") {
-      const i = await fetch("/api/institutions").then((r) => r.json());
+      const [i, s] = await Promise.all([
+        fetch("/api/institutions").then((r) => r.json()),
+        fetch("/api/settlements").then((r) => r.json()),
+      ]);
       setInstitutions(i.institutions ?? []);
+      setSettlements((s.settlements ?? []).map((row: { name_he: string }) => row.name_he));
     }
   }
 
@@ -98,6 +103,7 @@ export default function UsersPage() {
               <label>
                 שם מלא
                 <input
+                  dir="auto"
                   value={form.full_name}
                   onChange={(e) => setForm({ ...form, full_name: e.target.value })}
                   required
@@ -114,6 +120,7 @@ export default function UsersPage() {
                 אימייל
                 <input
                   type="email"
+                  dir="ltr"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   required
@@ -175,11 +182,17 @@ export default function UsersPage() {
               </label>
               <label>
                 יישוב (לרכז)
-                <input
+                <select
                   value={form.settlement_name}
                   onChange={(e) => setForm({ ...form, settlement_name: e.target.value })}
-                  placeholder="שם יישוב בעברית"
-                />
+                >
+                  <option value="">—</option>
+                  {settlements.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             <button type="submit" className="export">

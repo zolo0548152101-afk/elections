@@ -79,6 +79,14 @@ export async function POST(req: NextRequest) {
   }
 
   const sql = getSql();
+  if (settlement_name) {
+    const [known] = (await sql`
+      SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
+    `) as { name_he: string }[];
+    if (!known) {
+      return NextResponse.json({ error: "יישוב לא נמצא ברשימת היישובים" }, { status: 400 });
+    }
+  }
   const hash = hashPassword(password);
   try {
     const [row] = await sql`

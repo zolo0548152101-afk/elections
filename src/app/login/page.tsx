@@ -40,6 +40,7 @@ export default function LoginPage() {
           אימייל
           <input
             type="email"
+            dir="ltr"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -49,6 +50,7 @@ export default function LoginPage() {
           סיסמה
           <input
             type="password"
+            dir="ltr"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

@@ -51,5 +51,15 @@ export async function GET() {
     progress = row ?? progress;
   }
 
-  return NextResponse.json({ user, progress });
+  let settlement: { name_he: string; lat: number; lng: number } | null = null;
+  if (user.settlement_name) {
+    const [row] = (await sql`
+      SELECT name_he, lat, lng FROM settlements
+      WHERE name_he = ${user.settlement_name}
+      LIMIT 1
+    `) as { name_he: string; lat: number; lng: number }[];
+    settlement = row ?? null;
+  }
+
+  return NextResponse.json({ user, progress, settlement });
 }

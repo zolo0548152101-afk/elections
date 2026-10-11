@@ -18,6 +18,7 @@ npm run seed:admin
 # curl -L -o /tmp/isr_roads.parquet \
 #   https://production-raw-data-api.s3.amazonaws.com/ISO3/ISR/_layers/osm/roads.parquet
 # npm run build:streets && npm run seed:streets
+# To replace existing street rows (also clears street_marks): REPLACE_STREETS=1 npm run seed:streets
 npm run dev
 ```
 

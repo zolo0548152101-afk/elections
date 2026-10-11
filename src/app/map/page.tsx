@@ -11,12 +11,21 @@ const StreetMap = dynamic(
 
 export default function MapPage() {
   const [clusters, setClusters] = useState<ClusterView[]>([]);
+  const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/clusters?minRight=0&maxTurnout=100&minBzb=0")
       .then((r) => r.json())
       .then((d) => setClusters(d.clusters ?? []))
       .catch(() => setClusters([]));
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settlement?.lat != null && d.settlement?.lng != null) {
+          setFocus({ lat: Number(d.settlement.lat), lng: Number(d.settlement.lng) });
+        }
+      })
+      .catch(() => setFocus(null));
   }, []);
 
   return (
@@ -32,7 +41,7 @@ export default function MapPage() {
             </p>
           </div>
         </header>
-        <StreetMap clusters={clusters} />
+        <StreetMap clusters={clusters} focus={focus} />
       </div>
     </main>
   );
