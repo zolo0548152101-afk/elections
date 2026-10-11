@@ -145,6 +145,14 @@ CREATE TABLE IF NOT EXISTS institution_clusters (
   PRIMARY KEY (institution_id, ashkol)
 );
 
+-- Admin ops status for team clusters page (בוצע / לא בוצע), independent of street marks.
+CREATE TABLE IF NOT EXISTS ashkol_ops_status (
+  ashkol text PRIMARY KEY REFERENCES clusters(ashkol) ON DELETE CASCADE,
+  done boolean NOT NULL DEFAULT false,
+  updated_by integer REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Many-to-many: a coordinator may belong to several institutions.
 CREATE TABLE IF NOT EXISTS institution_coordinators (
   institution_id integer NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,

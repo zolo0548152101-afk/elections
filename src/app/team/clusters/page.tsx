@@ -80,11 +80,6 @@ export default function TeamClustersPage() {
         setMsg(data.error || "שגיאה בעדכון סטטוס");
         return;
       }
-      if (data.updated === 0 && data.message) {
-        setMsgKind("err");
-        setMsg(data.message);
-        return;
-      }
       setRows((prev) =>
         prev.map((r) => (r.ashkol === ashkol ? { ...r, done } : r)),
       );
