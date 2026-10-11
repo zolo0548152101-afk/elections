@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FormMsg } from "@/components/FormMsg";
+import { InstitutionMultiPicker } from "@/components/InstitutionMultiPicker";
 import { useTimedFlash } from "@/hooks/useTimedFlash";
-import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
+import { formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
 
 type LinkedCluster = { ashkol: string; settlement_name?: string };
@@ -119,8 +120,6 @@ export default function UsersPage() {
   const [sentOkId, setSentOkId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
-  const [addInstitutionId, setAddInstitutionId] = useState("");
-  const [instPickerQ, setInstPickerQ] = useState("");
   const [addCoordinatorId, setAddCoordinatorId] = useState("");
 
   async function load() {
@@ -145,8 +144,6 @@ export default function UsersPage() {
     setForm(freshForm());
     setEditId(null);
     setShowPassword(false);
-    setAddInstitutionId("");
-    setInstPickerQ("");
     setAddCoordinatorId("");
   }
 
@@ -162,30 +159,10 @@ export default function UsersPage() {
       coordinator_ids: parseIds(u.coordinator_ids),
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
-    setAddInstitutionId("");
-    setInstPickerQ("");
     setAddCoordinatorId("");
     setShowPassword(false);
     flash("info", "עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function addInstitution() {
-    const id = Number(addInstitutionId);
-    if (!Number.isInteger(id) || id <= 0) return;
-    setForm((prev) =>
-      prev.institution_ids.includes(id)
-        ? prev
-        : { ...prev, institution_ids: [...prev.institution_ids, id] },
-    );
-    setAddInstitutionId("");
-  }
-
-  function removeInstitution(id: number) {
-    setForm((prev) => ({
-      ...prev,
-      institution_ids: prev.institution_ids.filter((x) => x !== id),
-    }));
   }
 
   function addCoordinator() {
@@ -206,16 +183,6 @@ export default function UsersPage() {
     }));
   }
 
-  /** Include dropdown selection even if הוסף wasn't clicked. */
-  function effectiveInstitutionIds(): number[] {
-    const ids = [...form.institution_ids];
-    const pending = Number(addInstitutionId);
-    if (Number.isInteger(pending) && pending > 0 && !ids.includes(pending)) {
-      ids.push(pending);
-    }
-    return ids;
-  }
-
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     clearMsg();
@@ -231,7 +198,7 @@ export default function UsersPage() {
     }
 
     const institutionIds =
-      role === "coordinator" ? effectiveInstitutionIds() : [];
+      role === "coordinator" ? form.institution_ids : [];
 
     setSaving(true);
     const payload = {
@@ -365,24 +332,6 @@ export default function UsersPage() {
       .join(" · ");
   }
 
-  const pickerInstitutions = useMemo(() => {
-    return institutions
-      .filter((i) => !form.institution_ids.includes(i.id))
-      .filter((i) => {
-        if (!instPickerQ.trim()) return true;
-        const clusters = institutionClusters(i);
-        const hay = [
-          i.name,
-          i.settlement_name,
-          ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
-          ...clusters.map((c) => c.settlement_name),
-        ]
-          .filter(Boolean)
-          .join(" ");
-        return matchesSearch(hay, instPickerQ);
-      });
-  }, [institutions, form.institution_ids, instPickerQ]);
-
   const filteredUsers = users.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
     const needle = q.trim();
@@ -515,60 +464,13 @@ export default function UsersPage() {
                 </label>
               )}
               {(form.role === "coordinator" || meRole === "area_manager") && (
-                <div className="field-wide institution-multi">
-                  <span className="field-label">מוסדות</span>
-                  {form.institution_ids.length === 0 ? (
-                    <p className="lede" style={{ margin: "0.35rem 0" }}>
-                      אין מוסדות משויכים — בחרו מוסד ולחצו הוסף (או שמירה ישירות)
-                    </p>
-                  ) : (
-                    <ul className="coord-link-list">
-                      {form.institution_ids.map((id) => {
-                        const inst = institutionById.get(id);
-                        return (
-                          <li key={id}>
-                            <span>{institutionLabel(inst, id)}</span>
-                            <button
-                              type="button"
-                              className="linkish"
-                              onClick={() => removeInstitution(id)}
-                            >
-                              הסר
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
-                    <input
-                      type="search"
-                      value={instPickerQ}
-                      onChange={(e) => setInstPickerQ(e.target.value)}
-                      placeholder="חיפוש מוסד או אשכול…"
-                      autoComplete="off"
-                    />
-                    <select
-                      value={addInstitutionId}
-                      onChange={(e) => setAddInstitutionId(e.target.value)}
-                    >
-                      <option value="">הוספת מוסד…</option>
-                      {pickerInstitutions.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {institutionLabel(i)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="export"
-                      disabled={!addInstitutionId}
-                      onClick={addInstitution}
-                    >
-                      הוסף
-                    </button>
-                  </div>
-                </div>
+                <InstitutionMultiPicker
+                  institutions={institutions}
+                  value={form.institution_ids}
+                  onChange={(ids) =>
+                    setForm((prev) => ({ ...prev, institution_ids: ids }))
+                  }
+                />
               )}
               {meRole === "super_admin" && form.role === "area_manager" && (
                 <div className="field-wide institution-multi">
