@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { SessionUser } from "@/lib/auth";
@@ -13,6 +14,7 @@ export function AppNav({
 }) {
   const path = usePathname();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const links = [
     { href: "/", label: "מפה" },
@@ -31,6 +33,10 @@ export function AppNav({
     links.push({ href: "/links", label: "קישורים" });
   }
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [path]);
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -43,21 +49,36 @@ export function AppNav({
       : null;
 
   return (
-    <nav className="app-nav">
-      <div className="app-nav-links">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={
-              path === l.href || (l.href !== "/" && path.startsWith(l.href + "/"))
-                ? "active"
-                : ""
-            }
-          >
-            {l.label}
-          </Link>
-        ))}
+    <nav className="app-nav" aria-label="ניווט ראשי">
+      <div className="app-nav-top">
+        <button
+          type="button"
+          className="app-nav-menu-btn"
+          aria-expanded={menuOpen}
+          aria-controls="app-nav-links"
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          {menuOpen ? "סגור תפריט" : "תפריט"}
+        </button>
+        <div
+          id="app-nav-links"
+          className={`app-nav-links${menuOpen ? " is-open" : ""}`}
+        >
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={
+                path === l.href ||
+                (l.href !== "/" && path.startsWith(l.href + "/"))
+                  ? "active"
+                  : ""
+              }
+            >
+              {l.label}
+            </Link>
+          ))}
+        </div>
       </div>
       <div className="app-nav-user">
         {pct != null && (

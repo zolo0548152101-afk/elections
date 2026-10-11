@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { FormMsg } from "@/components/FormMsg";
+import { useTimedFlash } from "@/hooks/useTimedFlash";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
 
@@ -111,8 +113,7 @@ export default function UsersPage() {
   const [form, setForm] = useState<UserForm>(freshForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [msgKind, setMsgKind] = useState<"ok" | "err" | "info">("info");
+  const { msg, kind: msgKind, flash, clear: clearMsg } = useTimedFlash(4000);
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [sentOkId, setSentOkId] = useState<number | null>(null);
@@ -139,11 +140,6 @@ export default function UsersPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  function flash(kind: "ok" | "err" | "info", text: string) {
-    setMsgKind(kind);
-    setMsg(text);
-  }
 
   function resetForm() {
     setForm(freshForm());
@@ -222,7 +218,7 @@ export default function UsersPage() {
 
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
+    clearMsg();
 
     const role = meRole === "area_manager" ? "coordinator" : form.role;
     if (!form.full_name.trim() || !form.mobile.trim()) {
@@ -293,7 +289,7 @@ export default function UsersPage() {
       `למחוק את ${u.full_name} (${u.mobile || u.email})? הפעולה אינה ניתנת לביטול.`,
     );
     if (!ok) return;
-    setMsg(null);
+    clearMsg();
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
@@ -316,7 +312,7 @@ export default function UsersPage() {
     if (!ok) return;
     setSendingId(u.id);
     setSentOkId(null);
-    setMsg(null);
+    clearMsg();
     try {
       const res = await fetch(`/api/users/${u.id}/send-credentials`, {
         method: "POST",
@@ -432,7 +428,7 @@ export default function UsersPage() {
                 עורכים את {editingUser?.mobile || editingUser?.email}. לחצו עדכון לשמירה.
               </p>
             )}
-            <div className="form-grid">
+            <div className="form-grid form-grid-dense">
               <label>
                 שם מלא
                 <input
@@ -479,6 +475,8 @@ export default function UsersPage() {
                   <button
                     type="button"
                     className="reset"
+                    aria-pressed={showPassword}
+                    aria-label={showPassword ? "הסתר סיסמה" : "הצג סיסמה"}
                     onClick={() => setShowPassword((v) => !v)}
                   >
                     {showPassword ? "הסתר" : "הצג"}
@@ -650,19 +648,11 @@ export default function UsersPage() {
         )}
 
         {msg && (
-          <p
-            className={`form-msg ${
-              msgKind === "ok"
-                ? "form-msg-ok"
-                : msgKind === "err"
-                  ? "form-msg-err"
-                  : ""
-            }`}
-            role="status"
-            style={{ marginBottom: "0.75rem" }}
-          >
-            {msg}
-          </p>
+          <div style={{ marginBottom: "0.75rem" }}>
+            <FormMsg kind={msgKind} sticky>
+              {msg}
+            </FormMsg>
+          </div>
         )}
 
         <div className="panel-form users-filters">

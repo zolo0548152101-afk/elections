@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { FormMsg } from "@/components/FormMsg";
+import { useTimedFlash } from "@/hooks/useTimedFlash";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -9,14 +11,14 @@ export default function LoginPage() {
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const infoFlash = useTimedFlash(5000);
   const [loading, setLoading] = useState(false);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setInfo(null);
+    infoFlash.clear();
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -38,7 +40,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setInfo(null);
+    infoFlash.clear();
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
@@ -47,7 +49,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "שגיאה");
-      setInfo(data.message || "נשלחה סיסמה זמנית ב-WhatsApp");
+      infoFlash.flash("ok", data.message || "נשלחה סיסמה זמנית ב-WhatsApp");
       setMode("login");
       setPassword("");
     } catch (err) {
@@ -95,8 +97,10 @@ export default function LoginPage() {
             />
           </label>
         )}
-        {error && <p className="error">{error}</p>}
-        {info && <p className="form-msg">{info}</p>}
+        {error && <FormMsg kind="err">{error}</FormMsg>}
+        {infoFlash.msg && (
+          <FormMsg kind={infoFlash.kind}>{infoFlash.msg}</FormMsg>
+        )}
         <button type="submit" className="export" disabled={loading}>
           {loading
             ? "…"
@@ -111,7 +115,7 @@ export default function LoginPage() {
           onClick={() => {
             setMode((m) => (m === "login" ? "forgot" : "login"));
             setError(null);
-            setInfo(null);
+            infoFlash.clear();
           }}
           style={{ marginTop: "0.65rem", width: "100%" }}
         >

@@ -38,8 +38,10 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   if (path === "/login") return <>{children}</>;
   if (!ready || !user) {
     return (
-      <main>
-        <p className="lede" style={{ color: "var(--sand)" }}>
+      <main className="shell-loading" aria-busy="true" aria-live="polite">
+        <span className="skeleton skeleton-line" />
+        <span className="skeleton skeleton-block" />
+        <p className="lede" style={{ color: "var(--sand)", margin: 0 }}>
           טוען…
         </p>
       </main>
