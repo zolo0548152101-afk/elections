@@ -416,6 +416,37 @@ tbody tr:hover {
   background: rgba(47, 111, 237, 0.08);
 }
 
+.cluster-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.65rem 1rem;
+  align-items: end;
+}
+
+.cluster-card h2,
+.cluster-card p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.cluster-card h2 {
+  font-size: 1.05rem;
+}
+
+.cluster-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.cluster-card strong {
+  font-size: 1.05rem;
+}
+
 .street-map-canvas {
   height: min(70vh, 720px);
   border-radius: 18px;

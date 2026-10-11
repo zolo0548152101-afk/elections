@@ -37,6 +37,38 @@ function esc(value: unknown) {
     .replace(/"/g, "&quot;");
 }
 
+function fmtInt(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString("he-IL") : "—";
+}
+
+function fmtPct(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—";
+}
+
+function clusterFromProps(p: Record<string, unknown>): ClusterView {
+  return {
+    ashkol: String(p.ashkol ?? ""),
+    settlement_name: String(p.settlement_name ?? ""),
+    bzb: Number(p.bzb ?? 0),
+    voters: Number(p.voters ?? 0),
+    valid: Number(p.valid ?? 0),
+    right_votes: Number(p.right_votes ?? 0),
+    turnout_pct: Number(p.turnout_pct ?? 0),
+    right_pct: Number(p.right_pct ?? 0),
+    ballot_count: Number(p.ballot_count ?? 0),
+    map_lat: null,
+    map_lng: null,
+  };
+}
+
+function clusterPopupHtml(c: ClusterView) {
+  const row = (label: string, value: string) =>
+    `<div>${esc(label)}: <bdi dir="ltr">${esc(value)}</bdi></div>`;
+  return `<div dir="rtl" class="popup"><strong>${esc(c.settlement_name)}</strong>${row("אשכול", c.ashkol)}${row("בז״ב", fmtInt(c.bzb))}${row("מצביעים", fmtInt(c.voters))}${row("כשרים", fmtInt(c.valid))}${row("הצבעה", fmtPct(c.turnout_pct))}${row("קולות ימין", fmtInt(c.right_votes))}${row("ימין", fmtPct(c.right_pct))}${row("קלפיות", fmtInt(c.ballot_count))}</div>`;
+}
+
 export function StreetMap({
   clusters,
   focus,
@@ -50,6 +82,7 @@ export function StreetMap({
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [status, setStatus] = useState("טוען מפה…");
   const [selectedAshkol, setSelectedAshkol] = useState<string>("");
+  const [picked, setPicked] = useState<ClusterView | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -177,12 +210,14 @@ export function StreetMap({
     });
 
     map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
-      const p = e.features?.[0]?.properties;
-      if (!p) return;
-      const html = `<div dir="rtl" class="popup"><strong>${esc(p.settlement_name)}</strong><div>אשכול ${esc(p.ashkol)}</div><div>% ימין ${Number(p.right_pct).toFixed(1)}</div><div>% הצבעה ${Number(p.turnout_pct).toFixed(1)}</div></div>`;
-      new Popup({ closeButton: true, closeOnClick: false, maxWidth: "240px" })
+      const raw = e.features?.[0]?.properties;
+      if (!raw) return;
+      const cluster = clusterFromProps(raw as Record<string, unknown>);
+      setPicked(cluster);
+      setSelectedAshkol(cluster.ashkol);
+      new Popup({ closeButton: true, closeOnClick: false, maxWidth: "280px" })
         .setLngLat(e.lngLat)
-        .setHTML(html)
+        .setHTML(clusterPopupHtml(cluster))
         .addTo(map);
     });
 
@@ -216,8 +251,13 @@ export function StreetMap({
         properties: {
           ashkol: c.ashkol,
           settlement_name: c.settlement_name,
+          bzb: c.bzb,
+          voters: c.voters,
+          valid: c.valid,
+          right_votes: c.right_votes,
           turnout_pct: c.turnout_pct,
           right_pct: c.right_pct,
+          ballot_count: c.ballot_count,
         },
         geometry: {
           type: "Point" as const,
@@ -241,20 +281,6 @@ export function StreetMap({
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   }, [focus]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      if (!map.getLayer("streets-line")) return;
-      map.setFilter(
-        "streets-line",
-        selectedAshkol ? ["==", ["get", "ashkol"], selectedAshkol] : null,
-      );
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
-  }, [selectedAshkol]);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -343,12 +369,23 @@ export function StreetMap({
           )}
         </label>
         <label>
-          סינון אשכול
+          אשכול
           <select
             value={selectedAshkol}
-            onChange={(e) => setSelectedAshkol(e.target.value)}
+            onChange={(e) => {
+              const ashkol = e.target.value;
+              setSelectedAshkol(ashkol);
+              const cluster = clusters.find((c) => c.ashkol === ashkol) ?? null;
+              setPicked(cluster);
+              if (cluster?.map_lng != null && cluster.map_lat != null) {
+                mapRef.current?.flyTo({
+                  center: [cluster.map_lng, cluster.map_lat],
+                  zoom: 14,
+                });
+              }
+            }}
           >
-            <option value="">הכל (או ללא קישור)</option>
+            <option value="">בחרו אשכול</option>
             {clusters.map((c) => (
               <option key={c.ashkol} value={c.ashkol}>
                 {c.settlement_name} · {c.ashkol}
@@ -374,6 +411,45 @@ export function StreetMap({
         </button>
         <p className="map-status">{status}</p>
       </div>
+      <aside className="cluster-card" aria-live="polite">
+        {picked ? (
+          <>
+            <h2>
+              {picked.settlement_name} · אשכול <bdi dir="ltr">{picked.ashkol}</bdi>
+            </h2>
+            <div>
+              <span>בז״ב</span>
+              <strong><bdi dir="ltr">{fmtInt(picked.bzb)}</bdi></strong>
+            </div>
+            <div>
+              <span>מצביעים</span>
+              <strong><bdi dir="ltr">{fmtInt(picked.voters)}</bdi></strong>
+            </div>
+            <div>
+              <span>כשרים</span>
+              <strong><bdi dir="ltr">{fmtInt(picked.valid)}</bdi></strong>
+            </div>
+            <div>
+              <span>קלפיות</span>
+              <strong><bdi dir="ltr">{fmtInt(picked.ballot_count)}</bdi></strong>
+            </div>
+            <div>
+              <span>הצבעה</span>
+              <strong><bdi dir="ltr">{fmtPct(picked.turnout_pct)}</bdi></strong>
+            </div>
+            <div>
+              <span>קולות ימין</span>
+              <strong><bdi dir="ltr">{fmtInt(picked.right_votes)}</bdi></strong>
+            </div>
+            <div>
+              <span>ימין</span>
+              <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
+            </div>
+          </>
+        ) : (
+          <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
+        )}
+      </aside>
       <div ref={containerRef} className="street-map-canvas" />
       <p className="map-credit">
         © OpenStreetMap contributors · data available under ODbL · Hebrew names from OSM

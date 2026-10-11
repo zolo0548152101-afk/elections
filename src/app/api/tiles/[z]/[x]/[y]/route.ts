@@ -64,10 +64,7 @@ export async function GET(
   });
   const tile = index.getTile(z, x, y);
   if (!tile) {
-    return new NextResponse(new Uint8Array(), {
-      status: 204,
-      headers: { "Content-Type": "application/x-protobuf" },
-    });
+    return new NextResponse(null, { status: 204 });
   }
   const buf = Buffer.from(vtpbf.fromGeojsonVt({ streets: tile }, { version: 2 }));
   return new NextResponse(buf, {
