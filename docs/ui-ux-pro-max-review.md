@@ -87,11 +87,11 @@ Override note for Hebrew field ops: prefer Assistant/Heebo, sand cards, terracot
 
 ## Recommended next improvements (ordered)
 
-1. Global `:focus-visible` + `prefers-reduced-motion` in `globals.css`.
-2. `role="alert"` on auth/users error messages; optional toast auto-dismiss for success.
-3. Mobile nav: wrap or collapse secondary links; enlarge action buttons in tables.
-4. Map WebGL failure fallback (no full-page error overlay).
-5. Optional: denser users form grid + sticky success banner near the table actions.
+1. ~~Global `:focus-visible` + `prefers-reduced-motion` in `globals.css`.~~ **Done** (`cursor/ui-ux-pro-max-impl-37d4`)
+2. ~~`role="alert"` on auth/users error messages; optional toast auto-dismiss for success.~~ **Done** (`FormMsg` + `useTimedFlash`)
+3. ~~Mobile nav: wrap or collapse secondary links; enlarge action buttons in tables.~~ **Done** (תפריט toggle + 44px targets)
+4. ~~Map WebGL failure fallback (no full-page error overlay).~~ **Done** (`StreetMap` map-fallback)
+5. ~~Optional: denser users form grid + sticky success banner near the table actions.~~ **Done** (`.form-grid-dense` + sticky banner)
 
 ---
 
