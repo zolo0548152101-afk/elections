@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
@@ -18,33 +18,38 @@ export default function TeamClustersPage() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"" | "linked" | "done">("");
+  const [status, setStatus] = useState<"" | "open" | "done">("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
+  const [busyAshkol, setBusyAshkol] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const me = await fetch("/api/auth/me").then((r) => r.json());
+    const role = me.user?.role;
+    if (role !== "super_admin" && role !== "area_manager") {
+      router.replace("/");
+      return;
+    }
+    const res = await fetch("/api/team/clusters");
+    const data = await res.json();
+    if (!res.ok) {
+      setMsgKind("err");
+      setMsg(data.error || "שגיאה");
+      setLoading(false);
+      return;
+    }
+    setRows(data.clusters ?? []);
+    setLoading(false);
+  }, [router]);
 
   useEffect(() => {
-    void (async () => {
-      const me = await fetch("/api/auth/me").then((r) => r.json());
-      const role = me.user?.role;
-      if (role !== "super_admin" && role !== "area_manager") {
-        router.replace("/");
-        return;
-      }
-      const res = await fetch("/api/team/clusters");
-      const data = await res.json();
-      if (!res.ok) {
-        setMsg(data.error || "שגיאה");
-        setLoading(false);
-        return;
-      }
-      setRows(data.clusters ?? []);
-      setLoading(false);
-    })();
-  }, [router]);
+    void load();
+  }, [load]);
 
   const filtered = rows.filter((r) => {
     if (status === "done" && !r.done) return false;
-    if (status === "linked" && r.done) return false;
+    if (status === "open" && r.done) return false;
     const needle = q.trim();
     if (!needle) return true;
     const hay = [
@@ -53,11 +58,46 @@ export default function TeamClustersPage() {
       r.institution_name,
       r.coordinator_names,
       formatAshkolLabel(r.ashkol, r.settlement_name),
+      r.done ? "בוצע" : "לא בוצע",
     ]
       .filter(Boolean)
       .join(" ");
     return matchesSearch(hay, needle);
   });
+
+  async function setDone(ashkol: string, done: boolean) {
+    setBusyAshkol(ashkol);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/team/clusters/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ashkol, done }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsgKind("err");
+        setMsg(data.error || "שגיאה בעדכון סטטוס");
+        return;
+      }
+      if (data.updated === 0 && data.message) {
+        setMsgKind("err");
+        setMsg(data.message);
+        return;
+      }
+      setRows((prev) =>
+        prev.map((r) => (r.ashkol === ashkol ? { ...r, done } : r)),
+      );
+      setMsgKind("ok");
+      setMsg(
+        done
+          ? `✓ אשכול ${ashkol} סומן כבוצע`
+          : `אשכול ${ashkol} סומן כלא בוצע`,
+      );
+    } finally {
+      setBusyAshkol(null);
+    }
+  }
 
   return (
     <main>
@@ -66,11 +106,20 @@ export default function TeamClustersPage() {
           <div>
             <p className="eyebrow">ניהול</p>
             <h1>אשכולות</h1>
-            <p className="lede">אשכולות שקושרו למוסד — או שסומנו כבוצעו.</p>
+            <p className="lede">
+              אשכולות שקושרו למוסד — סננו לפי סטטוס וסמנו בוצע / לא בוצע.
+            </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}
-        {!loading && msg && <p className="form-msg">{msg}</p>}
+        {!loading && msg && (
+          <p
+            className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}
+            role="status"
+          >
+            {msg}
+          </p>
+        )}
         {!loading && (
           <div className="panel-form users-filters">
             <label>
@@ -86,11 +135,11 @@ export default function TeamClustersPage() {
               <select
                 value={status}
                 onChange={(e) =>
-                  setStatus(e.target.value as "" | "linked" | "done")
+                  setStatus(e.target.value as "" | "open" | "done")
                 }
               >
                 <option value="">הכל</option>
-                <option value="linked">קושר</option>
+                <option value="open">לא בוצע</option>
                 <option value="done">בוצע</option>
               </select>
             </label>
@@ -104,17 +153,41 @@ export default function TeamClustersPage() {
                   <th>אשכול</th>
                   <th>מוסד</th>
                   <th>רכז</th>
+                  <th>סטטוס</th>
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r) => (
                   <tr key={`${r.ashkol}:${r.institution_id}`}>
-                    <td className="mono" title={r.done ? "בוצע" : "קושר"}>
+                    <td className="mono">
                       {formatAshkolLabel(r.ashkol, r.settlement_name)}
-                      {r.done ? " ✓" : ""}
                     </td>
                     <td>{r.institution_name || "—"}</td>
                     <td>{r.coordinator_names || "—"}</td>
+                    <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
+                    <td className="actions-cell">
+                      <button
+                        type="button"
+                        className="export"
+                        disabled={busyAshkol === r.ashkol || r.done}
+                        onClick={() => void setDone(r.ashkol, true)}
+                      >
+                        {busyAshkol === r.ashkol && !r.done
+                          ? "…"
+                          : "סמן בוצע"}
+                      </button>
+                      <button
+                        type="button"
+                        className="reset"
+                        disabled={busyAshkol === r.ashkol || !r.done}
+                        onClick={() => void setDone(r.ashkol, false)}
+                      >
+                        {busyAshkol === r.ashkol && r.done
+                          ? "…"
+                          : "לא בוצע"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -125,7 +198,11 @@ export default function TeamClustersPage() {
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <p className="lede">אין אשכולות להצגה</p>
+          <p className="lede">
+            {rows.length === 0
+              ? "אין אשכולות להצגה"
+              : "אין תוצאות לפילטר הנוכחי — נסו חיפוש או סטטוס אחר"}
+          </p>
         )}
       </div>
     </main>

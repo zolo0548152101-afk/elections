@@ -693,10 +693,8 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th>שם</th>
-                <th>אימייל</th>
                 <th>נייד</th>
                 <th>תפקיד</th>
-                <th>מוסד / רכזים</th>
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
@@ -704,10 +702,8 @@ export default function UsersPage() {
               {filteredUsers.map((u) => (
                 <tr key={u.id} className={editId === u.id ? "row-editing" : undefined}>
                   <td>{u.full_name}</td>
-                  <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>{userInstitutionLabel(u)}</td>
                   {canManage && (
                     <td className="actions-cell">
                       <button
