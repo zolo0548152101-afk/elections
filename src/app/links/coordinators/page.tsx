@@ -225,7 +225,7 @@ export default function CoordinatorsLinksPage() {
                     {options.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.full_name}
-                        {c.institution_id ? " (משויך למוסד אחר)" : ""}
+                        {c.institution_id ? " (+ מוסדות אחרים)" : ""}
                       </option>
                     ))}
                   </select>

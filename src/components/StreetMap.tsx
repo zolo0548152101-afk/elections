@@ -142,14 +142,18 @@ export function StreetMap({
 
   useEffect(() => {
     if (!me) return;
-    if (me.role === "super_admin" || me.role === "area_manager") {
-      fetch("/api/institutions")
-        .then((r) => r.json())
-        .then((data) => setInstitutions(data.institutions ?? []))
-        .catch(() => {});
-    } else if (me.institution_id) {
-      setLinkInstitutionId(String(me.institution_id));
-    }
+    fetch("/api/institutions")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = (data.institutions ?? []) as Institution[];
+        setInstitutions(list);
+        if (me.role === "coordinator") {
+          const preferred =
+            list.find((i) => i.id === me.institution_id)?.id ?? list[0]?.id;
+          if (preferred) setLinkInstitutionId(String(preferred));
+        }
+      })
+      .catch(() => {});
   }, [me]);
 
   async function loadStreetAssign(streetId: string) {
@@ -681,10 +685,7 @@ export function StreetMap({
 
   async function linkClusterToInstitution() {
     if (!picked) return;
-    const institutionId =
-      me?.role === "coordinator"
-        ? me.institution_id
-        : Number(linkInstitutionId);
+    const institutionId = Number(linkInstitutionId) || me?.institution_id;
     if (!institutionId) {
       setStatus("בחרו מוסד לקישור האשכול");
       return;

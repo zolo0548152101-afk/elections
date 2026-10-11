@@ -188,6 +188,7 @@ export default function InstitutionsPage() {
           | undefined) ?? []
       ).map((c) => c.id),
     );
+    // Many-to-many: allow linking a coordinator who already has other institutions.
     return availableCoords.filter((c) => !linkedIds.has(c.id));
   }
 
@@ -229,7 +230,7 @@ export default function InstitutionsPage() {
             {options.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.full_name}
-                {c.institution_id ? " (משויך למוסד אחר)" : ""}
+                {c.institution_id ? " (+ מוסדות אחרים)" : ""}
               </option>
             ))}
           </select>
