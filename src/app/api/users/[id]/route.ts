@@ -111,10 +111,6 @@ export async function PATCH(
     return NextResponse.json({ error: "תפקיד לא חוקי" }, { status: 400 });
   }
 
-  if (role === "coordinator" && !settlement_name) {
-    return NextResponse.json({ error: "לרכז חובה לבחור יישוב" }, { status: 400 });
-  }
-
   const sql = getSql();
 
   if (target.role === "super_admin" && role !== "super_admin") {
@@ -124,18 +120,6 @@ export async function PATCH(
     if ((count?.n ?? 0) <= 1) {
       return NextResponse.json(
         { error: "לא ניתן להוריד את מנהל העל האחרון" },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (settlement_name) {
-    const [known] = (await sql`
-      SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
-    `) as { name_he: string }[];
-    if (!known) {
-      return NextResponse.json(
-        { error: "יישוב לא נמצא ברשימת היישובים" },
         { status: 400 },
       );
     }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SettlementPicker } from "@/components/SettlementPicker";
 
 type Institution = { id: number; name: string };
 type UserRow = {
@@ -26,7 +25,6 @@ const emptyForm = {
   password: "",
   role: "coordinator",
   institution_ids: [] as number[],
-  settlement_name: "",
   manager_id: "",
 };
 
@@ -52,7 +50,6 @@ const roleHe: Record<string, string> = {
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
-  const [settlements, setSettlements] = useState<string[]>([]);
   const [meRole, setMeRole] = useState<string>("");
   const [meId, setMeId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -73,14 +70,8 @@ export default function UsersPage() {
     setMeRole(me.user?.role ?? "");
     setMeId(me.user?.id ?? null);
     if (me.user?.role === "super_admin" || me.user?.role === "area_manager") {
-      const [i, s] = await Promise.all([
-        fetch("/api/institutions").then((r) => r.json()),
-        fetch("/api/settlements").then((r) => r.json()),
-      ]);
+      const i = await fetch("/api/institutions").then((r) => r.json());
       setInstitutions(i.institutions ?? []);
-      setSettlements(
-        (s.settlements ?? []).map((row: { name_he: string }) => row.name_he),
-      );
     }
   }
 
@@ -104,7 +95,6 @@ export default function UsersPage() {
       password: "",
       role: u.role,
       institution_ids: parseIds(u.institution_ids, u.institution_id),
-      settlement_name: u.settlement_name ?? "",
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
     setAddInstitutionId("");
@@ -132,10 +122,6 @@ export default function UsersPage() {
     setMsg(null);
 
     const role = meRole === "area_manager" ? "coordinator" : form.role;
-    if (role === "coordinator" && !form.settlement_name.trim()) {
-      setMsg("לרכז חובה לבחור יישוב מהרשימה");
-      return;
-    }
     if (!editId && !form.password.trim()) {
       setMsg("סיסמה חובה");
       return;
@@ -150,7 +136,7 @@ export default function UsersPage() {
       institution_ids: role === "coordinator" ? form.institution_ids : [],
       institution_id:
         role === "coordinator" ? (form.institution_ids[0] ?? null) : null,
-      settlement_name: form.settlement_name.trim() || null,
+      settlement_name: null,
       manager_id:
         role === "coordinator" && form.manager_id
           ? Number(form.manager_id)
@@ -200,8 +186,6 @@ export default function UsersPage() {
 
   const canManage = meRole === "super_admin" || meRole === "area_manager";
   const editingUser = editId ? users.find((u) => u.id === editId) : null;
-  const showSettlement =
-    form.role === "coordinator" || meRole === "area_manager";
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
@@ -213,7 +197,6 @@ export default function UsersPage() {
       u.mobile,
       u.institution_name,
       u.institution_names,
-      u.settlement_name,
       u.manager_name,
       roleHe[u.role],
     ]
@@ -230,7 +213,7 @@ export default function UsersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
             <p className="lede">
-              הוספה ועריכה — יישוב בהקלדה, סיסמה נשמרת רק כ־hash (לא מוצגת אחרי שמירה)
+              הוספה ועריכה — סיסמה נשמרת רק כ־hash (לא מוצגת אחרי שמירה)
             </p>
           </div>
         </header>
@@ -244,7 +227,7 @@ export default function UsersPage() {
             </h2>
             {editId && (
               <p className="edit-banner">
-                עורכים את {editingUser?.email}. בחרו יישוב ולחצו עדכון.
+                עורכים את {editingUser?.email}. לחצו עדכון לשמירה.
               </p>
             )}
             <div className="form-grid">
@@ -378,19 +361,6 @@ export default function UsersPage() {
                   </div>
                 </div>
               )}
-              {showSettlement && (
-                <label className="field-wide">
-                  יישוב (לרכז){form.role === "coordinator" ? " *" : ""}
-                  <SettlementPicker
-                    value={form.settlement_name}
-                    options={settlements}
-                    required={form.role === "coordinator"}
-                    onChange={(settlement_name) =>
-                      setForm({ ...form, settlement_name })
-                    }
-                  />
-                </label>
-              )}
             </div>
             <div className="form-actions">
               <button type="submit" className="export" disabled={saving}>
@@ -412,7 +382,7 @@ export default function UsersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="שם, אימייל, מוסד, יישוב…"
+              placeholder="שם, אימייל, מוסד…"
             />
           </label>
           <label>
@@ -438,7 +408,6 @@ export default function UsersPage() {
                 <th>נייד</th>
                 <th>תפקיד</th>
                 <th>מוסד</th>
-                <th>יישוב</th>
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
@@ -450,7 +419,6 @@ export default function UsersPage() {
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
                   <td>{u.institution_names || u.institution_name || "—"}</td>
-                  <td>{u.settlement_name || "—"}</td>
                   {canManage && (
                     <td className="actions-cell">
                       <button

@@ -126,19 +126,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "תפקיד לא חוקי" }, { status: 400 });
   }
 
-  if (role === "coordinator" && !settlement_name) {
-    return NextResponse.json({ error: "לרכז חובה לבחור יישוב" }, { status: 400 });
-  }
-
   const sql = getSql();
-  if (settlement_name) {
-    const [known] = (await sql`
-      SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
-    `) as { name_he: string }[];
-    if (!known) {
-      return NextResponse.json({ error: "יישוב לא נמצא ברשימת היישובים" }, { status: 400 });
-    }
-  }
+  // settlement_name is optional / legacy; not required for coordinators.
   const hash = hashPassword(password);
   try {
     const [row] = (await sql`
