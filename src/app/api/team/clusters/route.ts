@@ -7,16 +7,19 @@ export const runtime = "nodejs";
 type Row = {
   ashkol: string;
   settlement_name: string;
-  institution_id: number;
-  institution_name: string;
+  bzb: number;
+  turnout_pct: number;
+  right_pct: number;
+  likud_pct: number;
+  institution_names: string;
   coordinator_names: string;
+  linked: boolean;
   ops_done: boolean | null;
 };
 
 /**
- * Admin / רכז על: ashkols already linked to an institution (and optionally done),
- * with institution + coordinator names for a compact team table.
- * done comes from ashkol_ops_status (admin סמן בוצע / לא בוצע).
+ * Admin / רכז על: every ashkol, with optional institution/coordinator links
+ * and ops done status. One row per ashkol (not per old link row).
  */
 export async function GET() {
   const user = await getSessionUser();
@@ -27,71 +30,66 @@ export async function GET() {
   }
 
   const sql = getSql();
-  const rows =
-    user!.role === "super_admin"
-      ? ((await sql`
-          SELECT
-            cl.ashkol,
-            cl.settlement_name,
-            i.id AS institution_id,
-            i.name AS institution_name,
-            coalesce(
-              (
-                SELECT string_agg(u.full_name, ' · ' ORDER BY u.full_name)
-                FROM institution_coordinators link
-                JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
-                WHERE link.institution_id = i.id
-              ),
-              ''
-            ) AS coordinator_names,
-            ops.done AS ops_done
-          FROM institution_clusters ic
-          JOIN clusters cl ON cl.ashkol = ic.ashkol
-          JOIN institutions i ON i.id = ic.institution_id
-          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
-          ORDER BY cl.settlement_name, cl.ashkol, i.name
-        `) as Row[])
-      : ((await sql`
-          SELECT
-            cl.ashkol,
-            cl.settlement_name,
-            i.id AS institution_id,
-            i.name AS institution_name,
-            coalesce(
-              (
-                SELECT string_agg(u.full_name, ' · ' ORDER BY u.full_name)
-                FROM institution_coordinators link
-                JOIN users u ON u.id = link.user_id
-                  AND u.role = 'coordinator'
-                  AND u.manager_id = ${user!.id}
-                WHERE link.institution_id = i.id
-              ),
-              ''
-            ) AS coordinator_names,
-            ops.done AS ops_done
-          FROM institution_clusters ic
-          JOIN clusters cl ON cl.ashkol = ic.ashkol
-          JOIN institutions i ON i.id = ic.institution_id
-          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
-          WHERE EXISTS (
-            SELECT 1
-            FROM institution_coordinators link
-            JOIN users u ON u.id = link.user_id
-              AND u.role = 'coordinator'
-              AND u.manager_id = ${user!.id}
-            WHERE link.institution_id = i.id
-          )
-          ORDER BY cl.settlement_name, cl.ashkol, i.name
-        `) as Row[]);
+  const managerId = user!.role === "area_manager" ? user!.id : null;
+
+  const rows = (await sql`
+    SELECT
+      cl.ashkol,
+      cl.settlement_name,
+      cl.bzb,
+      cl.turnout_pct,
+      cl.right_pct,
+      cl.likud_pct,
+      coalesce(
+        (
+          SELECT string_agg(i.name, ' · ' ORDER BY i.name)
+          FROM (
+            SELECT DISTINCT i.name
+            FROM institution_clusters ic
+            JOIN institutions i ON i.id = ic.institution_id
+            WHERE ic.ashkol = cl.ashkol
+          ) i
+        ),
+        ''
+      ) AS institution_names,
+      coalesce(
+        (
+          SELECT string_agg(u.full_name, ' · ' ORDER BY u.full_name)
+          FROM (
+            SELECT DISTINCT u.full_name
+            FROM institution_clusters ic
+            JOIN institution_coordinators link ON link.institution_id = ic.institution_id
+            JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+            WHERE ic.ashkol = cl.ashkol
+              AND (
+                ${managerId}::int IS NULL
+                OR u.manager_id = ${managerId}
+              )
+          ) u
+        ),
+        ''
+      ) AS coordinator_names,
+      EXISTS (
+        SELECT 1 FROM institution_clusters ic WHERE ic.ashkol = cl.ashkol
+      ) AS linked,
+      ops.done AS ops_done
+    FROM clusters cl
+    LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
+    ORDER BY cl.settlement_name, cl.ashkol
+  `) as Row[];
 
   const clusters = rows.map((r) => ({
     ashkol: r.ashkol,
     settlement_name: r.settlement_name,
-    institution_id: r.institution_id,
-    institution_name: r.institution_name,
-    coordinator_names: r.coordinator_names,
+    bzb: Number(r.bzb),
+    turnout_pct: Number(r.turnout_pct),
+    right_pct: Number(r.right_pct),
+    likud_pct: Number(r.likud_pct ?? 0),
+    institution_names: r.institution_names || "",
+    coordinator_names: r.coordinator_names || "",
+    linked: Boolean(r.linked),
     done: r.ops_done === true,
   }));
 
-  return NextResponse.json({ clusters });
+  return NextResponse.json({ clusters, count: clusters.length });
 }

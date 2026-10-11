@@ -796,6 +796,26 @@ tbody tr.cluster-row-selected:hover {
   margin-bottom: 1rem;
 }
 
+.team-clusters-filters {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  align-items: end;
+}
+
+@media (min-width: 1100px) {
+  .team-clusters-filters {
+    grid-template-columns: 1.4fr repeat(6, minmax(110px, 1fr)) auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .team-clusters-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 .institution-multi .field-label {
   display: block;
   font-size: 0.85rem;
