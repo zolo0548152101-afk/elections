@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole, type SessionUser } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { coordinatorInstitutionIds } from "@/lib/streets-access";
+import {
+  coordinatorInstitutionIds,
+  syncPrimaryInstitution,
+} from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -258,6 +261,9 @@ export async function POST(req: NextRequest) {
     lat?: number | null;
     lng?: number | null;
     key_people_raw?: string;
+    contact_name?: string;
+    contact_phone?: string;
+    coordinator_user_id?: number | null;
   };
   const name = body.name?.trim() ?? "";
   if (!name) return NextResponse.json({ error: "שם חובה" }, { status: 400 });
@@ -266,8 +272,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "סוג מוסד לא חוקי" }, { status: 400 });
   }
 
+  const contactName = body.contact_name?.trim() ?? "";
+  const contactPhone = body.contact_phone?.trim() ?? "";
+  const coordinatorUserId =
+    body.coordinator_user_id == null || body.coordinator_user_id === 0
+      ? null
+      : Number(body.coordinator_user_id);
+
   const sql = getSql();
-  const [row] = await sql`
+
+  if (coordinatorUserId != null) {
+    if (!Number.isInteger(coordinatorUserId)) {
+      return NextResponse.json({ error: "רכז לא חוקי" }, { status: 400 });
+    }
+    const [target] = (await sql`
+      SELECT id, role, manager_id FROM users WHERE id = ${coordinatorUserId} LIMIT 1
+    `) as { id: number; role: string; manager_id: number | null }[];
+    if (!target || target.role !== "coordinator") {
+      return NextResponse.json(
+        { error: "ניתן לשייך רק משתמש בתפקיד רכז" },
+        { status: 400 },
+      );
+    }
+    if (user!.role === "area_manager" && target.manager_id !== user!.id) {
+      return NextResponse.json({ error: "רכז מחוץ לצוות" }, { status: 403 });
+    }
+  }
+
+  const keyPeople =
+    body.key_people_raw?.trim() ||
+    (contactName
+      ? `${contactName}${contactPhone ? ` ${contactPhone}` : ""}`
+      : null);
+
+  const [row] = (await sql`
     INSERT INTO institutions (
       name, kind, settlement_name, district, lat, lng, key_people_raw
     ) VALUES (
@@ -277,7 +315,7 @@ export async function POST(req: NextRequest) {
       ${body.district?.trim() || null},
       ${body.lat ?? null},
       ${body.lng ?? null},
-      ${body.key_people_raw?.trim() || null}
+      ${keyPeople}
     )
     ON CONFLICT (name) DO UPDATE SET
       kind = EXCLUDED.kind,
@@ -285,8 +323,32 @@ export async function POST(req: NextRequest) {
       district = EXCLUDED.district,
       lat = EXCLUDED.lat,
       lng = EXCLUDED.lng,
-      key_people_raw = EXCLUDED.key_people_raw
+      key_people_raw = COALESCE(EXCLUDED.key_people_raw, institutions.key_people_raw)
     RETURNING id, name, kind, settlement_name, district, lat, lng, key_people_raw, created_at
-  `;
+  `) as { id: number }[];
+
+  if (!row) {
+    return NextResponse.json({ error: "שגיאה ביצירת מוסד" }, { status: 500 });
+  }
+
+  if (contactName) {
+    await sql`
+      INSERT INTO institution_contacts (
+        institution_id, full_name, role_title, phone, sort_order
+      ) VALUES (
+        ${row.id}, ${contactName}, 'איש קשר', ${contactPhone}, 0
+      )
+    `;
+  }
+
+  if (coordinatorUserId != null) {
+    await sql`
+      INSERT INTO institution_coordinators (institution_id, user_id, linked_by)
+      VALUES (${row.id}, ${coordinatorUserId}, ${user!.id})
+      ON CONFLICT DO NOTHING
+    `;
+    await syncPrimaryInstitution(sql, coordinatorUserId);
+  }
+
   return NextResponse.json({ institution: row });
 }

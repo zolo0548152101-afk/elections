@@ -51,6 +51,9 @@ export default function InstitutionsPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [kind, setKind] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [createCoordId, setCreateCoordId] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -103,7 +106,13 @@ export default function InstitutionsPage() {
     const res = await fetch("/api/institutions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, kind: kind || null }),
+      body: JSON.stringify({
+        name,
+        kind: kind || null,
+        contact_name: contactName.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        coordinator_user_id: createCoordId ? Number(createCoordId) : null,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -112,6 +121,9 @@ export default function InstitutionsPage() {
     }
     setName("");
     setKind("");
+    setContactName("");
+    setContactPhone("");
+    setCreateCoordId("");
     setMsg("נוסף");
     void load();
   }
@@ -287,6 +299,39 @@ export default function InstitutionsPage() {
                     {kinds.map((k) => (
                       <option key={k} value={k}>
                         {k}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  איש קשר
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="שם"
+                  />
+                </label>
+                <label>
+                  נייד
+                  <input
+                    dir="ltr"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="05…"
+                    inputMode="tel"
+                  />
+                </label>
+                <label className="field-wide">
+                  קישור רכז
+                  <select
+                    value={createCoordId}
+                    onChange={(e) => setCreateCoordId(e.target.value)}
+                  >
+                    <option value="">ללא — ניתן לשייך אחר כך</option>
+                    {availableCoords.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.full_name}
+                        {c.institution_id ? " (+ מוסדות אחרים)" : ""}
                       </option>
                     ))}
                   </select>
