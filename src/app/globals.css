@@ -128,7 +128,7 @@ h1 {
 
 .filters {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto;
   gap: 0.85rem;
   align-items: end;
   background: var(--card);
@@ -1167,6 +1167,22 @@ tbody tr.cluster-row-selected:hover {
   border-radius: 18px;
   overflow: hidden;
   box-shadow: var(--shadow);
+}
+
+.map-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  color: var(--ink);
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.map-fallback p {
+  margin: 0;
+  max-width: 28rem;
+  line-height: 1.5;
+  font-weight: 600;
 }
 
 .map-status {

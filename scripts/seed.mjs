@@ -33,7 +33,7 @@ for (let i = 0; i < clusters.length; i += 400) {
   await sql`
     INSERT INTO clusters (
       ashkol, settlement_name, settlement_code, bzb, voters, valid,
-      right_votes, turnout_pct, right_pct, ballot_count
+      right_votes, turnout_pct, right_pct, ballot_count, likud_votes, likud_pct
     )
     SELECT * FROM UNNEST(
       ${chunk.map((c) => c.ashkol)}::text[],
@@ -45,9 +45,13 @@ for (let i = 0; i < clusters.length; i += 400) {
       ${chunk.map((c) => c.right_votes)}::int4[],
       ${chunk.map((c) => c.turnout_pct)}::float8[],
       ${chunk.map((c) => c.right_pct)}::float8[],
-      ${chunk.map((c) => c.ballot_count)}::int4[]
+      ${chunk.map((c) => c.ballot_count)}::int4[],
+      ${chunk.map((c) => c.likud_votes ?? 0)}::int4[],
+      ${chunk.map((c) => c.likud_pct ?? 0)}::float8[]
     )
-    ON CONFLICT (ashkol) DO NOTHING
+    ON CONFLICT (ashkol) DO UPDATE SET
+      likud_votes = EXCLUDED.likud_votes,
+      likud_pct = EXCLUDED.likud_pct
   `;
   console.log("clusters", Math.min(i + 400, clusters.length));
 }

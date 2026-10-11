@@ -9,6 +9,8 @@ const HEADERS = [
   "קולות_ימין",
   "אחוז_הצבעה",
   "אחוז_ימין",
+  "קולות_מחל",
+  "אחוז_מחל",
   "קלפיות",
 ] as const;
 
@@ -31,6 +33,8 @@ export function clustersToCsv(clusters: ClusterView[]): string {
         c.right_votes,
         c.turnout_pct,
         c.right_pct,
+        c.likud_votes ?? 0,
+        c.likud_pct ?? 0,
         c.ballot_count,
       ]
         .map(escapeCell)
