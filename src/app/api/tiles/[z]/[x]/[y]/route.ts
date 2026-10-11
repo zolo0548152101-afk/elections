@@ -3,6 +3,7 @@ import geojsonvt from "geojson-vt";
 import vtpbf from "vt-pbf";
 import { getSessionUser } from "@/lib/auth";
 import { getSql, type StreetRow } from "@/lib/db";
+import { streetVisibilityFilter } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -34,14 +35,27 @@ export async function GET(
 
   const { west, south, east, north } = tileToBBox(z, x, y);
   const sql = getSql();
-  const rows = (await sql`
-    SELECT s.id, s.name_he, s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
-    FROM streets s
-    LEFT JOIN street_marks m ON m.street_id = s.id
-    WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
-      AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
-    LIMIT 4000
-  `) as Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done">[];
+  const vis = await streetVisibilityFilter(sql, user);
+  const rows = (
+    vis.active
+      ? await sql`
+          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
+          FROM streets s
+          LEFT JOIN street_marks m ON m.street_id = s.id
+          WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
+            AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
+            AND s.ashkol = ANY(${vis.ashkols})
+          LIMIT 4000
+        `
+      : await sql`
+          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
+          FROM streets s
+          LEFT JOIN street_marks m ON m.street_id = s.id
+          WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
+            AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
+          LIMIT 4000
+        `
+  ) as Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done">[];
 
   const fc = {
     type: "FeatureCollection" as const,

@@ -17,7 +17,7 @@ setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import type { Feature } from "geojson";
 
-type SearchHit = {
+type SearchStreet = {
   id: string;
   name_he: string;
   lat: number;
@@ -26,6 +26,23 @@ type SearchHit = {
   done: boolean;
   near_settlement?: string | null;
 };
+
+type SearchCity = {
+  name_he: string;
+  lat: number;
+  lng: number;
+};
+
+type AssignUser = { id: number; full_name: string; institution_id: number | null };
+
+type MeUser = {
+  id: number;
+  role: string;
+  full_name: string;
+  institution_id: number | null;
+};
+
+type Institution = { id: number; name: string };
 
 type MapFocus = { lat: number; lng: number };
 
@@ -69,6 +86,14 @@ function clusterPopupHtml(c: ClusterView) {
   return `<div dir="rtl" class="popup"><strong>${esc(c.settlement_name)}</strong>${row("אשכול", c.ashkol)}${row("בז״ב", fmtInt(c.bzb))}${row("מצביעים", fmtInt(c.voters))}${row("כשרים", fmtInt(c.valid))}${row("הצבעה", fmtPct(c.turnout_pct))}${row("קולות ימין", fmtInt(c.right_votes))}${row("ימין", fmtPct(c.right_pct))}${row("קלפיות", fmtInt(c.ballot_count))}</div>`;
 }
 
+function streetPopupHtml(name: string, ashkol: string | null) {
+  const ashkolLine =
+    ashkol && ashkol.trim()
+      ? `<div>אשכול: <bdi dir="ltr">${esc(ashkol)}</bdi></div>`
+      : "";
+  return `<div dir="rtl" class="popup"><strong>${esc(name)}</strong>${ashkolLine}</div>`;
+}
+
 export function StreetMap({
   clusters,
   focus,
@@ -78,11 +103,54 @@ export function StreetMap({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const streetPopupRef = useRef<Popup | null>(null);
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [cityHits, setCityHits] = useState<SearchCity[]>([]);
+  const [streetHits, setStreetHits] = useState<SearchStreet[]>([]);
   const [status, setStatus] = useState("טוען מפה…");
   const [selectedAshkol, setSelectedAshkol] = useState<string>("");
   const [picked, setPicked] = useState<ClusterView | null>(null);
+  const [pickedStreet, setPickedStreet] = useState<SearchStreet | null>(null);
+  const [assigned, setAssigned] = useState<AssignUser[]>([]);
+  const [allowed, setAllowed] = useState<AssignUser[]>([]);
+  const [assignId, setAssignId] = useState("");
+  const [me, setMe] = useState<MeUser | null>(null);
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [linkInstitutionId, setLinkInstitutionId] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.user) setMe(data.user);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!me) return;
+    if (me.role === "super_admin" || me.role === "area_manager") {
+      fetch("/api/institutions")
+        .then((r) => r.json())
+        .then((data) => setInstitutions(data.institutions ?? []))
+        .catch(() => {});
+    } else if (me.institution_id) {
+      setLinkInstitutionId(String(me.institution_id));
+    }
+  }, [me]);
+
+  async function loadStreetAssign(streetId: string) {
+    const res = await fetch(`/api/streets/${encodeURIComponent(streetId)}/coordinators`);
+    if (!res.ok) {
+      setAssigned([]);
+      setAllowed([]);
+      return;
+    }
+    const data = await res.json();
+    setAssigned(data.assigned ?? []);
+    setAllowed(data.allowed ?? []);
+    setAssignId("");
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -170,7 +238,7 @@ export function StreetMap({
             type: "line",
             source: "highlight",
             paint: {
-              "line-color": "#f59e0b",
+              "line-color": "#2563eb",
               "line-width": 7,
               "line-opacity": 0.95,
             },
@@ -182,15 +250,42 @@ export function StreetMap({
     });
 
     map.addControl(new NavigationControl(), "top-left");
-    map.on("load", () => setStatus("לחצו על רחוב לסימון · חיפוש לפי שם עברי"));
+    map.on("load", () => setStatus("לחצו על רחוב לסימון · חיפוש עיר או רחוב"));
 
     map.on("click", "streets-line", async (e: MapLayerMouseEvent) => {
       const f = e.features?.[0];
       if (!f) return;
       const id = String(f.properties?.id ?? "");
       const name = String(f.properties?.name_he ?? "");
+      const ashkolRaw = f.properties?.ashkol;
+      const ashkol =
+        ashkolRaw != null && String(ashkolRaw).trim() !== ""
+          ? String(ashkolRaw)
+          : null;
       const done = Number(f.properties?.done ?? 0) === 1;
       if (!id) return;
+
+      streetPopupRef.current?.remove();
+      streetPopupRef.current = new Popup({
+        closeButton: true,
+        closeOnClick: false,
+        maxWidth: "260px",
+      })
+        .setLngLat(e.lngLat)
+        .setHTML(streetPopupHtml(name, ashkol))
+        .addTo(map);
+
+      const street: SearchStreet = {
+        id,
+        name_he: name,
+        lat: e.lngLat.lat,
+        lng: e.lngLat.lng,
+        ashkol,
+        done: !done,
+      };
+      setPickedStreet({ ...street, done });
+      void loadStreetAssign(id);
+
       setStatus(done ? `מסיר סימון: ${name}` : `מסמן בוצע: ${name}`);
       const res = await fetch(`/api/streets/${id}/mark`, {
         method: "POST",
@@ -203,6 +298,7 @@ export function StreetMap({
         };
         src.setTiles?.([`${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`]);
         map.triggerRepaint();
+        setPickedStreet({ ...street, done: !done });
         setStatus(done ? `הוסר סימון: ${name}` : `סומן בוצע: ${name}`);
       } else {
         setStatus("שגיאה בסימון");
@@ -236,6 +332,7 @@ export function StreetMap({
 
     mapRef.current = map;
     return () => {
+      streetPopupRef.current?.remove();
       map.remove();
       mapRef.current = null;
     };
@@ -311,25 +408,50 @@ export function StreetMap({
 
   useEffect(() => {
     if (q.trim().length < 2) {
-      setHits([]);
+      setCityHits([]);
+      setStreetHits([]);
       return;
     }
     const t = setTimeout(async () => {
       const res = await fetch(`/api/streets/search?q=${encodeURIComponent(q.trim())}`);
       if (!res.ok) return;
       const data = await res.json();
-      setHits(data.results ?? []);
+      setCityHits(data.cities ?? []);
+      setStreetHits(data.streets ?? data.results ?? []);
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
 
-  async function goToHit(hit: SearchHit) {
+  function goToCity(city: SearchCity) {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: [city.lng, city.lat], zoom: 13 });
+    setQ(city.name_he);
+    setCityHits([]);
+    setStreetHits([]);
+    setStatus(`עיר: ${city.name_he}`);
+  }
+
+  async function goToStreet(hit: SearchStreet) {
     const map = mapRef.current;
     if (!map) return;
     map.flyTo({ center: [hit.lng, hit.lat], zoom: 15 });
     setQ(hit.name_he);
-    setHits([]);
-    // Fetch bbox streets to highlight geometry
+    setCityHits([]);
+    setStreetHits([]);
+    setPickedStreet(hit);
+    void loadStreetAssign(hit.id);
+
+    streetPopupRef.current?.remove();
+    streetPopupRef.current = new Popup({
+      closeButton: true,
+      closeOnClick: false,
+      maxWidth: "260px",
+    })
+      .setLngLat([hit.lng, hit.lat])
+      .setHTML(streetPopupHtml(hit.name_he, hit.ashkol))
+      .addTo(map);
+
     const pad = 0.01;
     const res = await fetch(
       `/api/streets?west=${hit.lng - pad}&south=${hit.lat - pad}&east=${hit.lng + pad}&north=${hit.lat + pad}&limit=50`,
@@ -345,6 +467,64 @@ export function StreetMap({
       features: match ? [match] : [],
     });
     setStatus(`נמצא: ${hit.name_he}${hit.done ? " (בוצע)" : ""}`);
+  }
+
+  async function assignCoordinator() {
+    if (!pickedStreet || !assignId) return;
+    setStatus("מוסיף לרכז…");
+    const res = await fetch(
+      `/api/streets/${encodeURIComponent(pickedStreet.id)}/coordinators`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: Number(assignId) }),
+      },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.error || "שגיאה בהוספה לרכז");
+      return;
+    }
+    setStatus("הרחוב נוסף לרכז");
+    await loadStreetAssign(pickedStreet.id);
+  }
+
+  async function removeCoordinator(userId: number) {
+    if (!pickedStreet) return;
+    const res = await fetch(
+      `/api/streets/${encodeURIComponent(pickedStreet.id)}/coordinators?user_id=${userId}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      const data = await res.json();
+      setStatus(data.error || "שגיאה בהסרה");
+      return;
+    }
+    setStatus("השיוך הוסר");
+    await loadStreetAssign(pickedStreet.id);
+  }
+
+  async function linkClusterToInstitution() {
+    if (!picked) return;
+    const institutionId =
+      me?.role === "coordinator"
+        ? me.institution_id
+        : Number(linkInstitutionId);
+    if (!institutionId) {
+      setStatus("בחרו מוסד לקישור האשכול");
+      return;
+    }
+    const res = await fetch(`/api/institutions/${institutionId}/clusters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ashkol: picked.ashkol }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(data.error || "שגיאה בקישור אשכול");
+      return;
+    }
+    setStatus(`אשכול ${picked.ashkol} קושר למוסד`);
   }
 
   async function markClusterStreets(done: boolean) {
@@ -370,22 +550,36 @@ export function StreetMap({
     }
   }
 
+  const showHits = cityHits.length > 0 || streetHits.length > 0;
+  const canLinkCluster =
+    me &&
+    (me.role === "super_admin" ||
+      me.role === "area_manager" ||
+      (me.role === "coordinator" && me.institution_id));
+
   return (
     <div className="street-map-wrap">
       <div className="street-map-toolbar">
         <label className="search-box">
-          חיפוש רחוב
+          חיפוש עיר או רחוב
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="שם בעברית…"
           />
-          {hits.length > 0 && (
+          {showHits && (
             <ul className="search-hits">
-              {hits.map((h) => (
+              {cityHits.map((c) => (
+                <li key={`city-${c.name_he}`}>
+                  <button type="button" onClick={() => goToCity(c)}>
+                    עיר · {c.name_he}
+                  </button>
+                </li>
+              ))}
+              {streetHits.map((h) => (
                 <li key={h.id}>
-                  <button type="button" onClick={() => goToHit(h)}>
-                    {h.name_he}
+                  <button type="button" onClick={() => goToStreet(h)}>
+                    רחוב · {h.name_he}
                     {h.near_settlement ? ` · ${h.near_settlement}` : ""}
                     {h.done ? " ✓" : ""}
                     {h.ashkol ? ` · אשכול ${h.ashkol}` : ""}
@@ -438,45 +632,141 @@ export function StreetMap({
         </button>
         <p className="map-status">{status}</p>
       </div>
-      <aside className="cluster-card" aria-live="polite">
-        {picked ? (
-          <>
-            <h2>
-              {picked.settlement_name} · אשכול <bdi dir="ltr">{picked.ashkol}</bdi>
-            </h2>
-            <div>
-              <span>בז״ב</span>
-              <strong><bdi dir="ltr">{fmtInt(picked.bzb)}</bdi></strong>
-            </div>
-            <div>
-              <span>מצביעים</span>
-              <strong><bdi dir="ltr">{fmtInt(picked.voters)}</bdi></strong>
-            </div>
-            <div>
-              <span>כשרים</span>
-              <strong><bdi dir="ltr">{fmtInt(picked.valid)}</bdi></strong>
-            </div>
-            <div>
-              <span>קלפיות</span>
-              <strong><bdi dir="ltr">{fmtInt(picked.ballot_count)}</bdi></strong>
-            </div>
-            <div>
-              <span>הצבעה</span>
-              <strong><bdi dir="ltr">{fmtPct(picked.turnout_pct)}</bdi></strong>
-            </div>
-            <div>
-              <span>קולות ימין</span>
-              <strong><bdi dir="ltr">{fmtInt(picked.right_votes)}</bdi></strong>
-            </div>
-            <div>
-              <span>ימין</span>
-              <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
-            </div>
-          </>
-        ) : (
-          <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
-        )}
-      </aside>
+      <div className="map-side-cards">
+        <aside className="cluster-card" aria-live="polite">
+          {picked ? (
+            <>
+              <h2>
+                {picked.settlement_name} · אשכול <bdi dir="ltr">{picked.ashkol}</bdi>
+              </h2>
+              <div>
+                <span>בז״ב</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.bzb)}</bdi></strong>
+              </div>
+              <div>
+                <span>מצביעים</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.voters)}</bdi></strong>
+              </div>
+              <div>
+                <span>כשרים</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.valid)}</bdi></strong>
+              </div>
+              <div>
+                <span>קלפיות</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.ballot_count)}</bdi></strong>
+              </div>
+              <div>
+                <span>הצבעה</span>
+                <strong><bdi dir="ltr">{fmtPct(picked.turnout_pct)}</bdi></strong>
+              </div>
+              <div>
+                <span>קולות ימין</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.right_votes)}</bdi></strong>
+              </div>
+              <div>
+                <span>ימין</span>
+                <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
+              </div>
+              {canLinkCluster && (
+                <div className="cluster-link-row">
+                  {(me?.role === "super_admin" || me?.role === "area_manager") && (
+                    <select
+                      value={linkInstitutionId}
+                      onChange={(e) => setLinkInstitutionId(e.target.value)}
+                    >
+                      <option value="">מוסד לקישור</option>
+                      {institutions.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    className="export"
+                    onClick={() => void linkClusterToInstitution()}
+                  >
+                    קשר למוסד
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
+          )}
+        </aside>
+        <aside className="street-card" aria-live="polite">
+          {pickedStreet ? (
+            <>
+              <h2>{pickedStreet.name_he}</h2>
+              {pickedStreet.ashkol ? (
+                <div>
+                  <span>אשכול</span>
+                  <strong><bdi dir="ltr">{pickedStreet.ashkol}</bdi></strong>
+                </div>
+              ) : null}
+              <div>
+                <span>מצב</span>
+                <strong>{pickedStreet.done ? "בוצע" : "פתוח"}</strong>
+              </div>
+              <div className="assign-block">
+                <span>רכזים משויכים</span>
+                {assigned.length === 0 ? (
+                  <p className="assign-empty">אין שיוך עדיין</p>
+                ) : (
+                  <ul className="assign-list">
+                    {assigned.map((a) => (
+                      <li key={a.id}>
+                        {a.full_name}
+                        {allowed.some((x) => x.id === a.id) && (
+                          <button
+                            type="button"
+                            className="reset"
+                            onClick={() => void removeCoordinator(a.id)}
+                          >
+                            הסר
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {allowed.length > 0 && (
+                  <div className="assign-add">
+                    <select
+                      value={assignId}
+                      onChange={(e) => setAssignId(e.target.value)}
+                    >
+                      <option value="">הוספה לרכז</option>
+                      {allowed.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.full_name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="export"
+                      disabled={!assignId}
+                      onClick={() => void assignCoordinator()}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+                )}
+                {allowed.length === 0 && (
+                  <p className="assign-empty">
+                    אין רכז מותר לשיוך בעיר הזו (בדקו קבוצה עם יישוב מקושר).
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p>לחצו על רחוב לסימון כבוצע, לראות את האשכול כשיקושר, ולהוסיף לרכז.</p>
+          )}
+        </aside>
+      </div>
       <div ref={containerRef} className="street-map-canvas" />
       <p className="map-credit">
         © OpenStreetMap contributors · data available under ODbL · Hebrew names from OSM

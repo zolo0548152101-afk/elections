@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     name?: string;
     location_text?: string;
+    settlement_name?: string;
     headcount?: number;
     gender?: string;
     type?: string;
@@ -70,16 +71,29 @@ export async function POST(req: NextRequest) {
 
   const name = body.name?.trim() ?? "";
   const location_text = body.location_text?.trim() ?? "";
+  const settlement_name = body.settlement_name?.trim() ?? "";
   const headcount = Number(body.headcount ?? 0);
   const gender = body.gender?.trim() ?? "";
   const type = body.type ?? "";
   const coordinatorIds = Array.isArray(body.coordinator_ids) ? body.coordinator_ids : [];
 
-  if (!name || !location_text || !["yeshiva", "garin", "mechina"].includes(type)) {
+  if (
+    !name ||
+    !location_text ||
+    !settlement_name ||
+    !["yeshiva", "garin", "mechina"].includes(type)
+  ) {
     return NextResponse.json({ error: "שדות חובה חסרים" }, { status: 400 });
   }
 
   const sql = getSql();
+  const settlement = (await sql`
+    SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
+  `) as { name_he: string }[];
+  if (!settlement[0]) {
+    return NextResponse.json({ error: "יש לבחור יישוב מהרשימה" }, { status: 400 });
+  }
+
   const ids = coordinatorIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
   if (user!.role === "area_manager" && ids.length > 0) {
     const allowed = (await sql`
@@ -93,8 +107,8 @@ export async function POST(req: NextRequest) {
   }
 
   const [group] = await sql`
-    INSERT INTO groups (name, location_text, headcount, gender, type)
-    VALUES (${name}, ${location_text}, ${headcount}, ${gender}, ${type})
+    INSERT INTO groups (name, location_text, settlement_name, headcount, gender, type)
+    VALUES (${name}, ${location_text}, ${settlement_name}, ${headcount}, ${gender}, ${type})
     RETURNING *
   `;
 

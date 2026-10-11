@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 
 type Coord = { id: number; full_name: string };
+type Settlement = { name_he: string; lat: number; lng: number };
 type Group = {
   id: number;
   name: string;
   location_text: string;
+  settlement_name: string | null;
   headcount: number;
   gender: string;
   type: string;
@@ -16,10 +18,12 @@ type Group = {
 export default function GroupsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [coords, setCoords] = useState<Coord[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [form, setForm] = useState({
     name: "",
     location_text: "",
+    settlement_name: "",
     headcount: 10,
     gender: "",
     type: "yeshiva",
@@ -28,10 +32,11 @@ export default function GroupsPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
-    const [g, me, u] = await Promise.all([
+    const [g, me, u, s] = await Promise.all([
       fetch("/api/groups").then((r) => r.json()),
       fetch("/api/auth/me").then((r) => r.json()),
       fetch("/api/users").then((r) => r.json()),
+      fetch("/api/settlements").then((r) => r.json()),
     ]);
     setGroups(
       (g.groups ?? []).map((x: Group & { coordinators: unknown }) => ({
@@ -52,6 +57,7 @@ export default function GroupsPage() {
           full_name: x.full_name,
         })),
     );
+    setSettlements(s.settlements ?? []);
   }
 
   useEffect(() => {
@@ -75,6 +81,7 @@ export default function GroupsPage() {
     setForm({
       name: "",
       location_text: "",
+      settlement_name: "",
       headcount: 10,
       gender: "",
       type: "yeshiva",
@@ -99,7 +106,7 @@ export default function GroupsPage() {
           <div>
             <p className="eyebrow">ניהול</p>
             <h1>קבוצות</h1>
-            <p className="lede">ישיבה / גרעין / מכינה — קישור לרכזים רבים</p>
+            <p className="lede">ישיבה / גרעין / מכינה — קישור לרכזים וליישוב</p>
           </div>
         </header>
 
@@ -121,6 +128,23 @@ export default function GroupsPage() {
                   onChange={(e) => setForm({ ...form, location_text: e.target.value })}
                   required
                 />
+              </label>
+              <label>
+                יישוב (לשיוך רחובות)
+                <select
+                  value={form.settlement_name}
+                  onChange={(e) =>
+                    setForm({ ...form, settlement_name: e.target.value })
+                  }
+                  required
+                >
+                  <option value="">בחרו יישוב</option>
+                  {settlements.map((s) => (
+                    <option key={s.name_he} value={s.name_he}>
+                      {s.name_he}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 כמות אנשים
@@ -178,6 +202,7 @@ export default function GroupsPage() {
               <tr>
                 <th>שם</th>
                 <th>מיקום</th>
+                <th>יישוב</th>
                 <th>כמות</th>
                 <th>מגדר</th>
                 <th>סוג</th>
@@ -189,6 +214,7 @@ export default function GroupsPage() {
                 <tr key={g.id}>
                   <td>{g.name}</td>
                   <td>{g.location_text}</td>
+                  <td>{g.settlement_name ?? "—"}</td>
                   <td>{g.headcount}</td>
                   <td>{g.gender}</td>
                   <td>{g.type}</td>

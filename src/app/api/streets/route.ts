@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql, type StreetRow } from "@/lib/db";
+import { streetVisibilityFilter } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest) {
   }
 
   const sql = getSql();
+  const vis = await streetVisibilityFilter(sql, user);
   let rows: StreetRow[];
   if (ashkol) {
     rows = (await sql`
@@ -33,6 +35,17 @@ export async function GET(req: NextRequest) {
         AND s.ashkol = ${ashkol}
       LIMIT ${limit}
     `) as StreetRow[];
+  } else if (vis.active) {
+    rows = (await sql`
+      SELECT s.id, s.name_he, s.lat, s.lng, s.bbox_xmin, s.bbox_ymin, s.bbox_xmax, s.bbox_ymax,
+             s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
+      FROM streets s
+      LEFT JOIN street_marks m ON m.street_id = s.id
+      WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
+        AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
+        AND s.ashkol = ANY(${vis.ashkols})
+      LIMIT ${limit}
+    `) as StreetRow[];
   } else {
     rows = (await sql`
       SELECT s.id, s.name_he, s.lat, s.lng, s.bbox_xmin, s.bbox_ymin, s.bbox_xmax, s.bbox_ymax,
@@ -43,10 +56,6 @@ export async function GET(req: NextRequest) {
         AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
       LIMIT ${limit}
     `) as StreetRow[];
-  }
-
-  if (user.role === "coordinator" && user.settlement_name) {
-    // Coordinators still receive bbox streets; UI centers on their settlement.
   }
 
   const features = rows.map((s) => ({
