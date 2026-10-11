@@ -44,7 +44,14 @@ export async function GET() {
              ) AS institution_names,
              coalesce(
                (
-                 SELECT string_agg(ashkol, ', ' ORDER BY settlement_name, ashkol)
+                 SELECT string_agg(
+                   CASE
+                     WHEN settlement_name IS NOT NULL AND btrim(settlement_name) <> ''
+                     THEN ashkol || ' · ' || settlement_name
+                     ELSE ashkol
+                   END,
+                   ', ' ORDER BY settlement_name, ashkol
+                 )
                  FROM (
                    SELECT DISTINCT cl.ashkol, cl.settlement_name
                    FROM institution_coordinators link

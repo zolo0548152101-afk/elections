@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
 
 type LinkedCluster = { ashkol: string; settlement_name?: string };
@@ -81,19 +82,19 @@ function parseClusters(value: LinkedCluster[] | string | undefined): LinkedClust
   }
 }
 
-function institutionAshkols(inst: Institution | undefined): string[] {
+function institutionClusters(inst: Institution | undefined): LinkedCluster[] {
   if (!inst) return [];
-  return parseClusters(inst.linked_clusters)
-    .map((c) => String(c.ashkol ?? "").trim())
-    .filter(Boolean);
+  return parseClusters(inst.linked_clusters).filter((c) =>
+    String(c.ashkol ?? "").trim(),
+  );
 }
 
-/** e.g. אב"ע אורות מודיעין · אשכול 3000381, 3000376 */
+/** e.g. אב"ע אורות מודיעין · 3000381 · מודיעין, 3000376 · כפר סבא */
 function institutionLabel(inst: Institution | undefined, fallbackId?: number): string {
   if (!inst) return fallbackId ? `מוסד #${fallbackId}` : "—";
-  const ashkols = institutionAshkols(inst);
-  if (ashkols.length === 0) return inst.name;
-  return `${inst.name} · אשכול ${ashkols.join(", ")}`;
+  const labels = formatAshkolLabels(institutionClusters(inst));
+  if (!labels) return inst.name;
+  return `${inst.name} · ${labels}`;
 }
 
 const roleHe: Record<string, string> = {
@@ -314,7 +315,15 @@ export default function UsersPage() {
       .filter((i) => !form.institution_ids.includes(i.id))
       .filter((i) => {
         if (!instPickerQ.trim()) return true;
-        const hay = `${i.name} ${i.settlement_name ?? ""} ${institutionAshkols(i).join(" ")}`;
+        const clusters = institutionClusters(i);
+        const hay = [
+          i.name,
+          i.settlement_name,
+          ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
+          ...clusters.map((c) => c.settlement_name),
+        ]
+          .filter(Boolean)
+          .join(" ");
         return matchesSearch(hay, instPickerQ);
       });
   }, [institutions, form.institution_ids, instPickerQ]);

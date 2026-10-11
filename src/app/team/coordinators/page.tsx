@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
 
 type ClusterRef = { ashkol: string; settlement_name: string };
@@ -48,11 +49,14 @@ export default function TeamCoordinatorsPage() {
   const filtered = rows.filter((c) => {
     const needle = q.trim();
     if (!needle) return true;
-    const ashkols = (c.clusters ?? []).map((d) => d.ashkol);
+    const ashkols = (c.clusters ?? []).map((d) =>
+      formatAshkolLabel(d.ashkol, d.settlement_name),
+    );
     const hay = [
       c.full_name,
       ...c.institutions.map((i) => i.name),
       ...ashkols,
+      ...(c.clusters ?? []).map((d) => d.settlement_name),
     ]
       .filter(Boolean)
       .join(" ");
@@ -100,8 +104,9 @@ export default function TeamCoordinatorsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((c) => {
-                    const ashkols = (c.clusters ?? []).map((d) => d.ashkol);
-                    const count = c.cluster_count ?? ashkols.length;
+                    const clusters = c.clusters ?? [];
+                    const ashkolText = formatAshkolLabels(clusters);
+                    const count = c.cluster_count ?? clusters.length;
                     return (
                       <tr key={c.id}>
                         <td>{c.full_name}</td>
@@ -110,8 +115,8 @@ export default function TeamCoordinatorsPage() {
                             ? c.institutions.map((i) => i.name).join(" · ")
                             : "—"}
                         </td>
-                        <td title={ashkols.join(", ")}>
-                          {ashkols.length ? ashkols.join(", ") : "—"}
+                        <td title={ashkolText || undefined}>
+                          {ashkolText || "—"}
                         </td>
                         <td>
                           {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
