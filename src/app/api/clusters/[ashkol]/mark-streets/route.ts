@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { canAccessAshkol, canMarkStreet } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
-/** Mark all streets linked to a cluster as done (after cluster-street table is loaded). */
+/** Mark all streets linked to a cluster as done for the current user. */
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ ashkol: string }> },
@@ -16,6 +17,10 @@ export async function POST(
   const body = (await req.json().catch(() => ({}))) as { done?: boolean };
   const done = body.done !== false;
   const sql = getSql();
+
+  if (!(await canAccessAshkol(sql, user, ashkol))) {
+    return NextResponse.json({ error: "אין הרשאה לאשכול זה" }, { status: 403 });
+  }
 
   const streets = (await sql`
     SELECT id FROM streets WHERE ashkol = ${ashkol}
@@ -29,21 +34,24 @@ export async function POST(
     });
   }
 
-  if (done) {
-    for (const s of streets) {
+  let updated = 0;
+  for (const s of streets) {
+    if (!(await canMarkStreet(sql, user, s.id))) continue;
+    if (done) {
       await sql`
-        INSERT INTO street_marks (street_id, done, marked_by, marked_at)
-        VALUES (${s.id}, true, ${user.id}, now())
-        ON CONFLICT (street_id) DO UPDATE SET
-          done = true, marked_by = EXCLUDED.marked_by, marked_at = now()
+        INSERT INTO street_marks (street_id, user_id, done, marked_at)
+        VALUES (${s.id}, ${user.id}, true, now())
+        ON CONFLICT (street_id, user_id) DO UPDATE SET
+          done = true, marked_at = now()
+      `;
+    } else {
+      await sql`
+        DELETE FROM street_marks
+        WHERE street_id = ${s.id} AND user_id = ${user.id}
       `;
     }
-  } else {
-    await sql`
-      DELETE FROM street_marks
-      WHERE street_id IN (SELECT id FROM streets WHERE ashkol = ${ashkol})
-    `;
+    updated += 1;
   }
 
-  return NextResponse.json({ ashkol, updated: streets.length, done });
+  return NextResponse.json({ ashkol, updated, done });
 }

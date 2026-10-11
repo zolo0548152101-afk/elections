@@ -33,27 +33,40 @@ export async function GET(
     return new NextResponse("bad tile", { status: 400 });
   }
 
+  // At country zoom, skip street vectors — LIMIT would drop arbitrary streets.
+  if (z < 11) {
+    return new NextResponse(null, { status: 204 });
+  }
+
   const { west, south, east, north } = tileToBBox(z, x, y);
   const sql = getSql();
   const vis = await streetVisibilityFilter(sql, user);
+  const limit = z <= 12 ? 2500 : z <= 14 ? 5000 : 8000;
+
   const rows = (
     vis.active
       ? await sql`
-          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
+          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
+                 COALESCE(m.done, false) AS done
           FROM streets s
-          LEFT JOIN street_marks m ON m.street_id = s.id
+          LEFT JOIN street_marks m
+            ON m.street_id = s.id AND m.user_id = ${user.id}
           WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
             AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
             AND s.ashkol = ANY(${vis.ashkols})
-          LIMIT 4000
+          ORDER BY s.id
+          LIMIT ${limit}
         `
       : await sql`
-          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
+          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
+                 COALESCE(m.done, false) AS done
           FROM streets s
-          LEFT JOIN street_marks m ON m.street_id = s.id
+          LEFT JOIN street_marks m
+            ON m.street_id = s.id AND m.user_id = ${user.id}
           WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
             AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
-          LIMIT 4000
+          ORDER BY s.id
+          LIMIT ${limit}
         `
   ) as Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done">[];
 

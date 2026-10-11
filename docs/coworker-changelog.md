@@ -42,17 +42,20 @@ This document compares **what was on `main` before the street-map work** with **
 | `area_manager` | Manage own coordinators; groups for their team; assign streets to coordinators under them (city + institution rules); link clusters to those institutions |
 | `coordinator` | Own groups; mark streets; assign streets to **self** only in cities of their groups; link clusters to **own institution** |
 
-Sessions: email/password cookie `edo_session`. Default admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (or local defaults). Do not share secrets in chat.
+Sessions: email/password cookie `edo_session`. Admin via `ADMIN_EMAIL` / `ADMIN_PASSWORD` only (no code defaults). `npm run seed:admin` never resets an existing password unless `FORCE_ADMIN_PASSWORD=1`. Do not share secrets in chat.
 
 Pages: `/login`, `/` (map), `/users`, `/institutions`, `/groups`.
 
-Users page: admins can **edit**, **delete**, and **show/hide login passwords** for contacts. New/updated passwords are stored for ops visibility (`login_password`) while login still uses the bcrypt hash. Users created before this change show “לא נשמרה” until you edit and set a password again.
+Users page: admins can **edit** / **delete** users and set a **new** password (min 8 chars). Passwords are bcrypt-only — never stored or returned in plaintext.
 
 ### New data model (additive — nothing truncated)
 
 - `groups.settlement_name` → FK to `settlements` (city used for “who may receive this street”).
+- `groups.created_by` → keeps empty groups visible to the area manager who created them.
 - `street_coordinators` — many-to-many street ↔ coordinator (`assigned_by`, `assigned_at`).
-- `institution_clusters` — institution ↔ ashkol. Coordinator links relevant clusters to their institution. **After** `npm run import:cluster-streets` fills `streets.ashkol`, that role only sees streets of those clusters. Until then, all streets stay visible.
+- `street_marks` — per-user done state `(street_id, user_id)`.
+- `institutions` enriched from חוברת2 (`kind`, `settlement_name`, `district`, `lat`/`lng`, `key_people_raw`) + `institution_contacts`.
+- `institution_clusters` — institution ↔ ashkol. When the viewer has linked clusters and streets have `ashkol`, street visibility is scoped to those ashkols.
 
 ### Scripts coworkers may need
 
@@ -61,7 +64,8 @@ npm ci
 npm run db:schema          # idempotent schema apply
 npm run seed:streets       # load/upsert OSM streets (safe by default)
 npm run import:cluster-streets   # later: cluster↔street file
-npm run seed:admin         # ensure admin user
+npm run seed:admin         # ensure admin user (env required)
+npm run import:institutions  # upsert חוברת2 → institutions + contacts
 npm run dev -- --hostname 0.0.0.0 --port 3000
 ```
 

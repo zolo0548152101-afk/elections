@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { canManageInstitutionCluster } from "@/lib/streets-access";
+import {
+  canLinkClusterAshkol,
+  canManageInstitutionCluster,
+} from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -60,6 +63,13 @@ export async function POST(
   `) as { ashkol: string }[];
   if (!cluster[0]) {
     return NextResponse.json({ error: "אשכול לא נמצא" }, { status: 404 });
+  }
+
+  if (!(await canLinkClusterAshkol(sql, user, ashkol))) {
+    return NextResponse.json(
+      { error: "אין הרשאה לקשר אשכול מיישוב זה" },
+      { status: 403 },
+    );
   }
 
   await sql`

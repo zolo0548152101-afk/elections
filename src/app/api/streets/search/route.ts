@@ -89,7 +89,8 @@ export async function GET(req: NextRequest) {
               SELECT s.id, s.name_he, s.lat, s.lng, s.ashkol, COALESCE(m.done, false) AS done,
                 ${name_he}::text AS near_settlement
               FROM streets s
-              LEFT JOIN street_marks m ON m.street_id = s.id
+              LEFT JOIN street_marks m
+                ON m.street_id = s.id AND m.user_id = ${user.id}
               WHERE regexp_replace(s.name_he, '[''׳״"]+', '', 'g') ILIKE ${streetLike}
                 AND s.lat BETWEEN ${lat - CITY_PAD} AND ${lat + CITY_PAD}
                 AND s.lng BETWEEN ${lng - CITY_PAD} AND ${lng + CITY_PAD}
@@ -107,7 +108,8 @@ export async function GET(req: NextRequest) {
               SELECT s.id, s.name_he, s.lat, s.lng, s.ashkol, COALESCE(m.done, false) AS done,
                 ${name_he}::text AS near_settlement
               FROM streets s
-              LEFT JOIN street_marks m ON m.street_id = s.id
+              LEFT JOIN street_marks m
+                ON m.street_id = s.id AND m.user_id = ${user.id}
               WHERE regexp_replace(s.name_he, '[''׳״"]+', '', 'g') ILIKE ${streetLike}
                 AND s.lat BETWEEN ${lat - CITY_PAD} AND ${lat + CITY_PAD}
                 AND s.lng BETWEEN ${lng - CITY_PAD} AND ${lng + CITY_PAD}
@@ -136,7 +138,8 @@ export async function GET(req: NextRequest) {
                   LIMIT 1
                 ) AS near_settlement
               FROM streets s
-              LEFT JOIN street_marks m ON m.street_id = s.id
+              LEFT JOIN street_marks m
+                ON m.street_id = s.id AND m.user_id = ${user.id}
               WHERE regexp_replace(s.name_he, '[''׳״"]+', '', 'g') ILIKE ${streetLike}
                 AND s.ashkol = ANY(${vis.ashkols})
               ORDER BY
@@ -156,7 +159,8 @@ export async function GET(req: NextRequest) {
                   LIMIT 1
                 ) AS near_settlement
               FROM streets s
-              LEFT JOIN street_marks m ON m.street_id = s.id
+              LEFT JOIN street_marks m
+                ON m.street_id = s.id AND m.user_id = ${user.id}
               WHERE regexp_replace(s.name_he, '[''׳״"]+', '', 'g') ILIKE ${streetLike}
               ORDER BY
                 CASE

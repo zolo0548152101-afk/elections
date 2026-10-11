@@ -25,14 +25,17 @@ export async function GET() {
   }
 
   if (user.role === "area_manager") {
+    // Include empty groups created by this manager, plus groups with their coordinators.
     const rows = await sql`
       SELECT g.*, coalesce(json_agg(DISTINCT jsonb_build_object('id', u.id, 'full_name', u.full_name))
         FILTER (WHERE u.id IS NOT NULL), '[]') AS coordinators
       FROM groups g
-      JOIN group_coordinators gc ON gc.group_id = g.id
-      JOIN users coord ON coord.id = gc.user_id AND coord.manager_id = ${user.id}
+      LEFT JOIN group_coordinators gc ON gc.group_id = g.id
+      LEFT JOIN users coord ON coord.id = gc.user_id AND coord.manager_id = ${user.id}
       LEFT JOIN group_coordinators gc2 ON gc2.group_id = g.id
       LEFT JOIN users u ON u.id = gc2.user_id
+      WHERE g.created_by = ${user.id}
+         OR coord.id IS NOT NULL
       GROUP BY g.id
       ORDER BY g.name
     `;
@@ -95,20 +98,35 @@ export async function POST(req: NextRequest) {
   }
 
   const ids = coordinatorIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
-  if (user!.role === "area_manager" && ids.length > 0) {
-    const allowed = (await sql`
-      SELECT id FROM users
-      WHERE role = 'coordinator' AND manager_id = ${user!.id}
-    `) as { id: number }[];
-    const allowedIds = new Set(allowed.map((row) => row.id));
-    if (ids.some((id) => !allowedIds.has(id))) {
-      return NextResponse.json({ error: "רכז מחוץ לצוות" }, { status: 403 });
+
+  if (ids.length > 0) {
+    const candidates = (await sql`
+      SELECT id, role, manager_id FROM users WHERE id = ANY(${ids})
+    `) as { id: number; role: string; manager_id: number | null }[];
+    if (candidates.length !== ids.length) {
+      return NextResponse.json({ error: "רכז לא נמצא" }, { status: 400 });
+    }
+    if (candidates.some((c) => c.role !== "coordinator")) {
+      return NextResponse.json(
+        { error: "ניתן לשייך לקבוצה רק רכזים" },
+        { status: 400 },
+      );
+    }
+    if (user!.role === "area_manager") {
+      if (candidates.some((c) => c.manager_id !== user!.id)) {
+        return NextResponse.json({ error: "רכז מחוץ לצוות" }, { status: 403 });
+      }
     }
   }
 
   const [group] = await sql`
-    INSERT INTO groups (name, location_text, settlement_name, headcount, gender, type)
-    VALUES (${name}, ${location_text}, ${settlement_name}, ${headcount}, ${gender}, ${type})
+    INSERT INTO groups (
+      name, location_text, settlement_name, headcount, gender, type, created_by
+    )
+    VALUES (
+      ${name}, ${location_text}, ${settlement_name}, ${headcount}, ${gender}, ${type},
+      ${user!.id}
+    )
     RETURNING *
   `;
 

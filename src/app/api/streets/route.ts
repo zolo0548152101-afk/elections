@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql, type StreetRow } from "@/lib/db";
-import { streetVisibilityFilter } from "@/lib/streets-access";
+import { canAccessAshkol, streetVisibilityFilter } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -23,16 +23,28 @@ export async function GET(req: NextRequest) {
 
   const sql = getSql();
   const vis = await streetVisibilityFilter(sql, user);
+
+  if (ashkol) {
+    if (!(await canAccessAshkol(sql, user, ashkol))) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (vis.active && !vis.ashkols.includes(ashkol)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
+
   let rows: StreetRow[];
   if (ashkol) {
     rows = (await sql`
       SELECT s.id, s.name_he, s.lat, s.lng, s.bbox_xmin, s.bbox_ymin, s.bbox_xmax, s.bbox_ymax,
              s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
       FROM streets s
-      LEFT JOIN street_marks m ON m.street_id = s.id
+      LEFT JOIN street_marks m
+        ON m.street_id = s.id AND m.user_id = ${user.id}
       WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
         AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
         AND s.ashkol = ${ashkol}
+      ORDER BY s.id
       LIMIT ${limit}
     `) as StreetRow[];
   } else if (vis.active) {
@@ -40,10 +52,12 @@ export async function GET(req: NextRequest) {
       SELECT s.id, s.name_he, s.lat, s.lng, s.bbox_xmin, s.bbox_ymin, s.bbox_xmax, s.bbox_ymax,
              s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
       FROM streets s
-      LEFT JOIN street_marks m ON m.street_id = s.id
+      LEFT JOIN street_marks m
+        ON m.street_id = s.id AND m.user_id = ${user.id}
       WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
         AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
         AND s.ashkol = ANY(${vis.ashkols})
+      ORDER BY s.id
       LIMIT ${limit}
     `) as StreetRow[];
   } else {
@@ -51,9 +65,11 @@ export async function GET(req: NextRequest) {
       SELECT s.id, s.name_he, s.lat, s.lng, s.bbox_xmin, s.bbox_ymin, s.bbox_xmax, s.bbox_ymax,
              s.geom_geojson, s.ashkol, COALESCE(m.done, false) AS done
       FROM streets s
-      LEFT JOIN street_marks m ON m.street_id = s.id
+      LEFT JOIN street_marks m
+        ON m.street_id = s.id AND m.user_id = ${user.id}
       WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
         AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
+      ORDER BY s.id
       LIMIT ${limit}
     `) as StreetRow[];
   }
