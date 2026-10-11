@@ -12,6 +12,7 @@ type UserRow = {
   role: string;
   institution_id: number | null;
   institution_name?: string;
+  institution_names?: string | null;
   manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
@@ -45,6 +46,8 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
 
   async function load() {
     const [u, me] = await Promise.all([
@@ -166,6 +169,25 @@ export default function UsersPage() {
   const editingUser = editId ? users.find((u) => u.id === editId) : null;
   const showSettlement =
     form.role === "coordinator" || meRole === "area_manager";
+
+  const filteredUsers = users.filter((u) => {
+    if (roleFilter && u.role !== roleFilter) return false;
+    const needle = q.trim();
+    if (!needle) return true;
+    const hay = [
+      u.full_name,
+      u.email,
+      u.mobile,
+      u.institution_name,
+      u.institution_names,
+      u.settlement_name,
+      u.manager_name,
+      roleHe[u.role],
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return hay.includes(needle);
+  });
 
   return (
     <main>
@@ -316,6 +338,29 @@ export default function UsersPage() {
           </form>
         )}
 
+        <div className="panel-form users-filters">
+          <label>
+            חיפוש
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="שם, אימייל, מוסד, יישוב…"
+            />
+          </label>
+          <label>
+            תפקיד
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+            >
+              <option value="">הכל</option>
+              <option value="coordinator">רכז</option>
+              <option value="area_manager">רכז על</option>
+              <option value="super_admin">מנהל</option>
+            </select>
+          </label>
+        </div>
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -330,13 +375,13 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr key={u.id} className={editId === u.id ? "row-editing" : undefined}>
                   <td>{u.full_name}</td>
                   <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>{u.institution_name || "—"}</td>
+                  <td>{u.institution_names || u.institution_name || "—"}</td>
                   <td>{u.settlement_name || "—"}</td>
                   {canManage && (
                     <td className="actions-cell">
@@ -361,6 +406,9 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
+          <p className="map-credit" style={{ marginTop: "0.75rem" }}>
+            מציג {filteredUsers.length} / {users.length}
+          </p>
         </div>
       </div>
     </main>

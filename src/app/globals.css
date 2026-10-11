@@ -625,6 +625,19 @@ tbody tr.cluster-row-selected:hover {
   margin: 0 0 0.65rem;
 }
 
+.users-filters {
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 200px);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .users-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 .row-editing {
   background: rgba(47, 111, 237, 0.08);
 }
