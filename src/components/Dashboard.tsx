@@ -30,6 +30,8 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedAshkol, setSelectedAshkol] = useState("");
+  const [tableFocusToken, setTableFocusToken] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,8 +195,23 @@ export function Dashboard() {
       )}
 
       <div className="unified">
-        <StreetMap clusters={clusters} focus={focus} />
-        <ClusterTable clusters={clusters} sort={sort} dir={dir} onSort={onSort} />
+        <StreetMap
+          clusters={clusters}
+          focus={focus}
+          focusAshkol={selectedAshkol || null}
+          focusAshkolToken={tableFocusToken}
+        />
+        <ClusterTable
+          clusters={clusters}
+          sort={sort}
+          dir={dir}
+          onSort={onSort}
+          selectedAshkol={selectedAshkol}
+          onSelect={(c) => {
+            setSelectedAshkol(c.ashkol);
+            setTableFocusToken((n) => n + 1);
+          }}
+        />
       </div>
     </div>
   );

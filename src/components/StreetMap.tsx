@@ -97,9 +97,15 @@ function streetPopupHtml(name: string, ashkol: string | null) {
 export function StreetMap({
   clusters,
   focus,
+  focusAshkol,
+  focusAshkolToken,
 }: {
   clusters: ClusterView[];
   focus?: MapFocus | null;
+  /** Select this ashkol (e.g. from the coordinator table) and fly to it. */
+  focusAshkol?: string | null;
+  /** Bump to re-apply the same ashkol focus after another click. */
+  focusAshkolToken?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -524,6 +530,26 @@ export function StreetMap({
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   }, [focus]);
+
+  /** Table / external ashkol pick — select cluster, highlight streets, fly to point. */
+  useEffect(() => {
+    if (!focusAshkol) return;
+    const cluster = clusters.find((c) => c.ashkol === focusAshkol) ?? null;
+    setSelectedAshkol(focusAshkol);
+    setPicked(cluster);
+    const map = mapRef.current;
+    if (!map || !cluster || cluster.map_lng == null || cluster.map_lat == null) {
+      return;
+    }
+    const apply = () => {
+      map.flyTo({
+        center: [cluster.map_lng!, cluster.map_lat!],
+        zoom: 14,
+      });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [focusAshkol, focusAshkolToken, clusters]);
 
   useEffect(() => {
     if (q.trim().length < 1) {
