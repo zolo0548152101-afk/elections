@@ -200,6 +200,24 @@ h1 {
   max-height: 560px;
 }
 
+.table-compact {
+  border-radius: 12px;
+  max-height: min(70vh, 640px);
+}
+
+.table-compact table {
+  font-size: 0.82rem;
+}
+
+.table-compact th,
+.table-compact td {
+  padding: 0.35rem 0.5rem;
+}
+
+.table-compact th {
+  font-size: 0.78rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
