@@ -14,10 +14,7 @@ export function AppNav({
   const path = usePathname();
   const router = useRouter();
 
-  const links = [
-    { href: "/", label: "אשכולות" },
-    { href: "/map", label: "מפת רחובות" },
-  ];
+  const links = [{ href: "/", label: "מפה" }];
   if (user.role === "super_admin" || user.role === "area_manager") {
     links.push(
       { href: "/users", label: "משתמשים" },

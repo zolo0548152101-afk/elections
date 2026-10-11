@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   // Keep AGENTS.md as project notes; do not append Next's generated rules.
   agentRules: false,
+  async redirects() {
+    return [{ source: "/map", destination: "/", permanent: false }];
+  },
 };
 
 export default nextConfig;

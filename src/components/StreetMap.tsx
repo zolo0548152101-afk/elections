@@ -273,6 +273,33 @@ export function StreetMap({
   }, [clusters]);
 
   useEffect(() => {
+    if (!picked) return;
+    if (clusters.some((c) => c.ashkol === picked.ashkol)) return;
+    setPicked(null);
+    setSelectedAshkol("");
+  }, [clusters, picked]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || focus) return;
+    const pts = clusters.filter((c) => c.map_lat != null && c.map_lng != null);
+    if (pts.length === 0) return;
+    const apply = () => {
+      const lngs = pts.map((c) => c.map_lng!);
+      const lats = pts.map((c) => c.map_lat!);
+      map.fitBounds(
+        [
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)],
+        ],
+        { padding: 40, maxZoom: 11 },
+      );
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [clusters, focus]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !focus) return;
     const apply = () => {

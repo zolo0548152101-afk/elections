@@ -159,6 +159,15 @@ h1 {
   cursor: not-allowed;
 }
 
+.unified {
+  display: grid;
+  gap: 1rem;
+}
+
+.unified .table-wrap {
+  max-height: 480px;
+}
+
 .split {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
