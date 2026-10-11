@@ -351,6 +351,66 @@ tbody tr:hover {
   font: inherit;
 }
 
+.password-field {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.password-field input {
+  flex: 1;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.password-cell,
+.actions-cell {
+  white-space: nowrap;
+}
+
+.password-cell {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.actions-cell .export,
+.actions-cell .reset {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.linkish {
+  border: 0;
+  background: transparent;
+  color: var(--accent-2);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.muted-cell {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.row-editing {
+  background: rgba(47, 111, 237, 0.08);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

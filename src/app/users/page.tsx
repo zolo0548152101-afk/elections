@@ -11,8 +11,27 @@ type UserRow = {
   role: string;
   institution_id: number | null;
   institution_name?: string;
+  manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
+  login_password?: string | null;
+};
+
+const emptyForm = {
+  full_name: "",
+  mobile: "",
+  email: "",
+  password: "",
+  role: "coordinator",
+  institution_id: "",
+  settlement_name: "",
+  manager_id: "",
+};
+
+const roleHe: Record<string, string> = {
+  super_admin: "מנהל על",
+  area_manager: "מנהל אזור",
+  coordinator: "רכז",
 };
 
 export default function UsersPage() {
@@ -20,16 +39,11 @@ export default function UsersPage() {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [settlements, setSettlements] = useState<string[]>([]);
   const [meRole, setMeRole] = useState<string>("");
-  const [form, setForm] = useState({
-    full_name: "",
-    mobile: "",
-    email: "",
-    password: "",
-    role: "coordinator",
-    institution_id: "",
-    settlement_name: "",
-    manager_id: "",
-  });
+  const [meId, setMeId] = useState<number | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [revealIds, setRevealIds] = useState<Record<number, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
@@ -39,13 +53,16 @@ export default function UsersPage() {
     ]);
     setUsers(u.users ?? []);
     setMeRole(me.user?.role ?? "");
+    setMeId(me.user?.id ?? null);
     if (me.user?.role === "super_admin" || me.user?.role === "area_manager") {
       const [i, s] = await Promise.all([
         fetch("/api/institutions").then((r) => r.json()),
         fetch("/api/settlements").then((r) => r.json()),
       ]);
       setInstitutions(i.institutions ?? []);
-      setSettlements((s.settlements ?? []).map((row: { name_he: string }) => row.name_he));
+      setSettlements(
+        (s.settlements ?? []).map((row: { name_he: string }) => row.name_he),
+      );
     }
   }
 
@@ -53,38 +70,90 @@ export default function UsersPage() {
     load();
   }, []);
 
-  async function createUser(e: React.FormEvent) {
+  function resetForm() {
+    setForm(emptyForm);
+    setEditId(null);
+    setShowPassword(false);
+  }
+
+  function startEdit(u: UserRow) {
+    setEditId(u.id);
+    setForm({
+      full_name: u.full_name,
+      mobile: u.mobile ?? "",
+      email: u.email,
+      password: u.login_password ?? "",
+      role: u.role,
+      institution_id: u.institution_id ? String(u.institution_id) : "",
+      settlement_name: u.settlement_name ?? "",
+      manager_id: u.manager_id ? String(u.manager_id) : "",
+    });
+    setShowPassword(Boolean(u.login_password));
+    setMsg(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        institution_id: form.institution_id ? Number(form.institution_id) : null,
-        settlement_name: form.settlement_name || null,
-        manager_id:
-          form.role === "coordinator" && form.manager_id ? Number(form.manager_id) : null,
-      }),
-    });
+    const payload = {
+      ...form,
+      institution_id: form.institution_id ? Number(form.institution_id) : null,
+      settlement_name: form.settlement_name || null,
+      manager_id:
+        form.role === "coordinator" && form.manager_id
+          ? Number(form.manager_id)
+          : null,
+    };
+
+    const res = await fetch(
+      editId ? `/api/users/${editId}` : "/api/users",
+      {
+        method: editId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editId
+            ? {
+                ...payload,
+                // Empty password on edit = keep existing hash/login_password
+                password: form.password.trim() || undefined,
+              }
+            : payload,
+        ),
+      },
+    );
     const data = await res.json();
     if (!res.ok) {
       setMsg(data.error || "שגיאה");
       return;
     }
-    setMsg("נוצר בהצלחה");
-    setForm({
-      full_name: "",
-      mobile: "",
-      email: "",
-      password: "",
-      role: "coordinator",
-      institution_id: "",
-      settlement_name: "",
-      manager_id: "",
-    });
+    setMsg(editId ? "עודכן בהצלחה" : "נוצר בהצלחה");
+    resetForm();
     load();
   }
+
+  async function deleteUser(u: UserRow) {
+    if (u.id === meId) {
+      setMsg("לא ניתן למחוק את המשתמש המחובר");
+      return;
+    }
+    const ok = window.confirm(
+      `למחוק את ${u.full_name} (${u.email})? הפעולה אינה ניתנת לביטול.`,
+    );
+    if (!ok) return;
+    setMsg(null);
+    const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg(data.error || "שגיאה במחיקה");
+      return;
+    }
+    if (editId === u.id) resetForm();
+    setMsg("נמחק בהצלחה");
+    load();
+  }
+
+  const canManage = meRole === "super_admin" || meRole === "area_manager";
 
   return (
     <main>
@@ -93,12 +162,17 @@ export default function UsersPage() {
           <div>
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
+            <p className="lede">הוספה, עריכה, צפייה בסיסמה ומחיקה של אנשי הקשר</p>
           </div>
         </header>
 
-        {(meRole === "super_admin" || meRole === "area_manager") && (
-          <form className="panel-form" onSubmit={createUser}>
-            <h2>הוספת {meRole === "area_manager" ? "רכז" : "משתמש"}</h2>
+        {canManage && (
+          <form className="panel-form" onSubmit={saveUser}>
+            <h2>
+              {editId
+                ? "עריכת משתמש"
+                : `הוספת ${meRole === "area_manager" ? "רכז" : "משתמש"}`}
+            </h2>
             <div className="form-grid">
               <label>
                 שם מלא
@@ -128,12 +202,24 @@ export default function UsersPage() {
               </label>
               <label>
                 סיסמה
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required
-                />
+                {editId ? " (השאירו ריק כדי לא לשנות)" : ""}
+                <div className="password-field">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    dir="ltr"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required={!editId}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="reset"
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    {showPassword ? "הסתר" : "הצג"}
+                  </button>
+                </div>
               </label>
               {meRole === "super_admin" && (
                 <label>
@@ -170,7 +256,9 @@ export default function UsersPage() {
                 מוסד
                 <select
                   value={form.institution_id}
-                  onChange={(e) => setForm({ ...form, institution_id: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, institution_id: e.target.value })
+                  }
                 >
                   <option value="">—</option>
                   {institutions.map((i) => (
@@ -184,7 +272,9 @@ export default function UsersPage() {
                 יישוב (לרכז)
                 <select
                   value={form.settlement_name}
-                  onChange={(e) => setForm({ ...form, settlement_name: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, settlement_name: e.target.value })
+                  }
                 >
                   <option value="">—</option>
                   {settlements.map((name) => (
@@ -195,9 +285,16 @@ export default function UsersPage() {
                 </select>
               </label>
             </div>
-            <button type="submit" className="export">
-              שמירה
-            </button>
+            <div className="form-actions">
+              <button type="submit" className="export">
+                {editId ? "עדכון" : "שמירה"}
+              </button>
+              {editId && (
+                <button type="button" className="reset" onClick={resetForm}>
+                  ביטול עריכה
+                </button>
+              )}
+            </div>
             {msg && <p className="lede">{msg}</p>}
           </form>
         )}
@@ -212,17 +309,60 @@ export default function UsersPage() {
                 <th>תפקיד</th>
                 <th>מוסד</th>
                 <th>יישוב</th>
+                {canManage && <th>סיסמה</th>}
+                {canManage && <th>פעולות</th>}
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id}>
+                <tr key={u.id} className={editId === u.id ? "row-editing" : undefined}>
                   <td>{u.full_name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.mobile}</td>
-                  <td>{u.role}</td>
+                  <td dir="ltr">{u.email}</td>
+                  <td dir="ltr">{u.mobile}</td>
+                  <td>{roleHe[u.role] ?? u.role}</td>
                   <td>{u.institution_name}</td>
                   <td>{u.settlement_name}</td>
+                  {canManage && (
+                    <td className="password-cell">
+                      {u.login_password ? (
+                        <>
+                          <bdi dir="ltr">
+                            {revealIds[u.id] ? u.login_password : "••••••••"}
+                          </bdi>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() =>
+                              setRevealIds((m) => ({ ...m, [u.id]: !m[u.id] }))
+                            }
+                          >
+                            {revealIds[u.id] ? "הסתר" : "הצג"}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="muted-cell">לא נשמרה — ערכו והגדירו</span>
+                      )}
+                    </td>
+                  )}
+                  {canManage && (
+                    <td className="actions-cell">
+                      <button
+                        type="button"
+                        className="export"
+                        onClick={() => startEdit(u)}
+                      >
+                        עריכה
+                      </button>
+                      <button
+                        type="button"
+                        className="reset"
+                        disabled={u.id === meId}
+                        onClick={() => void deleteUser(u)}
+                      >
+                        מחיקה
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -46,6 +46,8 @@ Sessions: email/password cookie `edo_session`. Default admin from `ADMIN_EMAIL` 
 
 Pages: `/login`, `/` (map), `/users`, `/institutions`, `/groups`.
 
+Users page: admins can **edit**, **delete**, and **show/hide login passwords** for contacts. New/updated passwords are stored for ops visibility (`login_password`) while login still uses the bcrypt hash. Users created before this change show “לא נשמרה” until you edit and set a password again.
+
 ### New data model (additive — nothing truncated)
 
 - `groups.settlement_name` → FK to `settlements` (city used for “who may receive this street”).

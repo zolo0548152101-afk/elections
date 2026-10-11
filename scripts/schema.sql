@@ -32,12 +32,16 @@ CREATE TABLE IF NOT EXISTS users (
   mobile text,
   email text NOT NULL UNIQUE,
   password_hash text NOT NULL,
+  -- Ops-visible login password for admins (auth still uses password_hash).
+  login_password text,
   role text NOT NULL CHECK (role IN ('super_admin', 'area_manager', 'coordinator')),
   institution_id integer REFERENCES institutions(id) ON DELETE SET NULL,
   manager_id integer REFERENCES users(id) ON DELETE SET NULL,
   settlement_name text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS login_password text;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id text PRIMARY KEY,

@@ -17,10 +17,11 @@ const [inst] = await sql`
 `;
 
 await sql`
-  INSERT INTO users (full_name, mobile, email, password_hash, role, institution_id)
-  VALUES ('מנהל על', '', ${email}, ${hash}, 'super_admin', ${inst.id})
+  INSERT INTO users (full_name, mobile, email, password_hash, login_password, role, institution_id)
+  VALUES ('מנהל על', '', ${email}, ${hash}, ${password}, 'super_admin', ${inst.id})
   ON CONFLICT (email) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
+    login_password = EXCLUDED.login_password,
     role = 'super_admin',
     institution_id = EXCLUDED.institution_id
 `;
