@@ -219,7 +219,7 @@ export default function UsersPage() {
                   required
                 />
               </label>
-              <label>
+              <label className="field-wide field-password">
                 סיסמה
                 {editId ? " (ריק = ללא שינוי, מינימום 8)" : " (מינימום 8)"}
                 <div className="password-field">

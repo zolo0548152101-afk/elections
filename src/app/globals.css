@@ -506,15 +506,13 @@ tbody tr:hover {
   overflow: visible;
 }
 
-/* Long institution names + settlement picker need a wider cell */
+/* Password show-button + long institution names need a full row */
 .form-grid > label.field-wide {
   grid-column: 1 / -1;
 }
 
-@media (min-width: 900px) {
-  .form-grid > label.field-wide {
-    grid-column: span 2;
-  }
+.form-grid > label.field-password .password-field {
+  max-width: 420px;
 }
 
 .coord-set {
