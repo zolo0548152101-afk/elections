@@ -220,11 +220,6 @@ export default function UsersPage() {
     return ids;
   }
 
-  function flash(kind: "ok" | "err" | "info", text: string) {
-    setMsgKind(kind);
-    setMsg(text);
-  }
-
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
@@ -340,6 +335,7 @@ export default function UsersPage() {
         "ok",
         `✓ ההודעה נשלחה בהצלחה ב-WhatsApp אל ${u.full_name} (${u.mobile})`,
       );
+      window.scrollTo({ top: 0, behavior: "smooth" });
       window.setTimeout(() => {
         setSentOkId((cur) => (cur === u.id ? null : cur));
       }, 4000);
