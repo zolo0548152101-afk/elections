@@ -21,6 +21,13 @@ function rateLimited(key: string): boolean {
   return entry.count > MAX_ATTEMPTS;
 }
 
+type LoginUser = {
+  id: number;
+  password_hash: string;
+  temp_login_code_hash: string | null;
+  temp_login_expires_at: string | Date | null;
+};
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     mobile?: string;
@@ -49,11 +56,11 @@ export async function POST(req: NextRequest) {
   const variants = mobileMatchVariants(mobile);
   const sql = getSql();
   const rows = (await sql`
-    SELECT id, password_hash
+    SELECT id, password_hash, temp_login_code_hash, temp_login_expires_at
     FROM users
     WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${variants})
     LIMIT 2
-  `) as { id: number; password_hash: string }[];
+  `) as LoginUser[];
 
   if (rows.length > 1) {
     return NextResponse.json(
@@ -63,9 +70,35 @@ export async function POST(req: NextRequest) {
   }
 
   const user = rows[0];
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  if (!user) {
     return NextResponse.json({ error: "נייד או סיסמה שגויים" }, { status: 401 });
   }
+
+  if (verifyPassword(password, user.password_hash)) {
+    await createSession(user.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  const tempHash = user.temp_login_code_hash?.trim() || "";
+  const expiresAt = user.temp_login_expires_at
+    ? new Date(user.temp_login_expires_at).getTime()
+    : 0;
+  const tempValid =
+    tempHash &&
+    expiresAt > Date.now() &&
+    verifyPassword(password, tempHash);
+
+  if (!tempValid) {
+    return NextResponse.json({ error: "נייד או סיסמה שגויים" }, { status: 401 });
+  }
+
+  // One-time: clear temp code after successful login. Permanent password stays.
+  await sql`
+    UPDATE users
+    SET temp_login_code_hash = NULL,
+        temp_login_expires_at = NULL
+    WHERE id = ${user.id}
+  `;
   await createSession(user.id);
   return NextResponse.json({ ok: true });
 }

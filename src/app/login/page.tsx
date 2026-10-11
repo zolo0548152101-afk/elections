@@ -67,7 +67,7 @@ export default function LoginPage() {
         <p className="lede">
           {mode === "login"
             ? "ניהול יום בחירות"
-            : "נשלח אליכם ב-WhatsApp סיסמה זמנית לכניסה חד-פעמית."}
+            : "נשלח אליכם ב-WhatsApp קוד בן 5 ספרות, תקף ל־5 דקות. הסיסמה הקבועה לא משתנה."}
         </p>
         <label>
           נייד

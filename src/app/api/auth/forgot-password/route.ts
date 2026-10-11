@@ -3,7 +3,10 @@ import { hashPassword } from "@/lib/auth";
 import { appLoginUrl } from "@/lib/app-url";
 import { getSql } from "@/lib/db";
 import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
-import { generateTempPassword } from "@/lib/passwords";
+import {
+  generateTempLoginCode,
+  TEMP_LOGIN_TTL_MS,
+} from "@/lib/passwords";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -24,7 +27,8 @@ function rateLimited(key: string): boolean {
 }
 
 /**
- * Public: send a temporary password over WAHA (HAIM_YAHAD) for forgot-password.
+ * Public: send a 5-digit temporary login code over WAHA (HAIM_YAHAD).
+ * Does not replace the permanent password — only adds a 5-minute login option.
  * Always returns a generic success when the mobile format is valid (anti-enumeration).
  */
 export async function POST(req: NextRequest) {
@@ -60,7 +64,7 @@ export async function POST(req: NextRequest) {
   const genericOk = {
     ok: true,
     message:
-      "אם קיים משתמש עם מספר זה, נשלחה סיסמה זמנית ב-WhatsApp. התחברו איתה מיד.",
+      "אם קיים משתמש עם מספר זה, נשלח קוד זמני בן 5 ספרות ב-WhatsApp. תקף ל־5 דקות; הסיסמה הקבועה נשארת.",
   };
 
   if (rows.length !== 1 || !rows[0].mobile?.trim()) {
@@ -68,7 +72,6 @@ export async function POST(req: NextRequest) {
   }
 
   const user = rows[0];
-  // Fail fast if WAHA is not configured — do not rotate the password yet.
   if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
     return NextResponse.json(
       { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
@@ -76,14 +79,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const temp = generateTempPassword();
+  const temp = generateTempLoginCode();
   const loginUrl = appLoginUrl(req);
   const text = [
-    "שלום, הנה סיסמה זמנית לכניסה חד-פעמית למערכת.",
+    "שלום, הנה קוד זמני לכניסה למערכת.",
     `לינק להתחברות- ${loginUrl}`,
     `משתמש- ${mobile}`,
-    `סיסמא זמנית- ${temp}`,
-    "מומלץ להחליף סיסמה אחרי הכניסה.",
+    `קוד זמני (5 ספרות)- ${temp}`,
+    "הקוד תקף ל־5 דקות בלבד. הסיסמה הקבועה שלכם לא משתנה.",
   ].join("\n");
 
   const sent = await wahaSendText({ mobile: user.mobile!, text });
@@ -95,7 +98,13 @@ export async function POST(req: NextRequest) {
   }
 
   const hash = hashPassword(temp);
-  await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${user.id}`;
+  const expiresAt = new Date(Date.now() + TEMP_LOGIN_TTL_MS).toISOString();
+  await sql`
+    UPDATE users
+    SET temp_login_code_hash = ${hash},
+        temp_login_expires_at = ${expiresAt}::timestamptz
+    WHERE id = ${user.id}
+  `;
 
   return NextResponse.json(genericOk);
 }

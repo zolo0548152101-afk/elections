@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth";
 import { appLoginUrl } from "@/lib/app-url";
 import { getSql } from "@/lib/db";
-import { generateTempPassword, validatePassword } from "@/lib/passwords";
+import { generateRandomPassword, validatePassword } from "@/lib/passwords";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -71,7 +71,7 @@ export async function POST(
   let password = body.password?.trim() ?? "";
   let generated = false;
   if (!password) {
-    password = generateTempPassword();
+    password = generateRandomPassword();
     generated = true;
   }
   const pwErr = validatePassword(password);

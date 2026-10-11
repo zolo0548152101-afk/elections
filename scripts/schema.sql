@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS users (
 -- Drop ops plaintext password column if it exists (auth uses password_hash only).
 ALTER TABLE users DROP COLUMN IF EXISTS login_password;
 
+-- One-time login code (5 digits, 5 minutes). Does not replace password_hash.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_login_code_hash text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_login_expires_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS sessions (
   id text PRIMARY KEY,
   user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
