@@ -399,14 +399,14 @@ tbody tr:hover {
   top: calc(100% + 4px);
   right: 0;
   left: 0;
-  z-index: 5;
+  z-index: 20;
   margin: 0;
   padding: 0.35rem;
   list-style: none;
   background: white;
   border-radius: 12px;
   box-shadow: var(--shadow);
-  max-height: 240px;
+  max-height: 320px;
   overflow: auto;
 }
 
@@ -421,8 +421,41 @@ tbody tr:hover {
   border-radius: 8px;
 }
 
-.search-hits button:hover {
-  background: rgba(47, 111, 237, 0.08);
+.search-hits button:hover,
+.search-hits button.active {
+  background: rgba(47, 111, 237, 0.1);
+}
+
+.search-hits mark {
+  background: rgba(196, 92, 38, 0.22);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 0.1em;
+}
+
+.search-section,
+.search-hint {
+  padding: 0.35rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.search-hint {
+  font-weight: 500;
+}
+
+.hit-kind {
+  display: inline-block;
+  min-width: 2.4rem;
+  margin-inline-end: 0.35rem;
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hit-meta {
+  color: var(--muted);
 }
 
 .map-side-cards {

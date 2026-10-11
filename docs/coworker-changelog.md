@@ -30,7 +30,7 @@ This document compares **what was on `main` before the street-map work** with **
 | Home page | Unified: filters + street map + cluster dots + voter card + table + CSV |
 | Street color | Blue by default; **green** when marked done. **Not** filtered by voter criteria until cluster↔street import fills `streets.ashkol` |
 | Click street | Toggle done **and** open popup (name; ashkol only when set) + side card to **assign to coordinator** |
-| Search | Google-style: **cities and streets** (Hebrew), with nearest settlement on street hits |
+| Search | Interactive autocomplete: cities and streets as you type; supports **city + street** in one box (e.g. `בית שאן הרמב"ם`); quote variants normalized |
 | Cluster dots | Same voter figures as before (בז״ב, מצביעים, כשרים, הצבעה, ימין, קלפיות) on click + side card |
 | `/map` | Redirects to `/` |
 

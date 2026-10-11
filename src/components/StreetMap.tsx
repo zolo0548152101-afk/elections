@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
@@ -107,6 +107,10 @@ export function StreetMap({
   const [q, setQ] = useState("");
   const [cityHits, setCityHits] = useState<SearchCity[]>([]);
   const [streetHits, setStreetHits] = useState<SearchStreet[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [parsedCity, setParsedCity] = useState<string | null>(null);
+  const [activeHit, setActiveHit] = useState(0);
   const [status, setStatus] = useState("טוען מפה…");
   const [selectedAshkol, setSelectedAshkol] = useState<string>("");
   const [picked, setPicked] = useState<ClusterView | null>(null);
@@ -117,6 +121,7 @@ export function StreetMap({
   const [me, setMe] = useState<MeUser | null>(null);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [linkInstitutionId, setLinkInstitutionId] = useState("");
+  const searchBoxRef = useRef<HTMLLabelElement | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -407,38 +412,68 @@ export function StreetMap({
   }, [focus]);
 
   useEffect(() => {
-    if (q.trim().length < 2) {
+    if (q.trim().length < 1) {
       setCityHits([]);
       setStreetHits([]);
+      setParsedCity(null);
+      setSearchBusy(false);
       return;
     }
+    setSearchBusy(true);
     const t = setTimeout(async () => {
       const res = await fetch(`/api/streets/search?q=${encodeURIComponent(q.trim())}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setSearchBusy(false);
+        return;
+      }
       const data = await res.json();
       setCityHits(data.cities ?? []);
       setStreetHits(data.streets ?? data.results ?? []);
-    }, 200);
+      setParsedCity(data.parsed?.city ?? null);
+      setActiveHit(0);
+      setSearchOpen(true);
+      setSearchBusy(false);
+    }, 120);
     return () => clearTimeout(t);
   }, [q]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!searchBoxRef.current?.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  function clearHits() {
+    setCityHits([]);
+    setStreetHits([]);
+    setSearchOpen(false);
+    setParsedCity(null);
+  }
 
   function goToCity(city: SearchCity) {
     const map = mapRef.current;
     if (!map) return;
     map.flyTo({ center: [city.lng, city.lat], zoom: 13 });
-    setQ(city.name_he);
-    setCityHits([]);
-    setStreetHits([]);
-    setStatus(`עיר: ${city.name_he}`);
+    setQ(`${city.name_he} `);
+    clearHits();
+    setSearchOpen(true);
+    setStatus(`עיר: ${city.name_he} · המשיכו להקליד שם רחוב`);
   }
 
   async function goToStreet(hit: SearchStreet) {
     const map = mapRef.current;
     if (!map) return;
     map.flyTo({ center: [hit.lng, hit.lat], zoom: 15 });
-    setQ(hit.name_he);
-    setCityHits([]);
-    setStreetHits([]);
+    setQ(
+      hit.near_settlement
+        ? `${hit.near_settlement} ${hit.name_he}`
+        : hit.name_he,
+    );
+    clearHits();
     setPickedStreet(hit);
     void loadStreetAssign(hit.id);
 
@@ -550,42 +585,162 @@ export function StreetMap({
     }
   }
 
-  const showHits = cityHits.length > 0 || streetHits.length > 0;
+  type HitItem =
+    | { kind: "city"; city: SearchCity }
+    | { kind: "street"; street: SearchStreet };
+  const hitItems: HitItem[] = [
+    ...cityHits.map((city) => ({ kind: "city" as const, city })),
+    ...streetHits.map((street) => ({ kind: "street" as const, street })),
+  ];
+  const showHits = searchOpen && (hitItems.length > 0 || searchBusy || q.trim().length >= 1);
   const canLinkCluster =
     me &&
     (me.role === "super_admin" ||
       me.role === "area_manager" ||
       (me.role === "coordinator" && me.institution_id));
 
+  function activateHit(index: number) {
+    const item = hitItems[index];
+    if (!item) return;
+    if (item.kind === "city") goToCity(item.city);
+    else void goToStreet(item.street);
+  }
+
+  function onSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!showHits || hitItems.length === 0) {
+      if (e.key === "Escape") setSearchOpen(false);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveHit((i) => (i + 1) % hitItems.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveHit((i) => (i - 1 + hitItems.length) % hitItems.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      activateHit(activeHit);
+    } else if (e.key === "Escape") {
+      setSearchOpen(false);
+    }
+  }
+
+  function markMatch(text: string) {
+    const parts = q.trim().split(/\s+/).filter(Boolean);
+    const needle = parts[parts.length - 1] || "";
+    if (!needle) return text;
+    const lower = text.toLowerCase();
+    const n = needle.toLowerCase();
+    let idx = lower.indexOf(n);
+    if (idx < 0) {
+      const softNeedle = n.replace(/['׳״"`]/g, "");
+      const softText = lower.replace(/['׳״"`]/g, "");
+      const softIdx = softText.indexOf(softNeedle);
+      if (softIdx < 0 || !softNeedle) return text;
+      // Map soft index back roughly onto original by scanning.
+      idx = 0;
+      let softPos = 0;
+      while (idx < text.length && softPos < softIdx) {
+        if (!/['׳״"`]/.test(text[idx]!)) softPos += 1;
+        idx += 1;
+      }
+      const endSoft = softIdx + softNeedle.length;
+      let end = idx;
+      let softEndPos = softPos;
+      while (end < text.length && softEndPos < endSoft) {
+        if (!/['׳״"`]/.test(text[end]!)) softEndPos += 1;
+        end += 1;
+      }
+      return (
+        <>
+          {text.slice(0, idx)}
+          <mark>{text.slice(idx, end)}</mark>
+          {text.slice(end)}
+        </>
+      );
+    }
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark>{text.slice(idx, idx + needle.length)}</mark>
+        {text.slice(idx + needle.length)}
+      </>
+    );
+  }
+
   return (
     <div className="street-map-wrap">
       <div className="street-map-toolbar">
-        <label className="search-box">
+        <label className="search-box" ref={searchBoxRef}>
           חיפוש עיר או רחוב
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="שם בעברית…"
+            onChange={(e) => {
+              setQ(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={onSearchKeyDown}
+            placeholder='עיר, רחוב, או שניהם — למשל בית שאן הרמב"ם'
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={showHits}
+            aria-autocomplete="list"
           />
           {showHits && (
-            <ul className="search-hits">
-              {cityHits.map((c) => (
+            <ul className="search-hits" role="listbox">
+              {parsedCity && (
+                <li className="search-hint">מזהה עיר: {parsedCity} · השלמת רחובות בעיר</li>
+              )}
+              {searchBusy && hitItems.length === 0 && (
+                <li className="search-hint">מחפש השלמות…</li>
+              )}
+              {!searchBusy && hitItems.length === 0 && q.trim().length >= 1 && (
+                <li className="search-hint">אין התאמות — נסו עיר ואז רחוב</li>
+              )}
+              {cityHits.length > 0 && (
+                <li className="search-section">ערים</li>
+              )}
+              {cityHits.map((c, i) => (
                 <li key={`city-${c.name_he}`}>
-                  <button type="button" onClick={() => goToCity(c)}>
-                    עיר · {c.name_he}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={activeHit === i}
+                    className={activeHit === i ? "active" : undefined}
+                    onMouseEnter={() => setActiveHit(i)}
+                    onClick={() => goToCity(c)}
+                  >
+                    <span className="hit-kind">עיר</span>
+                    {markMatch(c.name_he)}
                   </button>
                 </li>
               ))}
-              {streetHits.map((h) => (
-                <li key={h.id}>
-                  <button type="button" onClick={() => goToStreet(h)}>
-                    רחוב · {h.name_he}
-                    {h.near_settlement ? ` · ${h.near_settlement}` : ""}
-                    {h.done ? " ✓" : ""}
-                    {h.ashkol ? ` · אשכול ${h.ashkol}` : ""}
-                  </button>
-                </li>
-              ))}
+              {streetHits.length > 0 && (
+                <li className="search-section">רחובות</li>
+              )}
+              {streetHits.map((h, i) => {
+                const idx = cityHits.length + i;
+                return (
+                  <li key={h.id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeHit === idx}
+                      className={activeHit === idx ? "active" : undefined}
+                      onMouseEnter={() => setActiveHit(idx)}
+                      onClick={() => void goToStreet(h)}
+                    >
+                      <span className="hit-kind">רחוב</span>
+                      {markMatch(h.name_he)}
+                      {h.near_settlement ? (
+                        <span className="hit-meta"> · {h.near_settlement}</span>
+                      ) : null}
+                      {h.done ? " ✓" : ""}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </label>
