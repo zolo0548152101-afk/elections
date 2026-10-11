@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SettlementPicker } from "@/components/SettlementPicker";
 
 type Institution = { id: number; name: string };
 type UserRow = {
@@ -42,9 +43,11 @@ export default function UsersPage() {
   const [meId, setMeId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
+  const [editNeedsPassword, setEditNeedsPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [revealIds, setRevealIds] = useState<Record<number, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     const [u, me] = await Promise.all([
@@ -67,17 +70,20 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   function resetForm() {
     setForm(emptyForm);
     setEditId(null);
+    setEditNeedsPassword(false);
     setShowPassword(false);
   }
 
   function startEdit(u: UserRow) {
+    const needsPassword = !u.login_password;
     setEditId(u.id);
+    setEditNeedsPassword(needsPassword);
     setForm({
       full_name: u.full_name,
       mobile: u.mobile ?? "",
@@ -88,48 +94,65 @@ export default function UsersPage() {
       settlement_name: u.settlement_name ?? "",
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
-    setShowPassword(Boolean(u.login_password));
-    setMsg(null);
+    setShowPassword(needsPassword || Boolean(u.login_password));
+    setMsg(
+      needsPassword
+        ? "למשתמש זה אין סיסמה שמורה — הזינו סיסמה חדשה ולחצו עדכון. אפשר גם לבחור יישוב ומוסד."
+        : null,
+    );
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    const payload = {
-      ...form,
-      institution_id: form.institution_id ? Number(form.institution_id) : null,
-      settlement_name: form.settlement_name || null,
-      manager_id:
-        form.role === "coordinator" && form.manager_id
-          ? Number(form.manager_id)
-          : null,
-    };
 
-    const res = await fetch(
-      editId ? `/api/users/${editId}` : "/api/users",
-      {
-        method: editId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          editId
-            ? {
-                ...payload,
-                // Empty password on edit = keep existing hash/login_password
-                password: form.password.trim() || undefined,
-              }
-            : payload,
-        ),
-      },
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      setMsg(data.error || "שגיאה");
+    const role = meRole === "area_manager" ? "coordinator" : form.role;
+    if (role === "coordinator" && !form.settlement_name.trim()) {
+      setMsg("לרכז חובה לבחור יישוב מהרשימה");
       return;
     }
-    setMsg(editId ? "עודכן בהצלחה" : "נוצר בהצלחה");
-    resetForm();
-    load();
+    if (!editId && !form.password.trim()) {
+      setMsg("סיסמה חובה");
+      return;
+    }
+    if (editId && editNeedsPassword && !form.password.trim()) {
+      setMsg("יש להגדיר סיסמה למשתמש זה");
+      return;
+    }
+
+    setSaving(true);
+    const payload = {
+      full_name: form.full_name,
+      mobile: form.mobile,
+      email: form.email,
+      role,
+      institution_id: form.institution_id ? Number(form.institution_id) : null,
+      settlement_name: form.settlement_name.trim() || null,
+      manager_id:
+        role === "coordinator" && form.manager_id
+          ? Number(form.manager_id)
+          : null,
+      password: form.password.trim() || undefined,
+    };
+
+    try {
+      const res = await fetch(editId ? `/api/users/${editId}` : "/api/users", {
+        method: editId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg(data.error || "שגיאה");
+        return;
+      }
+      setMsg(editId ? "עודכן בהצלחה — יישוב, מוסד וסיסמה נשמרו" : "נוצר בהצלחה");
+      resetForm();
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function deleteUser(u: UserRow) {
@@ -154,6 +177,9 @@ export default function UsersPage() {
   }
 
   const canManage = meRole === "super_admin" || meRole === "area_manager";
+  const editingUser = editId ? users.find((u) => u.id === editId) : null;
+  const showSettlement =
+    form.role === "coordinator" || meRole === "area_manager";
 
   return (
     <main>
@@ -162,7 +188,9 @@ export default function UsersPage() {
           <div>
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
-            <p className="lede">הוספה, עריכה, צפייה בסיסמה ומחיקה של אנשי הקשר</p>
+            <p className="lede">
+              הוספה ועריכה למעלה בטופס — בחרו יישוב בהקלדה, הגדירו סיסמה, ואז עדכון
+            </p>
           </div>
         </header>
 
@@ -170,9 +198,15 @@ export default function UsersPage() {
           <form className="panel-form" onSubmit={saveUser}>
             <h2>
               {editId
-                ? "עריכת משתמש"
+                ? `עריכת משתמש: ${editingUser?.full_name ?? ""}`
                 : `הוספת ${meRole === "area_manager" ? "רכז" : "משתמש"}`}
             </h2>
+            {editId && (
+              <p className="edit-banner">
+                עורכים את {editingUser?.email}. בחרו יישוב מההשלמה האוטומטית ולחצו
+                עדכון.
+              </p>
+            )}
             <div className="form-grid">
               <label>
                 שם מלא
@@ -202,15 +236,17 @@ export default function UsersPage() {
               </label>
               <label>
                 סיסמה
-                {editId ? " (השאירו ריק כדי לא לשנות)" : ""}
+                {editId && !editNeedsPassword ? " (השאירו ריק כדי לא לשנות)" : ""}
+                {editNeedsPassword ? " — חובה להגדיר" : ""}
                 <div className="password-field">
                   <input
                     type={showPassword ? "text" : "password"}
                     dir="ltr"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required={!editId}
+                    required={!editId || editNeedsPassword}
                     autoComplete="new-password"
+                    placeholder={editNeedsPassword ? "הזינו סיסמה חדשה" : ""}
                   />
                   <button
                     type="button"
@@ -268,26 +304,23 @@ export default function UsersPage() {
                   ))}
                 </select>
               </label>
-              <label>
-                יישוב (לרכז)
-                <select
-                  value={form.settlement_name}
-                  onChange={(e) =>
-                    setForm({ ...form, settlement_name: e.target.value })
-                  }
-                >
-                  <option value="">—</option>
-                  {settlements.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {showSettlement && (
+                <label>
+                  יישוב (לרכז){form.role === "coordinator" ? " *" : ""}
+                  <SettlementPicker
+                    value={form.settlement_name}
+                    options={settlements}
+                    required={form.role === "coordinator"}
+                    onChange={(settlement_name) =>
+                      setForm({ ...form, settlement_name })
+                    }
+                  />
+                </label>
+              )}
             </div>
             <div className="form-actions">
-              <button type="submit" className="export">
-                {editId ? "עדכון" : "שמירה"}
+              <button type="submit" className="export" disabled={saving}>
+                {saving ? "שומר…" : editId ? "עדכון" : "שמירה"}
               </button>
               {editId && (
                 <button type="button" className="reset" onClick={resetForm}>
@@ -295,7 +328,7 @@ export default function UsersPage() {
                 </button>
               )}
             </div>
-            {msg && <p className="lede">{msg}</p>}
+            {msg && <p className="form-msg">{msg}</p>}
           </form>
         )}
 
@@ -320,8 +353,8 @@ export default function UsersPage() {
                   <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>{u.institution_name}</td>
-                  <td>{u.settlement_name}</td>
+                  <td>{u.institution_name || "—"}</td>
+                  <td>{u.settlement_name || "—"}</td>
                   {canManage && (
                     <td className="password-cell">
                       {u.login_password ? (
@@ -340,7 +373,13 @@ export default function UsersPage() {
                           </button>
                         </>
                       ) : (
-                        <span className="muted-cell">לא נשמרה — ערכו והגדירו</span>
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => startEdit(u)}
+                        >
+                          לא נשמרה — לחצו להגדרה
+                        </button>
                       )}
                     </td>
                   )}

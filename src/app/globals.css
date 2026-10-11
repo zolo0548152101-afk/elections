@@ -351,6 +351,72 @@ tbody tr:hover {
   font: inherit;
 }
 
+.settlement-picker {
+  position: relative;
+}
+
+.settlement-picker input {
+  width: 100%;
+}
+
+.picker-selected {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.picker-hits {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.picker-hits button {
+  width: 100%;
+  text-align: start;
+  border: 0;
+  background: transparent;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.picker-hits button:hover {
+  background: rgba(47, 111, 237, 0.1);
+}
+
+.picker-empty {
+  padding: 0.4rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.edit-banner,
+.form-msg {
+  margin: 0 0 0.75rem;
+  color: var(--ink);
+  background: rgba(47, 111, 237, 0.08);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.92rem;
+}
+
+.form-msg {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
 .password-field {
   display: flex;
   gap: 0.4rem;

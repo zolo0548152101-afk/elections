@@ -94,6 +94,10 @@ export async function PATCH(
     return NextResponse.json({ error: "תפקיד לא חוקי" }, { status: 400 });
   }
 
+  if (role === "coordinator" && !settlement_name) {
+    return NextResponse.json({ error: "לרכז חובה לבחור יישוב" }, { status: 400 });
+  }
+
   const sql = getSql();
   if (settlement_name) {
     const [known] = (await sql`
