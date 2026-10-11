@@ -113,6 +113,7 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sendingId, setSendingId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [addInstitutionId, setAddInstitutionId] = useState("");
@@ -290,6 +291,47 @@ export default function UsersPage() {
     if (editId === u.id) resetForm();
     setMsg("נמחק בהצלחה");
     await load();
+  }
+
+  async function sendCredentials(u: UserRow) {
+    if (!u.mobile?.trim()) {
+      setMsg("למשתמש אין מספר נייד");
+      return;
+    }
+    const entered = window.prompt(
+      `שליחת פרטי התחברות ב-WhatsApp אל ${u.mobile}.\n` +
+        "הזינו סיסמה לשליחה, או השאירו ריק ליצירת סיסמה חדשה (תעודכן במערכת).",
+      editId === u.id ? form.password : "",
+    );
+    if (entered === null) return;
+    const password = entered.trim();
+    const ok = window.confirm(
+      password
+        ? `לשלוח ל-${u.full_name} ולעדכן את הסיסמה לערך שהוזן?`
+        : `לשלוח ל-${u.full_name} סיסמה חדשה אקראית (תעודכן במערכת)?`,
+    );
+    if (!ok) return;
+    setSendingId(u.id);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/users/${u.id}/send-credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(password ? { password } : {}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg(data.error || "שגיאה בשליחה");
+        return;
+      }
+      setMsg(
+        data.generated
+          ? `נשלח ב-WhatsApp · נוצרה סיסמה חדשה ל-${u.full_name}`
+          : `נשלח ב-WhatsApp אל ${u.full_name}`,
+      );
+    } finally {
+      setSendingId(null);
+    }
   }
 
   const canManage = meRole === "super_admin" || meRole === "area_manager";
@@ -638,6 +680,19 @@ export default function UsersPage() {
                         onClick={() => startEdit(u)}
                       >
                         עריכה
+                      </button>
+                      <button
+                        type="button"
+                        className="export"
+                        disabled={!u.mobile?.trim() || sendingId === u.id}
+                        onClick={() => void sendCredentials(u)}
+                        title={
+                          u.mobile?.trim()
+                            ? "שליחת פרטי התחברות ב-WhatsApp"
+                            : "אין נייד"
+                        }
+                      >
+                        {sendingId === u.id ? "שולח…" : "שלח בוואטסאפ"}
                       </button>
                       <button
                         type="button"
