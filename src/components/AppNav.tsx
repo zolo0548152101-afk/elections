@@ -23,6 +23,7 @@ export function AppNav({
   ];
   if (user.role === "super_admin" || user.role === "area_manager") {
     links.splice(1, 0, { href: "/users", label: "משתמשים" });
+    links.push({ href: "/team/coordinators", label: "הצוות" });
     links.push({ href: "/links", label: "קישורים" });
   }
 

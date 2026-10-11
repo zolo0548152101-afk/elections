@@ -22,3 +22,4 @@
 - `DATABASE_URL` is the Neon pooled connection for project `election-day-ops`, database `neondb`, with `sslmode=require`. `SESSION_SECRET` signs auth cookies.
 - Do not run `npm run seed` unless asked. It truncates `settlements` and `clusters`.
 - Vercel project `election-day-ops` (`prj_pwImjryRCzAcqSYYwU1o0E13qEeh`) tracks this repo with an empty root directory.
+- After every push that changes the app, resolve the branch’s Vercel preview alias (deployment aliases for `election-day-ops`) and paste that HTTPS link in the reply for the user to test.
