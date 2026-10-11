@@ -109,10 +109,6 @@ export function Dashboard() {
         </div>
         <div className="stats">
           <div>
-            <span className="stat-n">{loading ? "…" : count}</span>
-            <span className="stat-l">אשכולות</span>
-          </div>
-          <div>
             <span className="stat-n">{loading ? "…" : withMap}</span>
             <span className="stat-l">על המפה</span>
           </div>
