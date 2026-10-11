@@ -287,7 +287,15 @@ export default function InstitutionsPage() {
           </p>
         )}
 
-        {!loading && msg && <p className="form-msg">{msg}</p>}
+        {!loading && msg && (
+          <p
+            className="form-msg form-msg-err"
+            role="alert"
+            aria-live="assertive"
+          >
+            {msg}
+          </p>
+        )}
 
         {!loading && canEdit && (
           <>
