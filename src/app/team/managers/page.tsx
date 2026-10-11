@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CoordClusterEditor,
+  type CoordCluster,
+  type CoordInstitution,
+} from "@/components/CoordClusterEditor";
+import { formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
 
 type Coord = {
@@ -10,6 +16,8 @@ type Coord = {
   email: string;
   institution_names: string;
   ashkols?: string;
+  institutions?: CoordInstitution[];
+  clusters?: CoordCluster[];
   cluster_count?: number;
   progress: { done: number; total: number; pct: number };
 };
@@ -29,25 +37,30 @@ export default function TeamManagersPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
+  const [editId, setEditId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    const me = await fetch("/api/auth/me").then((r) => r.json());
+    if (me.user?.role !== "super_admin") {
+      router.replace("/team/coordinators");
+      return;
+    }
+    const res = await fetch("/api/team/managers");
+    const data = await res.json();
+    if (!res.ok) {
+      setMsgKind("err");
+      setMsg(data.error || "שגיאה");
+      setLoading(false);
+      return;
+    }
+    setRows(data.managers ?? []);
+    setLoading(false);
+  }, [router]);
 
   useEffect(() => {
-    void (async () => {
-      const me = await fetch("/api/auth/me").then((r) => r.json());
-      if (me.user?.role !== "super_admin") {
-        router.replace("/team/coordinators");
-        return;
-      }
-      const res = await fetch("/api/team/managers");
-      const data = await res.json();
-      if (!res.ok) {
-        setMsg(data.error || "שגיאה");
-        setLoading(false);
-        return;
-      }
-      setRows(data.managers ?? []);
-      setLoading(false);
-    })();
-  }, [router]);
+    void load();
+  }, [load]);
 
   const filtered = rows.filter((m) => {
     const needle = q.trim();
@@ -60,6 +73,7 @@ export default function TeamManagersPage() {
         c.full_name,
         c.institution_names,
         c.ashkols,
+        ...(c.clusters ?? []).map((cl) => cl.ashkol),
       ]),
     ]
       .filter(Boolean)
@@ -75,12 +89,19 @@ export default function TeamManagersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>רכזי על</h1>
             <p className="lede">
-              כל רכזי העל והרכזים המשויכים אליהם — מוסדות, אשכולות והתקדמות.
+              כל רכזי העל והרכזים המשויכים אליהם — ניתן להוסיף/להסיר אשכולות לרכז.
             </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}
-        {!loading && msg && <p className="form-msg">{msg}</p>}
+        {!loading && msg && (
+          <p
+            className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}
+            role="status"
+          >
+            {msg}
+          </p>
+        )}
         {!loading && (
           <label className="panel-form" style={{ display: "block" }}>
             חיפוש
@@ -114,22 +135,58 @@ export default function TeamManagersPage() {
                         <th>אשכולות</th>
                         <th>התקדמות</th>
                         <th>כמות אשכולות</th>
+                        <th>פעולות</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {m.coordinators.map((c) => (
-                        <tr key={c.id}>
-                          <td>{c.full_name}</td>
-                          <td>{c.institution_names || "—"}</td>
-                          <td title={c.ashkols || undefined}>
-                            {c.ashkols || "—"}
-                          </td>
-                          <td>
-                            {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
-                          </td>
-                          <td>{c.cluster_count ?? 0}</td>
-                        </tr>
-                      ))}
+                      {m.coordinators.map((c) => {
+                        const clusters = c.clusters ?? [];
+                        const institutions = c.institutions ?? [];
+                        const ashkolText =
+                          formatAshkolLabels(clusters) || c.ashkols || "";
+                        const open = editId === c.id;
+                        return (
+                          <tr
+                            key={c.id}
+                            className={open ? "row-editing" : undefined}
+                          >
+                            <td>{c.full_name}</td>
+                            <td>{c.institution_names || "—"}</td>
+                            <td title={ashkolText || undefined}>
+                              {ashkolText || "—"}
+                              {open && (
+                                <CoordClusterEditor
+                                  institutions={institutions}
+                                  clusters={clusters}
+                                  onChanged={load}
+                                  onMessage={(kind, text) => {
+                                    setMsgKind(kind);
+                                    setMsg(text);
+                                  }}
+                                />
+                              )}
+                            </td>
+                            <td>
+                              {c.progress.done}/{c.progress.total} (
+                              {c.progress.pct}%)
+                            </td>
+                            <td>{c.cluster_count ?? clusters.length}</td>
+                            <td className="actions-cell">
+                              <button
+                                type="button"
+                                className="export"
+                                onClick={() =>
+                                  setEditId((id) =>
+                                    id === c.id ? null : c.id,
+                                  )
+                                }
+                              >
+                                {open ? "סגור" : "עריכת אשכולות"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

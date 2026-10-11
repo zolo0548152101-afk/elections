@@ -85,6 +85,29 @@ export async function GET() {
 
     const withProgress = [];
     for (const c of coords) {
+      const institutions = (await sql`
+        SELECT i.id, i.name, i.settlement_name
+        FROM institution_coordinators link
+        JOIN institutions i ON i.id = link.institution_id
+        WHERE link.user_id = ${c.id}
+        ORDER BY i.name
+      `) as { id: number; name: string; settlement_name: string | null }[];
+
+      const clusters = (await sql`
+        SELECT cl.ashkol, cl.settlement_name, ic.institution_id, i.name AS institution_name
+        FROM institution_coordinators link
+        JOIN institution_clusters ic ON ic.institution_id = link.institution_id
+        JOIN clusters cl ON cl.ashkol = ic.ashkol
+        JOIN institutions i ON i.id = ic.institution_id
+        WHERE link.user_id = ${c.id}
+        ORDER BY cl.settlement_name, cl.ashkol, i.name
+      `) as {
+        ashkol: string;
+        settlement_name: string;
+        institution_id: number;
+        institution_name: string;
+      }[];
+
       const cityList = await coordinatorInstitutionCities(sql, c.id);
       let progress = { done: 0, total: 0, pct: 0 };
       if (cityList.length > 0) {
@@ -108,7 +131,7 @@ export async function GET() {
           pct: total > 0 ? Math.round((100 * done) / total) : 0,
         };
       }
-      withProgress.push({ ...c, progress });
+      withProgress.push({ ...c, institutions, clusters, progress });
     }
 
     out.push({

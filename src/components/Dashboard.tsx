@@ -7,7 +7,16 @@ import { downloadClustersCsv } from "@/lib/csv";
 
 const StreetMap = dynamic(
   () => import("./StreetMap").then((m) => m.StreetMap),
-  { ssr: false, loading: () => <div className="map-shell map-loading">טוען מפה…</div> },
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="map-shell map-loading skeleton skeleton-block"
+        aria-busy="true"
+        aria-label="טוען מפה"
+      />
+    ),
+  },
 );
 
 type SortKey =
@@ -241,7 +250,11 @@ export function Dashboard() {
         </section>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert" aria-live="assertive">
+          {error}
+        </p>
+      )}
       {!loading && !error && count === 0 && (
         <p className="lede" style={{ color: "var(--sand)" }}>
           אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד»

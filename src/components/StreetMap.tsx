@@ -1486,7 +1486,7 @@ export function StreetMap({
         <div className="street-map-canvas map-fallback" role="status">
           <p>
             לא ניתן להציג את המפה בסביבה זו (WebGL לא זמין). אפשר להמשיך עם
-            הטבלה והפילטרים.
+            הטבלה, החיפוש, הפילטרים ובחירת אשכולות.
           </p>
         </div>
       ) : (
