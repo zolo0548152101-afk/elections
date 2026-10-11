@@ -150,7 +150,7 @@ export default function UsersPage() {
     }
     if (editId === u.id) resetForm();
     setMsg("נמחק בהצלחה");
-    load();
+    await load();
   }
 
   const canManage = meRole === "super_admin" || meRole === "area_manager";
