@@ -218,6 +218,10 @@ export default function UsersPage() {
     setMsg(null);
 
     const role = meRole === "area_manager" ? "coordinator" : form.role;
+    if (!form.full_name.trim() || !form.mobile.trim()) {
+      setMsg("שם ונייד חובה");
+      return;
+    }
     if (!editId && !form.password.trim()) {
       setMsg("סיסמה חובה");
       return;
@@ -278,7 +282,7 @@ export default function UsersPage() {
       return;
     }
     const ok = window.confirm(
-      `למחוק את ${u.full_name} (${u.email})? הפעולה אינה ניתנת לביטול.`,
+      `למחוק את ${u.full_name} (${u.mobile || u.email})? הפעולה אינה ניתנת לביטול.`,
     );
     if (!ok) return;
     setMsg(null);
@@ -412,7 +416,7 @@ export default function UsersPage() {
             </h2>
             {editId && (
               <p className="edit-banner">
-                עורכים את {editingUser?.email}. לחצו עדכון לשמירה.
+                עורכים את {editingUser?.mobile || editingUser?.email}. לחצו עדכון לשמירה.
               </p>
             )}
             <div className="form-grid">
@@ -426,20 +430,24 @@ export default function UsersPage() {
                 />
               </label>
               <label>
-                נייד
+                נייד (התחברות)
                 <input
+                  type="tel"
+                  dir="ltr"
+                  inputMode="tel"
                   value={form.mobile}
                   onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                  required
+                  placeholder="05…"
                 />
               </label>
               <label>
-                אימייל
+                אימייל (אופציונלי)
                 <input
                   type="email"
                   dir="ltr"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
                 />
               </label>
               <label className="field-wide field-password">

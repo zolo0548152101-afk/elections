@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ mobile, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "שגיאה");
@@ -37,14 +37,16 @@ export default function LoginPage() {
         <h1>התחברות</h1>
         <p className="lede">ניהול יום בחירות</p>
         <label>
-          אימייל
+          נייד
           <input
-            type="email"
+            type="tel"
             dir="ltr"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            inputMode="tel"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
             required
             autoComplete="username"
+            placeholder="05…"
           />
         </label>
         <label>

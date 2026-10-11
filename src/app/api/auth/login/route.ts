@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSession, verifyPassword } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
 
 export const runtime = "nodejs";
 
-/** Simple in-memory rate limit: max attempts per email+IP window. */
+/** Simple in-memory rate limit: max attempts per mobile+IP window. */
 const WINDOW_MS = 60_000;
 const MAX_ATTEMPTS = 10;
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -21,10 +22,16 @@ function rateLimited(key: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { email?: string; password?: string };
-  const email = body.email?.trim().toLowerCase() ?? "";
+  const body = (await req.json()) as {
+    mobile?: string;
+    email?: string;
+    password?: string;
+  };
+  // Prefer mobile; accept legacy `email` field if it looks like a phone.
+  const rawMobile = (body.mobile ?? body.email ?? "").trim();
   const password = body.password ?? "";
-  if (!email || !password) {
+  const mobile = normalizeMobileLocal(rawMobile);
+  if (!mobile || !password) {
     return NextResponse.json({ error: "חסרים פרטי התחברות" }, { status: 400 });
   }
 
@@ -32,20 +39,32 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     "unknown";
-  if (rateLimited(`${ip}:${email}`)) {
+  if (rateLimited(`${ip}:${mobile}`)) {
     return NextResponse.json(
       { error: "יותר מדי ניסיונות. נסו שוב בעוד דקה." },
       { status: 429 },
     );
   }
 
+  const variants = mobileMatchVariants(mobile);
   const sql = getSql();
   const rows = (await sql`
-    SELECT id, password_hash FROM users WHERE lower(email) = ${email} LIMIT 1
+    SELECT id, password_hash
+    FROM users
+    WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${variants})
+    LIMIT 2
   `) as { id: number; password_hash: string }[];
+
+  if (rows.length > 1) {
+    return NextResponse.json(
+      { error: "מספר נייד משויך ליותר ממשתמש אחד — פנו למנהל" },
+      { status: 409 },
+    );
+  }
+
   const user = rows[0];
   if (!user || !verifyPassword(password, user.password_hash)) {
-    return NextResponse.json({ error: "אימייל או סיסמה שגויים" }, { status: 401 });
+    return NextResponse.json({ error: "נייד או סיסמה שגויים" }, { status: 401 });
   }
   await createSession(user.id);
   return NextResponse.json({ ok: true });

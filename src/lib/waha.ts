@@ -1,3 +1,5 @@
+import { normalizeMobileLocal } from "@/lib/mobile";
+
 /** Minimal WAHA client for credential WhatsApp sends (session HAIM_YAHAD). */
 
 function requireEnv(name: string): string {
@@ -8,20 +10,9 @@ function requireEnv(name: string): string {
 
 /** Normalize Israeli mobile to digits for chatId: 9725XXXXXXXX */
 export function mobileToWahaPhone(mobile: string): string | null {
-  let digits = mobile.replace(/\D/g, "");
-  if (!digits) return null;
-  if (digits.startsWith("972")) {
-    // ok
-  } else if (digits.startsWith("0")) {
-    digits = `972${digits.slice(1)}`;
-  } else if (digits.length === 9 && digits.startsWith("5")) {
-    digits = `972${digits}`;
-  } else {
-    return null;
-  }
-  // Israel mobile: 972 + 9 digits (5xxxxxxxx)
-  if (!/^9725\d{8}$/.test(digits)) return null;
-  return digits;
+  const local = normalizeMobileLocal(mobile);
+  if (!local) return null;
+  return `972${local.slice(1)}`;
 }
 
 export function mobileToChatId(mobile: string): string | null {

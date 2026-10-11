@@ -6,6 +6,7 @@ import {
   type SessionUser,
 } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
 import { validatePassword } from "@/lib/passwords";
 import { syncPrimaryInstitution } from "@/lib/streets-access";
 import { replaceAreaManagerCoordinators } from "@/lib/user-links";
@@ -72,13 +73,14 @@ export async function PATCH(
   };
 
   const full_name = body.full_name?.trim() ?? "";
-  const email = body.email?.trim().toLowerCase() ?? "";
-  const mobile = body.mobile?.trim() ?? "";
+  let email = body.email?.trim().toLowerCase() ?? "";
+  const mobileNorm = normalizeMobileLocal(body.mobile ?? "");
   const password = body.password?.trim() ?? "";
 
-  if (!full_name || !email) {
-    return NextResponse.json({ error: "שם ואימייל חובה" }, { status: 400 });
+  if (!full_name || !mobileNorm) {
+    return NextResponse.json({ error: "שם ונייד חובה" }, { status: 400 });
   }
+  if (!email) email = `${mobileNorm}@users.local`;
 
   let role = body.role ?? target.role;
   const hasInstitutionIds = Array.isArray(body.institution_ids);
@@ -142,6 +144,20 @@ export async function PATCH(
     if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
   }
 
+  const mobileVariants = mobileMatchVariants(mobileNorm);
+  const [dup] = (await sql`
+    SELECT id FROM users
+    WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${mobileVariants})
+      AND id <> ${id}
+    LIMIT 1
+  `) as { id: number }[];
+  if (dup) {
+    return NextResponse.json(
+      { error: "מספר נייד כבר משויך למשתמש אחר" },
+      { status: 409 },
+    );
+  }
+
   try {
     let row: Record<string, unknown> | undefined;
     if (password) {
@@ -149,7 +165,7 @@ export async function PATCH(
       [row] = await sql`
         UPDATE users SET
           full_name = ${full_name},
-          mobile = ${mobile},
+          mobile = ${mobileNorm},
           email = ${email},
           password_hash = ${hash},
           role = ${role},
@@ -164,7 +180,7 @@ export async function PATCH(
       [row] = await sql`
         UPDATE users SET
           full_name = ${full_name},
-          mobile = ${mobile},
+          mobile = ${mobileNorm},
           email = ${email},
           role = ${role},
           institution_id = ${institution_id},

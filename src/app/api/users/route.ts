@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, hashPassword, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { mobileMatchVariants, normalizeMobileLocal } from "@/lib/mobile";
 import { validatePassword } from "@/lib/passwords";
 import { syncPrimaryInstitution } from "@/lib/streets-access";
 import { replaceAreaManagerCoordinators } from "@/lib/user-links";
@@ -116,9 +117,9 @@ export async function POST(req: NextRequest) {
   };
 
   const full_name = body.full_name?.trim() ?? "";
-  const email = body.email?.trim().toLowerCase() ?? "";
   const password = body.password ?? "";
-  const mobile = body.mobile?.trim() ?? "";
+  const mobileNorm = normalizeMobileLocal(body.mobile ?? "");
+  let email = body.email?.trim().toLowerCase() ?? "";
   let role = body.role ?? "coordinator";
   const institutionIds = normalizeInstitutionIds(
     body.institution_ids,
@@ -129,9 +130,10 @@ export async function POST(req: NextRequest) {
   let settlement_name = body.settlement_name?.trim() || null;
   let manager_id = body.manager_id ?? null;
 
-  if (!full_name || !email || !password) {
-    return NextResponse.json({ error: "שם, אימייל וסיסמה חובה" }, { status: 400 });
+  if (!full_name || !mobileNorm || !password) {
+    return NextResponse.json({ error: "שם, נייד וסיסמה חובה" }, { status: 400 });
   }
+  if (!email) email = `${mobileNorm}@users.local`;
 
   const pwErr = validatePassword(password);
   if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
@@ -146,6 +148,19 @@ export async function POST(req: NextRequest) {
   }
 
   const sql = getSql();
+  const mobileVariants = mobileMatchVariants(mobileNorm);
+  const [dup] = (await sql`
+    SELECT id FROM users
+    WHERE regexp_replace(coalesce(mobile, ''), '[^0-9]', '', 'g') = ANY(${mobileVariants})
+    LIMIT 1
+  `) as { id: number }[];
+  if (dup) {
+    return NextResponse.json(
+      { error: "מספר נייד כבר משויך למשתמש אחר" },
+      { status: 409 },
+    );
+  }
+
   // settlement_name is optional / legacy; not required for coordinators.
   const hash = hashPassword(password);
   try {
@@ -154,7 +169,7 @@ export async function POST(req: NextRequest) {
         full_name, mobile, email, password_hash, role,
         institution_id, manager_id, settlement_name
       ) VALUES (
-        ${full_name}, ${mobile}, ${email}, ${hash}, ${role},
+        ${full_name}, ${mobileNorm}, ${email}, ${hash}, ${role},
         ${institution_id}, ${manager_id}, ${settlement_name}
       )
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,

@@ -92,7 +92,7 @@ export async function POST(
   const text = [
     "שלום, הוקם לך משתמש במערכת.",
     `לינק להתחברות- ${loginUrl}`,
-    `משתמש- ${target.email}`,
+    `משתמש- ${target.mobile.trim()}`,
     `סיסמא- ${password}`,
   ].join("\n");
 
