@@ -77,6 +77,7 @@ if (existingId) {
       mobile = ${mobile},
       email = ${email},
       password_hash = ${hash},
+      login_password = ${password},
       role = 'super_admin',
       institution_id = ${inst.id}
     WHERE id = ${existingId}
@@ -84,8 +85,8 @@ if (existingId) {
   console.log({ admin_mobile: mobile, id: existingId, full_name: "מנהל על", password: "updated" });
 } else {
   const [row] = await sql`
-    INSERT INTO users (full_name, mobile, email, password_hash, role, institution_id)
-    VALUES ('מנהל על', ${mobile}, ${email}, ${hash}, 'super_admin', ${inst.id})
+    INSERT INTO users (full_name, mobile, email, password_hash, login_password, role, institution_id)
+    VALUES ('מנהל על', ${mobile}, ${email}, ${hash}, ${password}, 'super_admin', ${inst.id})
     RETURNING id
   `;
   console.log({ admin_mobile: mobile, id: row.id, full_name: "מנהל על", password: "created" });

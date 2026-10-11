@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashPassword, getSessionUser, requireRole, type SessionUser } from "@/lib/auth";
+import { getSessionUser, requireRole, type SessionUser } from "@/lib/auth";
 import { appLoginUrl } from "@/lib/app-url";
 import { getSql } from "@/lib/db";
-import {
-  generateTempLoginCode,
-  TEMP_LOGIN_TTL_MS,
-} from "@/lib/passwords";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -17,6 +13,7 @@ type TargetUser = {
   mobile: string | null;
   role: string;
   manager_id: number | null;
+  login_password: string | null;
 };
 
 function canManage(actor: SessionUser, target: TargetUser) {
@@ -28,9 +25,8 @@ function canManage(actor: SessionUser, target: TargetUser) {
 }
 
 /**
- * WhatsApp login details via WAHA (HAIM_YAHAD).
- * Does not ask for or change the permanent password — sends a 5-digit
- * one-time code (5 minutes) as an extra login option.
+ * WhatsApp permanent login details via WAHA (HAIM_YAHAD).
+ * Sends the stored permanent password — does not generate or change it.
  */
 export async function POST(
   req: NextRequest,
@@ -50,7 +46,7 @@ export async function POST(
 
   const sql = getSql();
   const rows = (await sql`
-    SELECT id, full_name, email, mobile, role, manager_id
+    SELECT id, full_name, email, mobile, role, manager_id, login_password
     FROM users WHERE id = ${id} LIMIT 1
   `) as TargetUser[];
   const target = rows[0];
@@ -64,6 +60,17 @@ export async function POST(
     );
   }
 
+  const password = target.login_password?.trim() ?? "";
+  if (!password) {
+    return NextResponse.json(
+      {
+        error:
+          "אין סיסמה קבועה שמורה למשתמש. ערכו את המשתמש והגדירו סיסמה, ואז שלחו שוב.",
+      },
+      { status: 400 },
+    );
+  }
+
   if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
     return NextResponse.json(
       { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
@@ -71,32 +78,20 @@ export async function POST(
     );
   }
 
-  // Ignore any legacy body.password — never overwrite password_hash here.
   await req.json().catch(() => ({}));
 
-  const temp = generateTempLoginCode();
   const loginUrl = appLoginUrl(req);
   const text = [
-    "שלום, פרטי התחברות למערכת.",
+    "הוקם משתמש בשבילך באפליקציה",
     `לינק להתחברות- ${loginUrl}`,
     `משתמש- ${target.mobile.trim()}`,
-    `קוד זמני לכניסה (5 ספרות)- ${temp}`,
-    "הקוד תקף ל־5 דקות. הסיסמה הקבועה לא משתנה — אפשר גם להתחבר איתה.",
+    `סיסמא- ${password}`,
   ].join("\n");
 
   const sent = await wahaSendText({ mobile: target.mobile, text });
   if (!sent.ok) {
     return NextResponse.json({ error: sent.error }, { status: 502 });
   }
-
-  const hash = hashPassword(temp);
-  const expiresAt = new Date(Date.now() + TEMP_LOGIN_TTL_MS).toISOString();
-  await sql`
-    UPDATE users
-    SET temp_login_code_hash = ${hash},
-        temp_login_expires_at = ${expiresAt}::timestamptz
-    WHERE id = ${id}
-  `;
 
   return NextResponse.json({
     ok: true,

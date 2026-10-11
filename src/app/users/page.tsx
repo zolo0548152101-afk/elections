@@ -303,8 +303,7 @@ export default function UsersPage() {
       return;
     }
     const ok = window.confirm(
-      `לשלוח ל-${u.full_name} (${u.mobile}) קישור התחברות וקוד זמני ב-WhatsApp?\n` +
-        "הסיסמה הקבועה לא תשתנה.",
+      `לשלוח ל-${u.full_name} (${u.mobile}) את פרטי ההתחברות הקבועים ב-WhatsApp?`,
     );
     if (!ok) return;
     setSendingId(u.id);
@@ -322,9 +321,7 @@ export default function UsersPage() {
         setMsg(data.error || "שגיאה בשליחה");
         return;
       }
-      setMsg(
-        `נשלח ב-WhatsApp אל ${u.full_name} · קוד זמני ל־5 דקות (הסיסמה הקבועה נשארה)`,
-      );
+      setMsg(`נשלחו פרטי התחברות קבועים ב-WhatsApp אל ${u.full_name}`);
     } catch (err) {
       setMsg(
         err instanceof Error
@@ -400,7 +397,7 @@ export default function UsersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
             <p className="lede">
-              הוספה ועריכה — סיסמה נשמרת רק כ־hash (לא מוצגת אחרי שמירה)
+              הוספה ועריכה — סיסמה נשמרת גם לשליחה חוזרת ב-WhatsApp (לא מוצגת אחרי שמירה)
             </p>
           </div>
         </header>

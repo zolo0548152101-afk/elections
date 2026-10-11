@@ -21,7 +21,8 @@
 - Work from this repository root. Install with `npm ci`. Dev server: `npm run dev -- --hostname 0.0.0.0 --port 3000`. Open `http://localhost:3000` (127.0.0.1 is allowed via `allowedDevOrigins`).
 - `DATABASE_URL` is the Neon pooled connection for project `election-day-ops`, database `neondb`, with `sslmode=require`. `SESSION_SECRET` signs auth cookies.
 - Login is **mobile + password** (not email). Seed admin defaults: `ADMIN_MOBILE=0584152101`, `ADMIN_PASSWORD=12345678`.
-- Forgot-password and users “שלח בוואטסאפ” send a **5-digit** one-time code (5 minutes) via WhatsApp; they do **not** replace `password_hash` (passwords are hashed and cannot be re-read).
+- Forgot-password sends a **5-digit** one-time code (5 minutes) via WhatsApp; it does **not** replace `password_hash`.
+- Users “שלח בוואטסאפ” sends the **permanent** credentials (`login_password` + mobile + login link). Password is stored in `login_password` when created/updated.
 - Optional WhatsApp: `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` (default `HAIM_YAHAD`).
 - Do not run `npm run seed` unless asked. It truncates `settlements` and `clusters`.
 - Vercel project `election-day-ops` (`prj_pwImjryRCzAcqSYYwU1o0E13qEeh`) tracks this repo with an empty root directory.

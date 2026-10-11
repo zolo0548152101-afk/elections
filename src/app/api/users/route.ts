@@ -166,10 +166,10 @@ export async function POST(req: NextRequest) {
   try {
     const [row] = (await sql`
       INSERT INTO users (
-        full_name, mobile, email, password_hash, role,
+        full_name, mobile, email, password_hash, login_password, role,
         institution_id, manager_id, settlement_name
       ) VALUES (
-        ${full_name}, ${mobileNorm}, ${email}, ${hash}, ${role},
+        ${full_name}, ${mobileNorm}, ${email}, ${hash}, ${password}, ${role},
         ${institution_id}, ${manager_id}, ${settlement_name}
       )
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,

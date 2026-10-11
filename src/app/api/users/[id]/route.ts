@@ -168,6 +168,7 @@ export async function PATCH(
           mobile = ${mobileNorm},
           email = ${email},
           password_hash = ${hash},
+          login_password = ${password},
           role = ${role},
           institution_id = ${institution_id},
           manager_id = ${manager_id},
