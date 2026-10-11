@@ -68,10 +68,15 @@ export async function POST(req: NextRequest) {
   }
 
   const user = rows[0];
-  const temp = generateTempPassword();
-  const hash = hashPassword(temp);
-  await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${user.id}`;
+  // Fail fast if WAHA is not configured — do not rotate the password yet.
+  if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
+    return NextResponse.json(
+      { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
+      { status: 503 },
+    );
+  }
 
+  const temp = generateTempPassword();
   const loginUrl = appLoginUrl(req);
   const text = [
     "שלום, הנה סיסמה זמנית לכניסה חד-פעמית למערכת.",
@@ -88,6 +93,9 @@ export async function POST(req: NextRequest) {
       { status: 502 },
     );
   }
+
+  const hash = hashPassword(temp);
+  await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${user.id}`;
 
   return NextResponse.json(genericOk);
 }

@@ -77,10 +77,12 @@ export async function POST(
   const pwErr = validatePassword(password);
   if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
 
-  const hash = hashPassword(password);
-  await sql`
-    UPDATE users SET password_hash = ${hash} WHERE id = ${id}
-  `;
+  if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
+    return NextResponse.json(
+      { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
+      { status: 503 },
+    );
+  }
 
   const loginUrl = appLoginUrl(req);
   const text = [
@@ -92,15 +94,13 @@ export async function POST(
 
   const sent = await wahaSendText({ mobile: target.mobile, text });
   if (!sent.ok) {
-    return NextResponse.json(
-      {
-        error: sent.error,
-        password_updated: true,
-        generated,
-      },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: sent.error }, { status: 502 });
   }
+
+  const hash = hashPassword(password);
+  await sql`
+    UPDATE users SET password_hash = ${hash} WHERE id = ${id}
+  `;
 
   return NextResponse.json({
     ok: true,
