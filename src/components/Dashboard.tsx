@@ -92,6 +92,8 @@ export function Dashboard() {
   }
 
   const withMap = clusters.filter((c) => c.map_lat != null).length;
+  const linkedCount = clusters.filter((c) => c.linked).length;
+  const doneCount = clusters.filter((c) => c.done).length;
 
   return (
     <div className="dash">
@@ -113,6 +115,18 @@ export function Dashboard() {
           <div>
             <span className="stat-n">{loading ? "…" : withMap}</span>
             <span className="stat-l">על המפה</span>
+          </div>
+          <div>
+            <span className="stat-n">
+              {loading ? "…" : `${linkedCount}/${count || 0}`}
+            </span>
+            <span className="stat-l">תואמו</span>
+          </div>
+          <div>
+            <span className="stat-n">
+              {loading ? "…" : `${doneCount}/${count || 0}`}
+            </span>
+            <span className="stat-l">בוצעו</span>
           </div>
         </div>
       </header>
