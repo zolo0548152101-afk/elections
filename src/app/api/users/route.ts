@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, hashPassword, requireRole } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { validatePassword } from "@/lib/passwords";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ export async function GET() {
   if (user.role === "super_admin") {
     const rows = await sql`
       SELECT u.id, u.full_name, u.mobile, u.email, u.role, u.institution_id,
-             u.manager_id, u.settlement_name, u.login_password,
+             u.manager_id, u.settlement_name,
              i.name AS institution_name,
              m.full_name AS manager_name
       FROM users u
@@ -26,7 +27,7 @@ export async function GET() {
   if (user.role === "area_manager") {
     const rows = await sql`
       SELECT u.id, u.full_name, u.mobile, u.email, u.role, u.institution_id,
-             u.manager_id, u.settlement_name, u.login_password,
+             u.manager_id, u.settlement_name,
              i.name AS institution_name
       FROM users u
       LEFT JOIN institutions i ON i.id = u.institution_id
@@ -71,6 +72,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "שם, אימייל וסיסמה חובה" }, { status: 400 });
   }
 
+  const pwErr = validatePassword(password);
+  if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
+
   if (user!.role === "area_manager") {
     role = "coordinator";
     manager_id = user!.id;
@@ -97,14 +101,14 @@ export async function POST(req: NextRequest) {
   try {
     const [row] = await sql`
       INSERT INTO users (
-        full_name, mobile, email, password_hash, login_password, role,
+        full_name, mobile, email, password_hash, role,
         institution_id, manager_id, settlement_name
       ) VALUES (
-        ${full_name}, ${mobile}, ${email}, ${hash}, ${password}, ${role},
+        ${full_name}, ${mobile}, ${email}, ${hash}, ${role},
         ${institution_id}, ${manager_id}, ${settlement_name}
       )
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
-                settlement_name, login_password
+                settlement_name
     `;
     return NextResponse.json({ user: row });
   } catch (e) {

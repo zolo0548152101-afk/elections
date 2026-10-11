@@ -15,7 +15,6 @@ type UserRow = {
   manager_id?: number | null;
   manager_name?: string;
   settlement_name: string | null;
-  login_password?: string | null;
 };
 
 const emptyForm = {
@@ -43,9 +42,7 @@ export default function UsersPage() {
   const [meId, setMeId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
-  const [editNeedsPassword, setEditNeedsPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [revealIds, setRevealIds] = useState<Record<number, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -76,30 +73,23 @@ export default function UsersPage() {
   function resetForm() {
     setForm(emptyForm);
     setEditId(null);
-    setEditNeedsPassword(false);
     setShowPassword(false);
   }
 
   function startEdit(u: UserRow) {
-    const needsPassword = !u.login_password;
     setEditId(u.id);
-    setEditNeedsPassword(needsPassword);
     setForm({
       full_name: u.full_name,
       mobile: u.mobile ?? "",
       email: u.email,
-      password: u.login_password ?? "",
+      password: "",
       role: u.role,
       institution_id: u.institution_id ? String(u.institution_id) : "",
       settlement_name: u.settlement_name ?? "",
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
-    setShowPassword(needsPassword || Boolean(u.login_password));
-    setMsg(
-      needsPassword
-        ? "למשתמש זה אין סיסמה שמורה — הזינו סיסמה חדשה ולחצו עדכון. אפשר גם לבחור יישוב ומוסד."
-        : null,
-    );
+    setShowPassword(false);
+    setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -114,10 +104,6 @@ export default function UsersPage() {
     }
     if (!editId && !form.password.trim()) {
       setMsg("סיסמה חובה");
-      return;
-    }
-    if (editId && editNeedsPassword && !form.password.trim()) {
-      setMsg("יש להגדיר סיסמה למשתמש זה");
       return;
     }
 
@@ -147,7 +133,7 @@ export default function UsersPage() {
         setMsg(data.error || "שגיאה");
         return;
       }
-      setMsg(editId ? "עודכן בהצלחה — יישוב, מוסד וסיסמה נשמרו" : "נוצר בהצלחה");
+      setMsg(editId ? "עודכן בהצלחה" : "נוצר בהצלחה");
       resetForm();
       await load();
     } finally {
@@ -189,7 +175,7 @@ export default function UsersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
             <p className="lede">
-              הוספה ועריכה למעלה בטופס — בחרו יישוב בהקלדה, הגדירו סיסמה, ואז עדכון
+              הוספה ועריכה — יישוב בהקלדה, סיסמה נשמרת רק כ־hash (לא מוצגת אחרי שמירה)
             </p>
           </div>
         </header>
@@ -203,8 +189,7 @@ export default function UsersPage() {
             </h2>
             {editId && (
               <p className="edit-banner">
-                עורכים את {editingUser?.email}. בחרו יישוב מההשלמה האוטומטית ולחצו
-                עדכון.
+                עורכים את {editingUser?.email}. בחרו יישוב ולחצו עדכון.
               </p>
             )}
             <div className="form-grid">
@@ -236,17 +221,16 @@ export default function UsersPage() {
               </label>
               <label>
                 סיסמה
-                {editId && !editNeedsPassword ? " (השאירו ריק כדי לא לשנות)" : ""}
-                {editNeedsPassword ? " — חובה להגדיר" : ""}
+                {editId ? " (ריק = ללא שינוי, מינימום 8)" : " (מינימום 8)"}
                 <div className="password-field">
                   <input
                     type={showPassword ? "text" : "password"}
                     dir="ltr"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required={!editId || editNeedsPassword}
+                    required={!editId}
+                    minLength={editId && !form.password ? undefined : 8}
                     autoComplete="new-password"
-                    placeholder={editNeedsPassword ? "הזינו סיסמה חדשה" : ""}
                   />
                   <button
                     type="button"
@@ -342,7 +326,6 @@ export default function UsersPage() {
                 <th>תפקיד</th>
                 <th>מוסד</th>
                 <th>יישוב</th>
-                {canManage && <th>סיסמה</th>}
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
@@ -355,34 +338,6 @@ export default function UsersPage() {
                   <td>{roleHe[u.role] ?? u.role}</td>
                   <td>{u.institution_name || "—"}</td>
                   <td>{u.settlement_name || "—"}</td>
-                  {canManage && (
-                    <td className="password-cell">
-                      {u.login_password ? (
-                        <>
-                          <bdi dir="ltr">
-                            {revealIds[u.id] ? u.login_password : "••••••••"}
-                          </bdi>
-                          <button
-                            type="button"
-                            className="linkish"
-                            onClick={() =>
-                              setRevealIds((m) => ({ ...m, [u.id]: !m[u.id] }))
-                            }
-                          >
-                            {revealIds[u.id] ? "הסתר" : "הצג"}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="linkish"
-                          onClick={() => startEdit(u)}
-                        >
-                          לא נשמרה — לחצו להגדרה
-                        </button>
-                      )}
-                    </td>
-                  )}
                   {canManage && (
                     <td className="actions-cell">
                       <button

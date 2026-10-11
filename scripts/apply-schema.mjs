@@ -17,21 +17,42 @@ if (!url) {
 const sqlText = readFileSync(resolve(__dirname, "schema.sql"), "utf8");
 const sql = neon(url);
 
-// neon() runs one statement per call; split on semicolons outside dollar quotes is enough for this file.
-const statements = sqlText
-  .split(/;\s*\n/)
-  .map((s) =>
-    s
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("--"))
-      .join("\n")
-      .trim(),
-  )
-  .filter((s) => s.length > 0);
+/** Split SQL into statements, keeping DO $$ ... $$; blocks intact. */
+function splitStatements(text) {
+  const withoutLineComments = text
+    .split("\n")
+    .map((line) => (line.trim().startsWith("--") ? "" : line))
+    .join("\n");
 
+  const statements = [];
+  let buf = "";
+  let inDollar = false;
+  for (let i = 0; i < withoutLineComments.length; i++) {
+    const ch = withoutLineComments[i];
+    const next2 = withoutLineComments.slice(i, i + 2);
+    if (next2 === "$$") {
+      inDollar = !inDollar;
+      buf += "$$";
+      i += 1;
+      continue;
+    }
+    if (ch === ";" && !inDollar) {
+      const stmt = buf.trim();
+      if (stmt) statements.push(stmt);
+      buf = "";
+      continue;
+    }
+    buf += ch;
+  }
+  const tail = buf.trim();
+  if (tail) statements.push(tail);
+  return statements;
+}
+
+const statements = splitStatements(sqlText);
 for (const statement of statements) {
   await sql.query(statement);
-  console.log("ok:", statement.slice(0, 60).replace(/\s+/g, " "));
+  console.log("ok:", statement.slice(0, 70).replace(/\s+/g, " "));
 }
 
 console.log("schema applied");

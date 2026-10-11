@@ -6,6 +6,7 @@ import {
   type SessionUser,
 } from "@/lib/auth";
 import { getSql } from "@/lib/db";
+import { validatePassword } from "@/lib/passwords";
 
 export const runtime = "nodejs";
 
@@ -99,6 +100,19 @@ export async function PATCH(
   }
 
   const sql = getSql();
+
+  if (target.role === "super_admin" && role !== "super_admin") {
+    const [count] = (await sql`
+      SELECT count(*)::int AS n FROM users WHERE role = 'super_admin'
+    `) as { n: number }[];
+    if ((count?.n ?? 0) <= 1) {
+      return NextResponse.json(
+        { error: "לא ניתן להוריד את מנהל העל האחרון" },
+        { status: 400 },
+      );
+    }
+  }
+
   if (settlement_name) {
     const [known] = (await sql`
       SELECT name_he FROM settlements WHERE name_he = ${settlement_name} LIMIT 1
@@ -111,6 +125,11 @@ export async function PATCH(
     }
   }
 
+  if (password) {
+    const pwErr = validatePassword(password);
+    if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
+  }
+
   try {
     if (password) {
       const hash = hashPassword(password);
@@ -120,14 +139,13 @@ export async function PATCH(
           mobile = ${mobile},
           email = ${email},
           password_hash = ${hash},
-          login_password = ${password},
           role = ${role},
           institution_id = ${institution_id},
           manager_id = ${manager_id},
           settlement_name = ${settlement_name}
         WHERE id = ${id}
         RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
-                  settlement_name, login_password
+                  settlement_name
       `;
       return NextResponse.json({ user: row });
     }
@@ -143,7 +161,7 @@ export async function PATCH(
         settlement_name = ${settlement_name}
       WHERE id = ${id}
       RETURNING id, full_name, mobile, email, role, institution_id, manager_id,
-                settlement_name, login_password
+                settlement_name
     `;
     return NextResponse.json({ user: row });
   } catch (e) {
