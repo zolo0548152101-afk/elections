@@ -23,3 +23,4 @@
 - Do not run `npm run seed` unless asked. It truncates `settlements` and `clusters`.
 - Vercel project `election-day-ops` (`prj_pwImjryRCzAcqSYYwU1o0E13qEeh`) tracks this repo with an empty root directory.
 - After every push that changes the app, resolve the branch’s Vercel preview alias (deployment aliases for `election-day-ops`) and paste that HTTPS link in the reply for the user to test.
+- Do **not** merge to `main` or promote production until the user explicitly approves the preview. After approval, merge to `main` (which deploys production for `election-day-ops`).
