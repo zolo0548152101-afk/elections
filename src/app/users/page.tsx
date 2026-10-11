@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { matchesSearch } from "@/lib/text-search";
 
-type Institution = { id: number; name: string };
+type LinkedCluster = { ashkol: string; settlement_name?: string };
+type Institution = {
+  id: number;
+  name: string;
+  settlement_name?: string | null;
+  linked_clusters?: LinkedCluster[] | string;
+};
 type UserRow = {
   id: number;
   full_name: string;
@@ -20,28 +27,73 @@ type UserRow = {
   settlement_name: string | null;
 };
 
-const emptyForm = {
-  full_name: "",
-  mobile: "",
-  email: "",
-  password: "",
-  role: "coordinator",
-  institution_ids: [] as number[],
-  coordinator_ids: [] as number[],
-  manager_id: "",
+type UserForm = {
+  full_name: string;
+  mobile: string;
+  email: string;
+  password: string;
+  role: string;
+  institution_ids: number[];
+  coordinator_ids: number[];
+  manager_id: string;
 };
 
+function freshForm(): UserForm {
+  return {
+    full_name: "",
+    mobile: "",
+    email: "",
+    password: "",
+    role: "coordinator",
+    institution_ids: [],
+    coordinator_ids: [],
+    manager_id: "",
+  };
+}
+
 function parseIds(value: number[] | string | undefined, fallback?: number | null) {
-  if (Array.isArray(value)) return value.map(Number).filter((n) => Number.isInteger(n));
+  if (Array.isArray(value)) {
+    return value.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  }
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value) as number[];
-      if (Array.isArray(parsed)) return parsed.map(Number).filter((n) => Number.isInteger(n));
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      }
     } catch {
       /* ignore */
     }
   }
-  return fallback ? [fallback] : [];
+  return fallback != null && Number.isInteger(Number(fallback)) && Number(fallback) > 0
+    ? [Number(fallback)]
+    : [];
+}
+
+function parseClusters(value: LinkedCluster[] | string | undefined): LinkedCluster[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value) as LinkedCluster[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function institutionAshkols(inst: Institution | undefined): string[] {
+  if (!inst) return [];
+  return parseClusters(inst.linked_clusters)
+    .map((c) => String(c.ashkol ?? "").trim())
+    .filter(Boolean);
+}
+
+/** e.g. אב"ע אורות מודיעין · אשכול 3000381, 3000376 */
+function institutionLabel(inst: Institution | undefined, fallbackId?: number): string {
+  if (!inst) return fallbackId ? `מוסד #${fallbackId}` : "—";
+  const ashkols = institutionAshkols(inst);
+  if (ashkols.length === 0) return inst.name;
+  return `${inst.name} · אשכול ${ashkols.join(", ")}`;
 }
 
 const roleHe: Record<string, string> = {
@@ -55,7 +107,7 @@ export default function UsersPage() {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [meRole, setMeRole] = useState<string>("");
   const [meId, setMeId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<UserForm>(freshForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -63,6 +115,7 @@ export default function UsersPage() {
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [addInstitutionId, setAddInstitutionId] = useState("");
+  const [instPickerQ, setInstPickerQ] = useState("");
   const [addCoordinatorId, setAddCoordinatorId] = useState("");
 
   async function load() {
@@ -84,10 +137,11 @@ export default function UsersPage() {
   }, []);
 
   function resetForm() {
-    setForm(emptyForm);
+    setForm(freshForm());
     setEditId(null);
     setShowPassword(false);
     setAddInstitutionId("");
+    setInstPickerQ("");
     setAddCoordinatorId("");
   }
 
@@ -104,6 +158,7 @@ export default function UsersPage() {
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
     setAddInstitutionId("");
+    setInstPickerQ("");
     setAddCoordinatorId("");
     setShowPassword(false);
     setMsg("עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
@@ -112,30 +167,48 @@ export default function UsersPage() {
 
   function addInstitution() {
     const id = Number(addInstitutionId);
-    if (!Number.isInteger(id) || form.institution_ids.includes(id)) return;
-    setForm({ ...form, institution_ids: [...form.institution_ids, id] });
+    if (!Number.isInteger(id) || id <= 0) return;
+    setForm((prev) =>
+      prev.institution_ids.includes(id)
+        ? prev
+        : { ...prev, institution_ids: [...prev.institution_ids, id] },
+    );
     setAddInstitutionId("");
   }
 
   function removeInstitution(id: number) {
-    setForm({
-      ...form,
-      institution_ids: form.institution_ids.filter((x) => x !== id),
-    });
+    setForm((prev) => ({
+      ...prev,
+      institution_ids: prev.institution_ids.filter((x) => x !== id),
+    }));
   }
 
   function addCoordinator() {
     const id = Number(addCoordinatorId);
-    if (!Number.isInteger(id) || form.coordinator_ids.includes(id)) return;
-    setForm({ ...form, coordinator_ids: [...form.coordinator_ids, id] });
+    if (!Number.isInteger(id) || id <= 0) return;
+    setForm((prev) =>
+      prev.coordinator_ids.includes(id)
+        ? prev
+        : { ...prev, coordinator_ids: [...prev.coordinator_ids, id] },
+    );
     setAddCoordinatorId("");
   }
 
   function removeCoordinator(id: number) {
-    setForm({
-      ...form,
-      coordinator_ids: form.coordinator_ids.filter((x) => x !== id),
-    });
+    setForm((prev) => ({
+      ...prev,
+      coordinator_ids: prev.coordinator_ids.filter((x) => x !== id),
+    }));
+  }
+
+  /** Include dropdown selection even if הוסף wasn't clicked. */
+  function effectiveInstitutionIds(): number[] {
+    const ids = [...form.institution_ids];
+    const pending = Number(addInstitutionId);
+    if (Number.isInteger(pending) && pending > 0 && !ids.includes(pending)) {
+      ids.push(pending);
+    }
+    return ids;
   }
 
   async function saveUser(e: React.FormEvent) {
@@ -148,15 +221,17 @@ export default function UsersPage() {
       return;
     }
 
+    const institutionIds =
+      role === "coordinator" ? effectiveInstitutionIds() : [];
+
     setSaving(true);
     const payload = {
       full_name: form.full_name,
       mobile: form.mobile,
       email: form.email,
       role,
-      institution_ids: role === "coordinator" ? form.institution_ids : [],
-      institution_id:
-        role === "coordinator" ? (form.institution_ids[0] ?? null) : null,
+      institution_ids: institutionIds,
+      institution_id: institutionIds[0] ?? null,
       coordinator_ids: role === "area_manager" ? form.coordinator_ids : undefined,
       settlement_name: null,
       manager_id:
@@ -177,7 +252,17 @@ export default function UsersPage() {
         setMsg(data.error || "שגיאה");
         return;
       }
-      setMsg(editId ? "עודכן בהצלחה" : "נוצר בהצלחה");
+      const savedNames = institutionIds
+        .map((id) => institutions.find((i) => i.id === id)?.name)
+        .filter(Boolean)
+        .join(" · ");
+      setMsg(
+        editId
+          ? role === "coordinator"
+            ? `עודכן בהצלחה${savedNames ? ` · מוסדות: ${savedNames}` : " · ללא מוסדות"}`
+            : "עודכן בהצלחה"
+          : "נוצר בהצלחה",
+      );
       resetForm();
       await load();
     } finally {
@@ -209,6 +294,31 @@ export default function UsersPage() {
   const canManage = meRole === "super_admin" || meRole === "area_manager";
   const editingUser = editId ? users.find((u) => u.id === editId) : null;
 
+  const institutionById = useMemo(() => {
+    const map = new Map<number, Institution>();
+    for (const inst of institutions) map.set(inst.id, inst);
+    return map;
+  }, [institutions]);
+
+  function userInstitutionLabel(u: UserRow): string {
+    if (u.role === "area_manager") return u.coordinator_names || "—";
+    const ids = parseIds(u.institution_ids, u.institution_id);
+    if (ids.length === 0) return u.institution_names || u.institution_name || "—";
+    return ids
+      .map((id) => institutionLabel(institutionById.get(id), id))
+      .join(" · ");
+  }
+
+  const pickerInstitutions = useMemo(() => {
+    return institutions
+      .filter((i) => !form.institution_ids.includes(i.id))
+      .filter((i) => {
+        if (!instPickerQ.trim()) return true;
+        const hay = `${i.name} ${i.settlement_name ?? ""} ${institutionAshkols(i).join(" ")}`;
+        return matchesSearch(hay, instPickerQ);
+      });
+  }, [institutions, form.institution_ids, instPickerQ]);
+
   const filteredUsers = users.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
     const needle = q.trim();
@@ -221,11 +331,12 @@ export default function UsersPage() {
       u.institution_names,
       u.coordinator_names,
       u.manager_name,
+      userInstitutionLabel(u),
       roleHe[u.role],
     ]
       .filter(Boolean)
       .join(" ");
-    return hay.includes(needle);
+    return matchesSearch(hay, needle);
   });
 
   return (
@@ -338,15 +449,15 @@ export default function UsersPage() {
                   <span className="field-label">מוסדות</span>
                   {form.institution_ids.length === 0 ? (
                     <p className="lede" style={{ margin: "0.35rem 0" }}>
-                      אין מוסדות משויכים
+                      אין מוסדות משויכים — בחרו מוסד ולחצו הוסף (או שמירה ישירות)
                     </p>
                   ) : (
                     <ul className="coord-link-list">
                       {form.institution_ids.map((id) => {
-                        const inst = institutions.find((i) => i.id === id);
+                        const inst = institutionById.get(id);
                         return (
                           <li key={id}>
-                            <span>{inst?.name ?? `מוסד #${id}`}</span>
+                            <span>{institutionLabel(inst, id)}</span>
                             <button
                               type="button"
                               className="linkish"
@@ -360,18 +471,23 @@ export default function UsersPage() {
                     </ul>
                   )}
                   <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
+                    <input
+                      type="search"
+                      value={instPickerQ}
+                      onChange={(e) => setInstPickerQ(e.target.value)}
+                      placeholder="חיפוש מוסד או אשכול…"
+                      autoComplete="off"
+                    />
                     <select
                       value={addInstitutionId}
                       onChange={(e) => setAddInstitutionId(e.target.value)}
                     >
                       <option value="">הוספת מוסד…</option>
-                      {institutions
-                        .filter((i) => !form.institution_ids.includes(i.id))
-                        .map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.name}
-                          </option>
-                        ))}
+                      {pickerInstitutions.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {institutionLabel(i)}
+                        </option>
+                      ))}
                     </select>
                     <button
                       type="button"
@@ -504,11 +620,7 @@ export default function UsersPage() {
                   <td dir="ltr">{u.email}</td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
-                  <td>
-                    {u.role === "area_manager"
-                      ? u.coordinator_names || "—"
-                      : u.institution_names || u.institution_name || "—"}
-                  </td>
+                  <td>{userInstitutionLabel(u)}</td>
                   {canManage && (
                     <td className="actions-cell">
                       <button

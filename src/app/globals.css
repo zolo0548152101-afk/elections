@@ -592,9 +592,9 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .coord-link-add select {
-  flex: 1 1 140px;
+  flex: 1 1 220px;
   min-width: 0;
-  max-width: 220px;
+  max-width: 420px;
 }
 
 .coord-link-add .export {
@@ -604,9 +604,9 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .coord-link-add input {
-  flex: 1 1 140px;
+  flex: 1 1 160px;
   min-width: 0;
-  max-width: 220px;
+  max-width: 260px;
 }
 
 .links-subnav {
