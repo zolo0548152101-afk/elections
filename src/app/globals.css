@@ -349,6 +349,14 @@ tbody tr:hover {
   border-radius: 10px;
   padding: 0.55rem 0.7rem;
   font: inherit;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.panel-form select {
+  text-overflow: ellipsis;
 }
 
 .settlement-picker {
@@ -421,10 +429,19 @@ tbody tr:hover {
   display: flex;
   gap: 0.4rem;
   align-items: center;
+  min-width: 0;
+  width: 100%;
 }
 
 .password-field input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.password-field .reset {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0.45rem 0.75rem;
 }
 
 .form-actions {
@@ -479,8 +496,25 @@ tbody tr:hover {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 0.75rem;
+  align-items: start;
+}
+
+.form-grid > label {
+  min-width: 0;
+  overflow: visible;
+}
+
+/* Long institution names + settlement picker need a wider cell */
+.form-grid > label.field-wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  .form-grid > label.field-wide {
+    grid-column: span 2;
+  }
 }
 
 .coord-set {

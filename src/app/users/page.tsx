@@ -272,7 +272,7 @@ export default function UsersPage() {
                   </select>
                 </label>
               )}
-              <label>
+              <label className="field-wide">
                 מוסד
                 <select
                   value={form.institution_id}
@@ -289,7 +289,7 @@ export default function UsersPage() {
                 </select>
               </label>
               {showSettlement && (
-                <label>
+                <label className="field-wide">
                   יישוב (לרכז){form.role === "coordinator" ? " *" : ""}
                   <SettlementPicker
                     value={form.settlement_name}
