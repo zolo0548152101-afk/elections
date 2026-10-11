@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { ashkolStreetStats } from "@/lib/cluster-status";
 import { getSql } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -11,11 +10,13 @@ type Row = {
   institution_id: number;
   institution_name: string;
   coordinator_names: string;
+  ops_done: boolean | null;
 };
 
 /**
  * Admin / רכז על: ashkols already linked to an institution (and optionally done),
  * with institution + coordinator names for a compact team table.
+ * done comes from ashkol_ops_status (admin סמן בוצע / לא בוצע).
  */
 export async function GET() {
   const user = await getSessionUser();
@@ -42,10 +43,12 @@ export async function GET() {
                 WHERE link.institution_id = i.id
               ),
               ''
-            ) AS coordinator_names
+            ) AS coordinator_names,
+            ops.done AS ops_done
           FROM institution_clusters ic
           JOIN clusters cl ON cl.ashkol = ic.ashkol
           JOIN institutions i ON i.id = ic.institution_id
+          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
           ORDER BY cl.settlement_name, cl.ashkol, i.name
         `) as Row[])
       : ((await sql`
@@ -64,10 +67,12 @@ export async function GET() {
                 WHERE link.institution_id = i.id
               ),
               ''
-            ) AS coordinator_names
+            ) AS coordinator_names,
+            ops.done AS ops_done
           FROM institution_clusters ic
           JOIN clusters cl ON cl.ashkol = ic.ashkol
           JOIN institutions i ON i.id = ic.institution_id
+          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
           WHERE EXISTS (
             SELECT 1
             FROM institution_coordinators link
@@ -79,18 +84,13 @@ export async function GET() {
           ORDER BY cl.settlement_name, cl.ashkol, i.name
         `) as Row[]);
 
-  const stats = await ashkolStreetStats(
-    sql,
-    rows.map((r) => r.ashkol),
-  );
-
   const clusters = rows.map((r) => ({
     ashkol: r.ashkol,
     settlement_name: r.settlement_name,
     institution_id: r.institution_id,
     institution_name: r.institution_name,
     coordinator_names: r.coordinator_names,
-    done: stats.get(r.ashkol)?.done ?? false,
+    done: r.ops_done === true,
   }));
 
   return NextResponse.json({ clusters });
