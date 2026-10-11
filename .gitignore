@@ -49,3 +49,5 @@ data/streets.ndjson
 data/streets_index.json
 data/street_batches/
 .env.local
+__pycache__/
+*.pyc
