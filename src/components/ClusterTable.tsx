@@ -10,6 +10,8 @@ export type ClusterView = {
   turnout_pct: number;
   right_pct: number;
   ballot_count: number;
+  likud_votes?: number;
+  likud_pct?: number;
   map_lat: number | null;
   map_lng: number | null;
   /** Linked to at least one institution. */
@@ -25,7 +27,9 @@ type SortKey =
   | "voters"
   | "turnout_pct"
   | "right_pct"
-  | "right_votes";
+  | "right_votes"
+  | "likud_pct"
+  | "likud_votes";
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "settlement_name", label: "יישוב" },
@@ -35,6 +39,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "turnout_pct", label: "% הצבעה" },
   { key: "right_votes", label: "קולות ימין" },
   { key: "right_pct", label: "% ימין" },
+  { key: "likud_votes", label: "קולות מחל" },
+  { key: "likud_pct", label: "% מחל" },
 ];
 
 export function ClusterTable({
@@ -89,6 +95,8 @@ export function ClusterTable({
               <td>{c.turnout_pct.toFixed(1)}%</td>
               <td>{c.right_votes.toLocaleString("he-IL")}</td>
               <td>{c.right_pct.toFixed(1)}%</td>
+              <td>{(c.likud_votes ?? 0).toLocaleString("he-IL")}</td>
+              <td>{(c.likud_pct ?? 0).toFixed(1)}%</td>
               <td>{c.ballot_count}</td>
               <td>{c.map_lat != null ? "כן" : "—"}</td>
             </tr>

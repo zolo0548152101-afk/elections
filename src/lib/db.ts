@@ -19,6 +19,8 @@ export type ClusterRow = {
   turnout_pct: number;
   right_pct: number;
   ballot_count: number;
+  likud_votes: number;
+  likud_pct: number;
   lat: number | null;
   lng: number | null;
 };

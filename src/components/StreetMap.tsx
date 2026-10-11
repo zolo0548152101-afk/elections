@@ -103,6 +103,8 @@ function clusterFromProps(p: Record<string, unknown>): ClusterView {
     turnout_pct: Number(p.turnout_pct ?? 0),
     right_pct: Number(p.right_pct ?? 0),
     ballot_count: Number(p.ballot_count ?? 0),
+    likud_votes: Number(p.likud_votes ?? 0),
+    likud_pct: Number(p.likud_pct ?? 0),
     map_lat: null,
     map_lng: null,
     linked: Number(p.linked ?? 0) === 1 || p.linked === true,
@@ -147,7 +149,7 @@ function streetStatusPaint() {
 function clusterPopupHtml(c: ClusterView) {
   const row = (label: string, value: string) =>
     `<div>${esc(label)}: <bdi dir="ltr">${esc(value)}</bdi></div>`;
-  return `<div dir="rtl" class="popup"><strong>${esc(c.settlement_name)}</strong>${row("אשכול", c.ashkol)}${row("בז״ב", fmtInt(c.bzb))}${row("מצביעים", fmtInt(c.voters))}${row("כשרים", fmtInt(c.valid))}${row("הצבעה", fmtPct(c.turnout_pct))}${row("קולות ימין", fmtInt(c.right_votes))}${row("ימין", fmtPct(c.right_pct))}${row("קלפיות", fmtInt(c.ballot_count))}</div>`;
+  return `<div dir="rtl" class="popup"><strong>${esc(c.settlement_name)}</strong>${row("אשכול", c.ashkol)}${row("בז״ב", fmtInt(c.bzb))}${row("מצביעים", fmtInt(c.voters))}${row("כשרים", fmtInt(c.valid))}${row("הצבעה", fmtPct(c.turnout_pct))}${row("קולות ימין", fmtInt(c.right_votes))}${row("ימין", fmtPct(c.right_pct))}${row("קולות מחל", fmtInt(c.likud_votes ?? 0))}${row("מחל", fmtPct(c.likud_pct ?? 0))}${row("קלפיות", fmtInt(c.ballot_count))}</div>`;
 }
 
 function streetPopupHtml(name: string, ashkol: string | null) {
@@ -480,6 +482,8 @@ export function StreetMap({
             turnout_pct: c.turnout_pct,
             right_pct: c.right_pct,
             ballot_count: c.ballot_count,
+            likud_votes: c.likud_votes ?? 0,
+            likud_pct: c.likud_pct ?? 0,
             linked: linked ? 1 : 0,
             done: done ? 1 : 0,
             selected: selectedAshkol === c.ashkol ? 1 : 0,
@@ -1156,6 +1160,14 @@ export function StreetMap({
               <div>
                 <span>ימין</span>
                 <strong><bdi dir="ltr">{fmtPct(picked.right_pct)}</bdi></strong>
+              </div>
+              <div>
+                <span>קולות מחל</span>
+                <strong><bdi dir="ltr">{fmtInt(picked.likud_votes ?? 0)}</bdi></strong>
+              </div>
+              <div>
+                <span>מחל</span>
+                <strong><bdi dir="ltr">{fmtPct(picked.likud_pct ?? 0)}</bdi></strong>
               </div>
               {canLinkCluster && (
                 <div className="cluster-link-block">

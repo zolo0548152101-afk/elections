@@ -17,12 +17,15 @@ type SortKey =
   | "voters"
   | "turnout_pct"
   | "right_pct"
-  | "right_votes";
+  | "right_votes"
+  | "likud_pct"
+  | "likud_votes";
 
 export function Dashboard() {
   const [minRight, setMinRight] = useState(70);
   const [maxTurnout, setMaxTurnout] = useState(60);
   const [minBzb, setMinBzb] = useState(300);
+  const [minLikud, setMinLikud] = useState(0);
   const [sort, setSort] = useState<SortKey>("right_pct");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [clusters, setClusters] = useState<ClusterView[]>([]);
@@ -38,6 +41,7 @@ export function Dashboard() {
   const effectiveMinRight = isCoordinator ? 0 : minRight;
   const effectiveMaxTurnout = isCoordinator ? 100 : maxTurnout;
   const effectiveMinBzb = isCoordinator ? 0 : minBzb;
+  const effectiveMinLikud = isCoordinator ? 0 : minLikud;
 
   const load = useCallback(async () => {
     if (role === null) return;
@@ -48,6 +52,7 @@ export function Dashboard() {
         minRight: String(effectiveMinRight),
         maxTurnout: String(effectiveMaxTurnout),
         minBzb: String(effectiveMinBzb),
+        minLikud: String(effectiveMinLikud),
         sort,
         dir,
       });
@@ -61,7 +66,15 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [role, effectiveMinRight, effectiveMaxTurnout, effectiveMinBzb, sort, dir]);
+  }, [
+    role,
+    effectiveMinRight,
+    effectiveMaxTurnout,
+    effectiveMinBzb,
+    effectiveMinLikud,
+    sort,
+    dir,
+  ]);
 
   useEffect(() => {
     const t = setTimeout(load, 150);
@@ -181,6 +194,23 @@ export function Dashboard() {
               onChange={(e) => setMinBzb(Number(e.target.value))}
             />
           </label>
+          <label>
+            מינימום % מחל (ליכוד)
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={minLikud}
+              onChange={(e) => setMinLikud(Number(e.target.value))}
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={minLikud}
+              onChange={(e) => setMinLikud(Number(e.target.value))}
+            />
+          </label>
           <div className="filter-actions">
             <button
               type="button"
@@ -189,9 +219,10 @@ export function Dashboard() {
                 setMinRight(70);
                 setMaxTurnout(60);
                 setMinBzb(300);
+                setMinLikud(0);
               }}
             >
-              ברירת מחדל 70 / 60 / 300
+              ברירת מחדל 70 / 60 / 300 / 0
             </button>
             <button
               type="button"
@@ -200,7 +231,7 @@ export function Dashboard() {
               onClick={() =>
                 downloadClustersCsv(
                   clusters,
-                  `ashkolot-yamin${minRight}-turnout${maxTurnout}-bzb${minBzb}.csv`,
+                  `ashkolot-yamin${minRight}-turnout${maxTurnout}-bzb${minBzb}-likud${minLikud}.csv`,
                 )
               }
             >

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   const minRight = Number(sp.get("minRight") ?? "70");
   const maxTurnout = Number(sp.get("maxTurnout") ?? "60");
   const minBzb = Number(sp.get("minBzb") ?? "300");
+  const minLikud = Number(sp.get("minLikud") ?? "0");
   const sort = sp.get("sort") ?? "right_pct";
   const dir = sp.get("dir") === "asc" ? "ASC" : "DESC";
 
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
     "turnout_pct",
     "right_pct",
     "right_votes",
+    "likud_pct",
+    "likud_votes",
   ]);
   const sortCol = allowedSort.has(sort) ? sort : "right_pct";
 
@@ -49,6 +52,8 @@ export async function GET(req: NextRequest) {
             c.turnout_pct,
             c.right_pct,
             c.ballot_count,
+            c.likud_votes,
+            c.likud_pct,
             s.lat,
             s.lng
           FROM clusters c
@@ -56,6 +61,7 @@ export async function GET(req: NextRequest) {
           WHERE c.right_pct >= ${minRight}
             AND c.turnout_pct < ${maxTurnout}
             AND c.bzb >= ${minBzb}
+            AND c.likud_pct >= ${minLikud}
         `
       : ashkols.length === 0
         ? []
@@ -71,6 +77,8 @@ export async function GET(req: NextRequest) {
             c.turnout_pct,
             c.right_pct,
             c.ballot_count,
+            c.likud_votes,
+            c.likud_pct,
             s.lat,
             s.lng
           FROM clusters c
@@ -78,6 +86,7 @@ export async function GET(req: NextRequest) {
           WHERE c.right_pct >= ${minRight}
             AND c.turnout_pct < ${maxTurnout}
             AND c.bzb >= ${minBzb}
+            AND c.likud_pct >= ${minLikud}
             AND c.ashkol = ANY(${ashkols})
         `
   ) as ClusterRow[];
@@ -123,6 +132,7 @@ export async function GET(req: NextRequest) {
     minRight,
     maxTurnout,
     minBzb,
+    minLikud,
     clusters: withMap,
     scoped: ashkols !== null,
   });

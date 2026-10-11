@@ -14,7 +14,7 @@
 - Next.js App Router, Neon Postgres, Vercel, Leaflet (cluster dashboard), MapLibre (street map).
 - Streets: OSM Hebrew names only (Geofabrik / HOT roads). Vector tiles via `/api/tiles/{z}/{x}/{y}`.
 - Roles: `super_admin`, `area_manager`, `coordinator`. Auth: email/password sessions.
-- Filters: min % right, max turnout, min בז״ב. Right parties: ט + מחל + שס + ג.
+- Filters: min % right, max turnout, min בז״ב, min % מחל (ליכוד). Right parties: ט + מחל + שס + ג.
 - Cluster↔street link column `streets.ashkol` stays null until `npm run import:cluster-streets`.
 
 ## Cloud agents
