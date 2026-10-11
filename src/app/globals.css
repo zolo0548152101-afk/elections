@@ -879,6 +879,23 @@ tbody tr.cluster-row-selected:hover {
   margin-top: 0.35rem;
 }
 
+.coord-cluster-editor {
+  position: relative;
+  margin-top: 0.75rem;
+  max-width: 42rem;
+}
+
+.coord-cluster-editor .field-label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+}
+
+.coord-cluster-editor .inst-chip-text {
+  max-width: 22rem;
+}
+
 @media (max-width: 900px) {
   .form-grid.form-grid-dense {
     grid-template-columns: repeat(2, minmax(0, 1fr));
