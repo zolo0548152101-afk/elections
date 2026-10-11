@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth";
 import { getSql, type ClusterRow } from "@/lib/db";
 import { offsetWithinSettlement } from "@/lib/geo";
+import { visibleClusterAshkols } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const sp = req.nextUrl.searchParams;
   const minRight = Number(sp.get("minRight") ?? "70");
   const maxTurnout = Number(sp.get("maxTurnout") ?? "60");
@@ -24,27 +29,54 @@ export async function GET(req: NextRequest) {
   const sortCol = allowedSort.has(sort) ? sort : "right_pct";
 
   const sql = getSql();
-  // Dynamic ORDER BY via validated identifiers only.
-  const rows = (await sql`
-    SELECT
-      c.ashkol,
-      c.settlement_name,
-      c.settlement_code,
-      c.bzb,
-      c.voters,
-      c.valid,
-      c.right_votes,
-      c.turnout_pct,
-      c.right_pct,
-      c.ballot_count,
-      s.lat,
-      s.lng
-    FROM clusters c
-    LEFT JOIN settlements s ON s.name_he = c.settlement_name
-    WHERE c.right_pct >= ${minRight}
-      AND c.turnout_pct < ${maxTurnout}
-      AND c.bzb >= ${minBzb}
-  `) as ClusterRow[];
+  const ashkols = await visibleClusterAshkols(sql, user);
+
+  const rows = (
+    ashkols === null
+      ? await sql`
+          SELECT
+            c.ashkol,
+            c.settlement_name,
+            c.settlement_code,
+            c.bzb,
+            c.voters,
+            c.valid,
+            c.right_votes,
+            c.turnout_pct,
+            c.right_pct,
+            c.ballot_count,
+            s.lat,
+            s.lng
+          FROM clusters c
+          LEFT JOIN settlements s ON s.name_he = c.settlement_name
+          WHERE c.right_pct >= ${minRight}
+            AND c.turnout_pct < ${maxTurnout}
+            AND c.bzb >= ${minBzb}
+        `
+      : ashkols.length === 0
+        ? []
+        : await sql`
+          SELECT
+            c.ashkol,
+            c.settlement_name,
+            c.settlement_code,
+            c.bzb,
+            c.voters,
+            c.valid,
+            c.right_votes,
+            c.turnout_pct,
+            c.right_pct,
+            c.ballot_count,
+            s.lat,
+            s.lng
+          FROM clusters c
+          LEFT JOIN settlements s ON s.name_he = c.settlement_name
+          WHERE c.right_pct >= ${minRight}
+            AND c.turnout_pct < ${maxTurnout}
+            AND c.bzb >= ${minBzb}
+            AND c.ashkol = ANY(${ashkols})
+        `
+  ) as ClusterRow[];
 
   const sorted = [...rows].sort((a, b) => {
     const av = a[sortCol as keyof ClusterRow];
@@ -74,5 +106,6 @@ export async function GET(req: NextRequest) {
     maxTurnout,
     minBzb,
     clusters: withMap,
+    scoped: ashkols !== null,
   });
 }

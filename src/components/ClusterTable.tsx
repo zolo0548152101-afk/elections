@@ -38,11 +38,15 @@ export function ClusterTable({
   sort,
   dir,
   onSort,
+  selectedAshkol,
+  onSelect,
 }: {
   clusters: ClusterView[];
   sort: SortKey;
   dir: "asc" | "desc";
   onSort: (key: SortKey) => void;
+  selectedAshkol?: string;
+  onSelect?: (cluster: ClusterView) => void;
 }) {
   return (
     <div className="table-wrap">
@@ -63,7 +67,17 @@ export function ClusterTable({
         </thead>
         <tbody>
           {clusters.map((c) => (
-            <tr key={c.ashkol}>
+            <tr
+              key={c.ashkol}
+              className={[
+                onSelect ? "cluster-row-selectable" : "",
+                selectedAshkol === c.ashkol ? "cluster-row-selected" : "",
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined}
+              onClick={onSelect ? () => onSelect(c) : undefined}
+              title={onSelect ? "הצג אשכול במפה" : undefined}
+            >
               <td>{c.settlement_name}</td>
               <td className="mono">{c.ashkol}</td>
               <td>{c.bzb.toLocaleString("he-IL")}</td>

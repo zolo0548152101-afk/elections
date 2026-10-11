@@ -43,3 +43,9 @@ next-env.d.ts
 
 .env*.local
 .env
+
+# Large generated street extracts (rebuild via scripts)
+data/streets.ndjson
+data/streets_index.json
+data/street_batches/
+.env.local

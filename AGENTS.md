@@ -11,21 +11,15 @@
 4. Do not start implementation on a stale checkout — coworker may have pushed since the last session.
 
 ## Stack
-- Next.js App Router, Neon Postgres, Vercel, Leaflet/OSM.
+- Next.js App Router, Neon Postgres, Vercel, Leaflet (cluster dashboard), MapLibre (street map).
+- Streets: OSM Hebrew names only (Geofabrik / HOT roads). Vector tiles via `/api/tiles/{z}/{x}/{y}`.
+- Roles: `super_admin`, `area_manager`, `coordinator`. Auth: email/password sessions.
 - Filters: min % right, max turnout, min בז״ב. Right parties: ט + מחל + שס + ג.
+- Cluster↔street link column `streets.ashkol` stays null until `npm run import:cluster-streets`.
 
 ## Cloud agents
 - Work from this repository root. Install with `npm ci`. Dev server: `npm run dev -- --hostname 0.0.0.0 --port 3000`. Open `http://localhost:3000` (127.0.0.1 is allowed via `allowedDevOrigins`).
 - `DATABASE_URL` is the Neon pooled connection for project `election-day-ops`, database `neondb`, with `sslmode=require`. `SESSION_SECRET` signs auth cookies.
 - Do not run `npm run seed` unless asked. It truncates `settlements` and `clusters`.
 - Vercel project `election-day-ops` (`prj_pwImjryRCzAcqSYYwU1o0E13qEeh`) tracks this repo with an empty root directory.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-## This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- After every push that changes the app, resolve the branch’s Vercel preview alias (deployment aliases for `election-day-ops`) and paste that HTTPS link in the reply for the user to test.

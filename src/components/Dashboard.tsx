@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ClusterTable, type ClusterView } from "./ClusterTable";
 import { downloadClustersCsv } from "@/lib/csv";
 
-const ClusterMap = dynamic(
-  () => import("./ClusterMap").then((m) => m.ClusterMap),
+const StreetMap = dynamic(
+  () => import("./StreetMap").then((m) => m.StreetMap),
   { ssr: false, loading: () => <div className="map-shell map-loading">טוען מפה…</div> },
 );
 
@@ -29,6 +29,9 @@ export function Dashboard() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedAshkol, setSelectedAshkol] = useState("");
+  const [tableFocusToken, setTableFocusToken] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +61,17 @@ export function Dashboard() {
     return () => clearTimeout(t);
   }, [load]);
 
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settlement?.lat != null && d.settlement?.lng != null) {
+          setFocus({ lat: Number(d.settlement.lat), lng: Number(d.settlement.lng) });
+        }
+      })
+      .catch(() => setFocus(null));
+  }, []);
+
   function onSort(key: SortKey) {
     if (key === sort) setDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -75,7 +89,8 @@ export function Dashboard() {
           <p className="eyebrow">ניהול יום בחירות</p>
           <h1>אשכולות לפי הצבעה וימין</h1>
           <p className="lede">
-            סינון קיבוצי קלפיות: ימין (ט + מחל + שס + ג) ומדד הצבעה. הטבלה והמפה מסוננים יחד.
+            מפת הרחובות והאשכולות יחד. הסינון (ימין, הצבעה, בז״ב) חל על הנקודות, הטבלה
+            והייצוא. לחצו על נקודה לנתוני הבוחרים ועל קו רחוב לסימון בוצע.
           </p>
         </div>
         <div className="stats">
@@ -172,10 +187,31 @@ export function Dashboard() {
       </section>
 
       {error && <p className="error">{error}</p>}
+      {!loading && !error && count === 0 && (
+        <p className="lede" style={{ color: "var(--sand)" }}>
+          אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד»
+          על האשכולות הרלוונטיים — רק הם יופיעו כאן.
+        </p>
+      )}
 
-      <div className="split">
-        <ClusterMap clusters={clusters} />
-        <ClusterTable clusters={clusters} sort={sort} dir={dir} onSort={onSort} />
+      <div className="unified">
+        <StreetMap
+          clusters={clusters}
+          focus={focus}
+          focusAshkol={selectedAshkol || null}
+          focusAshkolToken={tableFocusToken}
+        />
+        <ClusterTable
+          clusters={clusters}
+          sort={sort}
+          dir={dir}
+          onSort={onSort}
+          selectedAshkol={selectedAshkol}
+          onSelect={(c) => {
+            setSelectedAshkol(c.ashkol);
+            setTableFocusToken((n) => n + 1);
+          }}
+        />
       </div>
     </div>
   );

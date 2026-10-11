@@ -22,3 +22,17 @@ export type ClusterRow = {
   lat: number | null;
   lng: number | null;
 };
+
+export type StreetRow = {
+  id: string;
+  name_he: string;
+  lat: number;
+  lng: number;
+  bbox_xmin: number;
+  bbox_ymin: number;
+  bbox_xmax: number;
+  bbox_ymax: number;
+  geom_geojson: string;
+  ashkol: string | null;
+  done?: boolean;
+};
