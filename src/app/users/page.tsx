@@ -302,17 +302,9 @@ export default function UsersPage() {
       setMsg("למשתמש אין מספר נייד");
       return;
     }
-    const entered = window.prompt(
-      `שליחת פרטי התחברות ב-WhatsApp אל ${u.mobile}.\n` +
-        "הזינו סיסמה לשליחה, או השאירו ריק ליצירת סיסמה חדשה (תעודכן במערכת).",
-      editId === u.id ? form.password : "",
-    );
-    if (entered === null) return;
-    const password = entered.trim();
     const ok = window.confirm(
-      password
-        ? `לשלוח ל-${u.full_name} ולעדכן את הסיסמה לערך שהוזן?`
-        : `לשלוח ל-${u.full_name} סיסמה חדשה אקראית (תעודכן במערכת)?`,
+      `לשלוח ל-${u.full_name} (${u.mobile}) קישור התחברות וקוד זמני ב-WhatsApp?\n` +
+        "הסיסמה הקבועה לא תשתנה.",
     );
     if (!ok) return;
     setSendingId(u.id);
@@ -321,17 +313,23 @@ export default function UsersPage() {
       const res = await fetch(`/api/users/${u.id}/send-credentials`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(password ? { password } : {}),
+        body: JSON.stringify({}),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!res.ok) {
         setMsg(data.error || "שגיאה בשליחה");
         return;
       }
       setMsg(
-        data.generated
-          ? `נשלח ב-WhatsApp · נוצרה סיסמה חדשה ל-${u.full_name}`
-          : `נשלח ב-WhatsApp אל ${u.full_name}`,
+        `נשלח ב-WhatsApp אל ${u.full_name} · קוד זמני ל־5 דקות (הסיסמה הקבועה נשארה)`,
+      );
+    } catch (err) {
+      setMsg(
+        err instanceof Error
+          ? `שגיאת רשת בשליחה: ${err.message}`
+          : "שגיאת רשת בשליחה",
       );
     } finally {
       setSendingId(null);
