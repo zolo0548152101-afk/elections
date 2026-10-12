@@ -94,9 +94,14 @@ h1 {
 .lede {
   margin: 0.3rem 0 0;
   max-width: 40rem;
-  opacity: 0.88;
+  opacity: 0.92;
   line-height: 1.4;
   font-size: 0.92rem;
+}
+
+/* Page background is navy. Notes that sit directly on it must be light. */
+.dash > .lede {
+  color: var(--sand);
 }
 
 .stats {
@@ -454,6 +459,15 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .login-card,
+.panel-form,
+.table-wrap,
+.filters,
+.cluster-card,
+.street-card {
+  color: var(--ink);
+}
+
+.login-card,
 .panel-form {
   background: var(--card);
   border-radius: 14px;
@@ -560,30 +574,33 @@ tbody tr.cluster-row-selected:hover {
 
 .edit-banner,
 .form-msg {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.65rem;
   color: var(--ink);
-  background: rgba(47, 111, 237, 0.08);
+  background: #fffaf3;
+  border: 1px solid rgba(16, 32, 51, 0.16);
   border-radius: 10px;
   padding: 0.55rem 0.75rem;
   font-size: 0.92rem;
 }
 
 .form-msg {
-  margin-top: 0.75rem;
+  margin-top: 0.65rem;
   margin-bottom: 0;
 }
 
+/* Opaque fills. A tint over the navy page made the text the same color as the bar. */
 .form-msg-ok {
-  background: rgba(22, 163, 74, 0.14);
+  background: #dcfce7;
   color: #14532d;
-  border: 1px solid rgba(22, 163, 74, 0.35);
-  font-weight: 600;
+  border: 1px solid #4ade80;
+  font-weight: 700;
 }
 
 .form-msg-err {
-  background: rgba(185, 28, 28, 0.1);
+  background: #fee2e2;
   color: #7f1d1d;
-  border: 1px solid rgba(185, 28, 28, 0.3);
+  border: 1px solid #fca5a5;
+  font-weight: 700;
 }
 
 .form-msg-sticky {
@@ -608,12 +625,12 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .status-done {
-  background: rgba(22, 163, 74, 0.16);
+  background: #dcfce7;
   color: #14532d;
 }
 
 .status-open {
-  background: rgba(196, 92, 38, 0.14);
+  background: #ffedd5;
   color: #9a3412;
 }
 
@@ -651,8 +668,11 @@ tbody tr.cluster-row-selected:hover {
 .link-success-note {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #14532d;
+  background: #dcfce7;
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
   grid-column: 1 / -1;
 }
 
@@ -1332,8 +1352,12 @@ tbody tr.cluster-row-selected:hover {
 
 .map-credit {
   margin: 0;
-  color: rgba(242, 235, 224, 0.75);
+  color: var(--muted);
   font-size: 0.8rem;
+}
+
+.street-map-wrap > .map-credit {
+  color: rgba(242, 235, 224, 0.92);
 }
 
 @media (max-width: 980px) {
