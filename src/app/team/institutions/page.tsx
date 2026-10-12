@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ShowMore } from "@/components/ShowMore";
 import { useRouter } from "next/navigation";
 
 type Inst = {
@@ -79,7 +80,7 @@ export default function TeamInstitutionsPage() {
         {loading && <p className="lede">טוען…</p>}
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading && (
-          <label className="panel-form" style={{ display: "block" }}>
+          <label className="panel-form search-strip">
             חיפוש
             <input
               value={q}
@@ -106,14 +107,26 @@ export default function TeamInstitutionsPage() {
                   const coords = (i.coordinators as { id: number; full_name: string }[]) ?? [];
                   return (
                     <tr key={i.id}>
-                      <td>{i.name}</td>
-                      <td>{i.kind || "—"}</td>
-                      <td>{i.settlement_name || "—"}</td>
-                      <td>{i.district || "—"}</td>
                       <td>
-                        {coords.length
-                          ? coords.map((c) => c.full_name).join(" · ")
-                          : "—"}
+                        <ShowMore text={i.name} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.kind} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.settlement_name} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.district} />
+                      </td>
+                      <td>
+                        <ShowMore
+                          text={
+                            coords.length
+                              ? coords.map((c) => c.full_name).join(" · ")
+                              : ""
+                          }
+                        />
                       </td>
                       <td>{i.cluster_count}</td>
                     </tr>

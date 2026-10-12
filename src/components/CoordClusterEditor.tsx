@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { AshkolSearch } from "@/components/AshkolSearch";
+import { ShowMore } from "@/components/ShowMore";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 
 export type CoordInstitution = {
@@ -25,6 +27,7 @@ type Props = {
 
 /**
  * Add / remove ashkol links for a coordinator via their institutions.
+ * The linked list lives only here so the table summary is hidden while editing.
  */
 export function CoordClusterEditor({
   institutions,
@@ -36,11 +39,12 @@ export function CoordClusterEditor({
     institutions[0] ? String(institutions[0].id) : "",
   );
   const [ashkol, setAshkol] = useState("");
+  const [pickerKey, setPickerKey] = useState(0);
   const [busy, setBusy] = useState(false);
 
   if (institutions.length === 0) {
     return (
-      <p className="lede" style={{ margin: "0.5rem 0 0" }}>
+      <p className="lede" style={{ margin: 0 }}>
         אין מוסדות משויכים לרכז — קשרו מוסד לפני הוספת אשכולות.
       </p>
     );
@@ -50,7 +54,7 @@ export function CoordClusterEditor({
     const id = Number(institutionId);
     const code = ashkol.trim();
     if (!Number.isInteger(id) || id <= 0 || !code) {
-      onMessage?.("err", "בחרו מוסד והזינו מספר אשכול");
+      onMessage?.("err", "בחרו מוסד ואשכול מהחיפוש");
       return;
     }
     setBusy(true);
@@ -66,6 +70,7 @@ export function CoordClusterEditor({
         return;
       }
       setAshkol("");
+      setPickerKey((k) => k + 1);
       onMessage?.("ok", `✓ אשכול ${code} נוסף`);
       await onChanged();
     } finally {
@@ -93,23 +98,22 @@ export function CoordClusterEditor({
   }
 
   return (
-    <div className="coord-cluster-editor" style={{ marginTop: "0.75rem" }}>
+    <div className="coord-cluster-editor">
       {clusters.length > 0 ? (
-        <ul className="coord-set" style={{ marginBottom: "0.65rem" }}>
+        <ul className="coord-cluster-list">
           {clusters.map((c) => (
             <li key={`${c.institution_id}:${c.ashkol}`}>
-              <span className="mono">
-                {formatAshkolLabel(c.ashkol, c.settlement_name)}
-              </span>
-              {c.institution_name ? (
-                <span className="map-credit"> · {c.institution_name}</span>
+              <ShowMore text={formatAshkolLabel(c.ashkol, c.settlement_name)} />
+              {institutions.length > 1 && c.institution_name ? (
+                <span className="muted-cell">
+                  · <ShowMore text={c.institution_name} />
+                </span>
               ) : null}
               <button
                 type="button"
                 className="reset"
                 disabled={busy}
                 onClick={() => void unlink(c)}
-                style={{ marginInlineStart: "0.5rem" }}
               >
                 הסר
               </button>
@@ -117,11 +121,11 @@ export function CoordClusterEditor({
           ))}
         </ul>
       ) : (
-        <p className="lede" style={{ margin: "0 0 0.5rem" }}>
+        <p className="lede" style={{ margin: 0 }}>
           אין אשכולות מקושרים
         </p>
       )}
-      <div className="form-actions" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+      <div className="coord-cluster-add">
         <label>
           מוסד
           <select
@@ -138,12 +142,11 @@ export function CoordClusterEditor({
         </label>
         <label>
           אשכול
-          <input
-            dir="ltr"
-            value={ashkol}
-            onChange={(e) => setAshkol(e.target.value)}
-            placeholder="מספר אשכול"
+          <AshkolSearch
+            key={pickerKey}
             disabled={busy}
+            onPick={setAshkol}
+            onSubmit={() => void link()}
           />
         </label>
         <button

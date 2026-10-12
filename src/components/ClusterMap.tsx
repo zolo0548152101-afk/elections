@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import type { ClusterView } from "./ClusterTable";
+import { ShowMore } from "@/components/ShowMore";
 import "leaflet/dist/leaflet.css";
 
 function FitBounds({ clusters }: { clusters: ClusterView[] }) {
@@ -56,7 +57,9 @@ export function ClusterMap({ clusters }: { clusters: ClusterView[] }) {
             >
               <Popup>
                 <div className="popup" dir="rtl">
-                  <strong>{c.settlement_name}</strong>
+                  <strong>
+                    <ShowMore text={c.settlement_name} />
+                  </strong>
                   <div>אשכול {c.ashkol}</div>
                   <div>בז״ב: {c.bzb.toLocaleString("he-IL")}</div>
                   <div>מצביעים: {c.voters.toLocaleString("he-IL")}</div>

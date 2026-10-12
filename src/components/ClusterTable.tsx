@@ -1,5 +1,7 @@
 "use client";
 
+import { ShowMore } from "@/components/ShowMore";
+
 export type ClusterView = {
   ashkol: string;
   settlement_name: string;
@@ -88,7 +90,9 @@ export function ClusterTable({
               onClick={onSelect ? () => onSelect(c) : undefined}
               title={onSelect ? "הצג אשכול במפה" : undefined}
             >
-              <td>{c.settlement_name}</td>
+              <td>
+                <ShowMore text={c.settlement_name} />
+              </td>
               <td className="mono">{c.ashkol}</td>
               <td>{c.bzb.toLocaleString("he-IL")}</td>
               <td>{c.voters.toLocaleString("he-IL")}</td>

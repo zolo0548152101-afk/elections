@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
+import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 
 type Row = {
@@ -156,10 +157,16 @@ export default function TeamClustersPage() {
                 {filtered.map((r) => (
                   <tr key={`${r.ashkol}:${r.institution_id}`}>
                     <td className="mono">
-                      {formatAshkolLabel(r.ashkol, r.settlement_name)}
+                      <ShowMore
+                        text={formatAshkolLabel(r.ashkol, r.settlement_name)}
+                      />
                     </td>
-                    <td>{r.institution_name || "—"}</td>
-                    <td>{r.coordinator_names || "—"}</td>
+                    <td>
+                      <ShowMore text={r.institution_name} />
+                    </td>
+                    <td>
+                      <ShowMore text={r.coordinator_names} />
+                    </td>
                     <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
                     <td className="actions-cell">
                       <button

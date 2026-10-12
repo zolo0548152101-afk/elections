@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LinksNav } from "@/components/LinksNav";
+import { ShowMore } from "@/components/ShowMore";
 
 type Coord = {
   id: number;
@@ -169,11 +170,12 @@ export default function CoordinatorsLinksPage() {
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading && unlinked.length > 0 && (
           <p className="lede">
-            רכזים ללא מוסד: {unlinked.map((c) => c.full_name).join(" · ")}
+            רכזים ללא מוסד:{" "}
+            <ShowMore text={unlinked.map((c) => c.full_name).join(" · ")} />
           </p>
         )}
         {!loading && (
-          <label className="panel-form" style={{ display: "block" }}>
+          <label className="panel-form search-strip">
             סינון
             <input
               value={q}
@@ -189,8 +191,12 @@ export default function CoordinatorsLinksPage() {
             return (
               <section key={inst.id} className="panel-form links-panel">
                 <div className="links-panel-head">
-                  <h2>{inst.name}</h2>
-                  <p className="lede">{inst.settlement_name || "—"}</p>
+                  <h2>
+                    <ShowMore text={inst.name} />
+                  </h2>
+                  <p className="lede">
+                    <ShowMore text={inst.settlement_name} />
+                  </p>
                 </div>
                 {coords.length === 0 ? (
                   <p className="lede">אין רכז משויך</p>
@@ -198,7 +204,7 @@ export default function CoordinatorsLinksPage() {
                   <ul className="coord-link-list">
                     {coords.map((c) => (
                       <li key={c.id}>
-                        <span>{c.full_name}</span>
+                        <ShowMore text={c.full_name} />
                         <button
                           type="button"
                           className="linkish"

@@ -15,6 +15,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // Turbopack rewrites the library chunk, so the relative worker URL 404s.
 setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
+import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 
@@ -1176,7 +1177,8 @@ export function StreetMap({
           {picked ? (
             <>
               <h2>
-                {picked.settlement_name} · אשכול <bdi dir="ltr">{picked.ashkol}</bdi>
+                <ShowMore text={picked.settlement_name} /> · אשכול{" "}
+                <bdi dir="ltr">{picked.ashkol}</bdi>
               </h2>
               <div>
                 <span>בז״ב</span>
@@ -1268,7 +1270,7 @@ export function StreetMap({
                   </div>
                   {selectedInstitution && (
                     <p className="lede" style={{ margin: 0, fontSize: "0.85rem" }}>
-                      נבחר: {institutionOptionLabel(selectedInstitution)}
+                      נבחר: <ShowMore text={institutionOptionLabel(selectedInstitution)} />
                     </p>
                   )}
                 </div>
@@ -1360,14 +1362,16 @@ export function StreetMap({
               )}
               {pickedStreet && (
                 <div className="assign-block" style={{ marginTop: "0.85rem" }}>
-                  <span>רכזים · {pickedStreet.name_he}</span>
+                  <span>
+                    רכזים · <ShowMore text={pickedStreet.name_he} />
+                  </span>
                   {assigned.length === 0 ? (
                     <p className="assign-empty">אין שיוך עדיין</p>
                   ) : (
                     <ul className="assign-list">
                       {assigned.map((a) => (
                         <li key={a.id}>
-                          {a.full_name}
+                          <ShowMore text={a.full_name} />
                           {allowed.some((x) => x.id === a.id) && (
                             <button
                               type="button"
@@ -1409,7 +1413,9 @@ export function StreetMap({
             </>
           ) : pickedStreet ? (
             <>
-              <h2>{pickedStreet.name_he}</h2>
+              <h2>
+                <ShowMore text={pickedStreet.name_he} />
+              </h2>
               {pickedStreet.ashkol ? (
                 <div>
                   <span>אשכול</span>
@@ -1430,7 +1436,7 @@ export function StreetMap({
                   <ul className="assign-list">
                     {assigned.map((a) => (
                       <li key={a.id}>
-                        {a.full_name}
+                        <ShowMore text={a.full_name} />
                         {allowed.some((x) => x.id === a.id) && (
                           <button
                             type="button"

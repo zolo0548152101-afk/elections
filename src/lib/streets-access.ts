@@ -203,27 +203,17 @@ export async function canMarkStreet(
 }
 
 /**
- * Coordinator may only link clusters in their institution city (or user settlement).
- * Super admin: any. Area manager: settlements of team institutions.
+ * Settlements whose clusters this user may link.
+ * `null` means every settlement (super admin).
  */
-export async function canLinkClusterAshkol(
+export async function linkableSettlementNames(
   sql: Sql,
   user: SessionUser,
-  ashkol: string,
-): Promise<boolean> {
-  if (user.role === "super_admin") return true;
-
-  const cluster = (await sql`
-    SELECT settlement_name FROM clusters WHERE ashkol = ${ashkol} LIMIT 1
-  `) as { settlement_name: string }[];
-  if (!cluster[0]) return false;
-  const settlement = cluster[0].settlement_name;
-
+): Promise<string[] | null> {
+  if (user.role === "super_admin") return null;
   if (user.role === "coordinator") {
-    const cities = await coordinatorInstitutionCities(sql, user.id);
-    return cities.includes(settlement);
+    return coordinatorInstitutionCities(sql, user.id);
   }
-
   if (user.role === "area_manager") {
     const rows = (await sql`
       SELECT DISTINCT name FROM (
@@ -240,10 +230,28 @@ export async function canLinkClusterAshkol(
           AND u.settlement_name IS NOT NULL
       ) cities
     `) as { name: string | null }[];
-    return rows.some((r) => r.name === settlement);
+    return rows.map((r) => r.name).filter((name): name is string => Boolean(name));
   }
+  return [];
+}
 
-  return false;
+/**
+ * Coordinator may only link clusters in their institution city (or user settlement).
+ * Super admin: any. Area manager: settlements of team institutions.
+ */
+export async function canLinkClusterAshkol(
+  sql: Sql,
+  user: SessionUser,
+  ashkol: string,
+): Promise<boolean> {
+  const names = await linkableSettlementNames(sql, user);
+  if (names === null) return true;
+
+  const cluster = (await sql`
+    SELECT settlement_name FROM clusters WHERE ashkol = ${ashkol} LIMIT 1
+  `) as { settlement_name: string }[];
+  if (!cluster[0]) return false;
+  return names.includes(cluster[0].settlement_name);
 }
 
 export type AssignTarget = {

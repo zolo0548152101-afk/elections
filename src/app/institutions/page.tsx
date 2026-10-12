@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ShowMore } from "@/components/ShowMore";
 
 type Contact = {
   id: number;
@@ -220,7 +221,7 @@ export default function InstitutionsPage() {
           <ul className="coord-link-list">
             {coords.map((c) => (
               <li key={c.id}>
-                <span>{c.full_name}</span>
+                <ShowMore text={c.full_name} />
                 <button
                   type="button"
                   className="linkish"
@@ -396,11 +397,15 @@ export default function InstitutionsPage() {
                 className="panel-form"
                 style={{ marginBottom: "1.25rem" }}
               >
-                <h2 style={{ margin: "0 0 0.35rem", fontSize: "1.25rem" }}>{inst.name}</h2>
+                <h2 style={{ margin: "0 0 0.35rem", fontSize: "1.15rem" }}>
+                  <ShowMore text={inst.name} />
+                </h2>
                 <p className="lede" style={{ marginBottom: "0.75rem" }}>
-                  {[inst.kind, inst.settlement_name, inst.district]
-                    .filter(Boolean)
-                    .join(" · ") || "—"}
+                  <ShowMore
+                    text={[inst.kind, inst.settlement_name, inst.district]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
                 </p>
                 {contacts.length > 0 && (
                   <div style={{ marginBottom: "1rem" }}>
@@ -408,9 +413,11 @@ export default function InstitutionsPage() {
                     <ul style={{ margin: "0.35rem 0 0", paddingInlineStart: "1.2rem" }}>
                       {contacts.map((c) => (
                         <li key={c.id}>
-                          {c.full_name}
-                          {c.role_title ? ` (${c.role_title})` : ""}
-                          {c.phone ? ` · ${c.phone}` : ""}
+                          <ShowMore
+                            text={`${c.full_name}${c.role_title ? ` (${c.role_title})` : ""}${
+                              c.phone ? ` · ${c.phone}` : ""
+                            }`}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -437,7 +444,9 @@ export default function InstitutionsPage() {
                         {clusters.map((c) => (
                           <tr key={c.ashkol}>
                             <td>{c.ashkol}</td>
-                            <td>{c.settlement_name}</td>
+                            <td>
+                              <ShowMore text={c.settlement_name} />
+                            </td>
                             <td>{Number(c.right_pct).toFixed(1)}</td>
                             <td>{Number(c.turnout_pct).toFixed(1)}</td>
                             <td>{c.bzb}</td>
@@ -471,21 +480,33 @@ export default function InstitutionsPage() {
                   const clusters = (i.linked_clusters as LinkedCluster[]) ?? [];
                   return (
                     <tr key={i.id}>
-                      <td>{i.name}</td>
-                      <td>{i.kind || "—"}</td>
-                      <td>{i.settlement_name || "—"}</td>
-                      <td>{i.district || "—"}</td>
+                      <td>
+                        <ShowMore text={i.name} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.kind} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.settlement_name} />
+                      </td>
+                      <td>
+                        <ShowMore text={i.district} />
+                      </td>
                       <td className="contacts-cell">
-                        {contacts.length > 0
-                          ? contacts
-                              .map(
-                                (c) =>
-                                  `${c.full_name}${c.role_title ? ` (${c.role_title})` : ""}${
-                                    c.phone ? ` ${c.phone}` : ""
-                                  }`,
-                              )
-                              .join(" · ")
-                          : i.key_people_raw || "—"}
+                        <ShowMore
+                          text={
+                            contacts.length > 0
+                              ? contacts
+                                  .map(
+                                    (c) =>
+                                      `${c.full_name}${c.role_title ? ` (${c.role_title})` : ""}${
+                                        c.phone ? ` ${c.phone}` : ""
+                                      }`,
+                                  )
+                                  .join(" · ")
+                              : i.key_people_raw || ""
+                          }
+                        />
                       </td>
                       <td>{clusters.length}</td>
                       <td>
