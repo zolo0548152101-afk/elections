@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { SessionUser } from "@/lib/auth";
+import { ShowMore } from "@/components/ShowMore";
 
 export function AppNav({
   user,
@@ -86,8 +87,8 @@ export function AppNav({
             התקדמות {progress!.done}/{progress!.total} ({pct}%)
           </span>
         )}
-        <span>
-          {user.full_name} · {roleLabel(user.role)}
+        <span className="app-nav-who">
+          <ShowMore text={user.full_name} /> · {roleLabel(user.role)}
         </span>
         <button type="button" onClick={logout}>
           יציאה

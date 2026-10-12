@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CoordClusterEditor,
@@ -8,6 +8,7 @@ import {
   type CoordInstitution,
 } from "@/components/CoordClusterEditor";
 import { formatAshkolLabels } from "@/lib/ashkol-label";
+import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 
 type Coord = {
@@ -103,7 +104,7 @@ export default function TeamManagersPage() {
           </p>
         )}
         {!loading && (
-          <label className="panel-form" style={{ display: "block" }}>
+          <label className="panel-form search-strip">
             חיפוש
             <input
               value={q}
@@ -116,7 +117,9 @@ export default function TeamManagersPage() {
           filtered.map((m) => (
             <section key={m.id} className="panel-form links-panel">
               <div className="links-panel-head">
-                <h2>{m.full_name}</h2>
+                <h2>
+                  <ShowMore text={m.full_name} />
+                </h2>
                 <p className="lede">
                   {[m.email, m.mobile, `${m.coordinator_count} רכזים`]
                     .filter(Boolean)
@@ -126,7 +129,7 @@ export default function TeamManagersPage() {
               {m.coordinators.length === 0 ? (
                 <p className="lede">אין רכזים משויכים</p>
               ) : (
-                <div className="table-wrap">
+                <div className={`table-wrap${editId != null ? " is-editing" : ""}`}>
                   <table>
                     <thead>
                       <tr>
@@ -146,24 +149,19 @@ export default function TeamManagersPage() {
                           formatAshkolLabels(clusters) || c.ashkols || "";
                         const open = editId === c.id;
                         return (
-                          <tr
-                            key={c.id}
-                            className={open ? "row-editing" : undefined}
-                          >
-                            <td>{c.full_name}</td>
-                            <td>{c.institution_names || "—"}</td>
-                            <td title={ashkolText || undefined}>
-                              {ashkolText || "—"}
-                              {open && (
-                                <CoordClusterEditor
-                                  institutions={institutions}
-                                  clusters={clusters}
-                                  onChanged={load}
-                                  onMessage={(kind, text) => {
-                                    setMsgKind(kind);
-                                    setMsg(text);
-                                  }}
-                                />
+                          <Fragment key={c.id}>
+                          <tr className={open ? "row-editing" : undefined}>
+                            <td>
+                              <ShowMore text={c.full_name} />
+                            </td>
+                            <td>
+                              <ShowMore text={c.institution_names} />
+                            </td>
+                            <td title={open ? undefined : ashkolText || undefined}>
+                              {open ? (
+                                <span className="muted-cell">נערך בשורה למטה</span>
+                              ) : (
+                                <ShowMore text={ashkolText} />
                               )}
                             </td>
                             <td>
@@ -185,6 +183,22 @@ export default function TeamManagersPage() {
                               </button>
                             </td>
                           </tr>
+                          {open && (
+                            <tr className="edit-detail-row">
+                              <td colSpan={6}>
+                                <CoordClusterEditor
+                                  institutions={institutions}
+                                  clusters={clusters}
+                                  onChanged={load}
+                                  onMessage={(kind, text) => {
+                                    setMsgKind(kind);
+                                    setMsg(text);
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>

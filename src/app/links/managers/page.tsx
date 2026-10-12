@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LinksNav } from "@/components/LinksNav";
+import { ShowMore } from "@/components/ShowMore";
 
 type UserRow = {
   id: number;
@@ -191,7 +192,9 @@ export default function ManagersLinksPage() {
             return (
               <section key={mgr.id} className="panel-form links-panel">
                 <div className="links-panel-head">
-                  <h2>{mgr.full_name}</h2>
+                  <h2>
+                    <ShowMore text={mgr.full_name} />
+                  </h2>
                   <p className="lede">{mgr.email || "רכז על"}</p>
                 </div>
                 {under.length === 0 ? (
@@ -200,11 +203,11 @@ export default function ManagersLinksPage() {
                   <ul className="coord-link-list">
                     {under.map((c) => (
                       <li key={c.id}>
-                        <span>
-                          {c.full_name}
-                          {c.settlement_name ? ` · ${c.settlement_name}` : ""}
-                          {c.institution_name ? ` · ${c.institution_name}` : ""}
-                        </span>
+                        <ShowMore
+                          text={[c.full_name, c.settlement_name, c.institution_name]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        />
                         {meRole === "super_admin" && (
                           <button
                             type="button"

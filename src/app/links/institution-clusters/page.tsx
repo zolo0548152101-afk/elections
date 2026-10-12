@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AshkolSearch } from "@/components/AshkolSearch";
 import { LinksNav } from "@/components/LinksNav";
+import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 
 type LinkedCluster = {
@@ -49,7 +51,8 @@ export default function InstitutionClustersLinksPage() {
   const router = useRouter();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [q, setQ] = useState("");
-  const [ashkolDraft, setAshkolDraft] = useState<Record<number, string>>({});
+  const [ashkolPick, setAshkolPick] = useState<Record<number, string>>({});
+  const [pickerEpoch, setPickerEpoch] = useState<Record<number, number>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
@@ -90,10 +93,10 @@ export default function InstitutionClustersLinksPage() {
   }, []);
 
   async function linkAshkol(institutionId: number) {
-    const ashkol = (ashkolDraft[institutionId] ?? "").trim();
+    const ashkol = (ashkolPick[institutionId] ?? "").trim();
     if (!ashkol) {
       setMsgKind("err");
-      setMsg("הזינו מספר אשכול");
+      setMsg("בחרו אשכול מהחיפוש");
       return;
     }
     setBusyId(institutionId);
@@ -111,7 +114,8 @@ export default function InstitutionClustersLinksPage() {
       }
       const instName =
         institutions.find((i) => i.id === institutionId)?.name ?? "המוסד";
-      setAshkolDraft((p) => ({ ...p, [institutionId]: "" }));
+      setAshkolPick((p) => ({ ...p, [institutionId]: "" }));
+      setPickerEpoch((p) => ({ ...p, [institutionId]: (p[institutionId] ?? 0) + 1 }));
       setMsgKind("ok");
       setMsg(`✓ הקישור הצליח — אשכול ${ashkol} קושר ל«${instName}»`);
       setFlashId(institutionId);
@@ -205,31 +209,33 @@ export default function InstitutionClustersLinksPage() {
                 className={`panel-form links-panel${flashId === inst.id ? " links-panel-flash" : ""}`}
               >
                 <div className="links-panel-head">
-                  <h2>{inst.name}</h2>
+                  <h2>
+                    <ShowMore text={inst.name} />
+                  </h2>
                   <p className="lede">
-                    {[inst.kind, inst.settlement_name].filter(Boolean).join(" · ") || "—"}
+                    <ShowMore
+                      text={
+                        [inst.kind, inst.settlement_name].filter(Boolean).join(" · ") || ""
+                      }
+                    />
                   </p>
                 </div>
-                <div className="coord-link-add">
-                  <input
-                    dir="ltr"
-                    placeholder="מספר אשכול"
-                    value={ashkolDraft[inst.id] ?? ""}
-                    onChange={(e) =>
-                      setAshkolDraft((p) => ({ ...p, [inst.id]: e.target.value }))
-                    }
-                    disabled={busyId === inst.id}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void linkAshkol(inst.id);
+                <div className="coord-cluster-add">
+                  <label>
+                    אשכול
+                    <AshkolSearch
+                      key={`${inst.id}:${pickerEpoch[inst.id] ?? 0}`}
+                      disabled={busyId === inst.id}
+                      onPick={(code) =>
+                        setAshkolPick((p) => ({ ...p, [inst.id]: code }))
                       }
-                    }}
-                  />
+                      onSubmit={() => void linkAshkol(inst.id)}
+                    />
+                  </label>
                   <button
                     type="button"
                     className="export"
-                    disabled={busyId === inst.id || !(ashkolDraft[inst.id] ?? "").trim()}
+                    disabled={busyId === inst.id || !(ashkolPick[inst.id] ?? "").trim()}
                     onClick={() => void linkAshkol(inst.id)}
                   >
                     קשר אשכול
@@ -257,7 +263,9 @@ export default function InstitutionClustersLinksPage() {
                         {clusters.map((c) => (
                           <tr key={c.ashkol}>
                             <td className="mono">{c.ashkol}</td>
-                            <td>{c.settlement_name}</td>
+                            <td>
+                              <ShowMore text={c.settlement_name} />
+                            </td>
                             <td>{Number(c.right_pct).toFixed(1)}</td>
                             <td>{Number(c.turnout_pct).toFixed(1)}</td>
                             <td>{c.bzb}</td>

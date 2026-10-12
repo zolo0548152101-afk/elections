@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CoordClusterEditor,
-  type CoordCluster,
-  type CoordInstitution,
+import type {
+  CoordCluster,
+  CoordInstitution,
 } from "@/components/CoordClusterEditor";
+import { CoordinatorLinkRows } from "@/components/CoordinatorLinkRows";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
+import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 
 type Coord = {
@@ -80,8 +81,8 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
               {meRole === "super_admin"
-                ? "כל הרכזים במערכת — מוסדות, אשכולות והתקדמות. ניתן להוסיף/להסיר אשכולות."
-                : "רכזים תחתיכם — מוסדות, אשכולות והתקדמות. ניתן להוסיף/להסיר אשכולות."}
+                ? "כל הרכזים במערכת — כל שורה מקשרת מוסד לאשכול."
+                : "רכזים תחתיכם — כל שורה מקשרת מוסד לאשכול."}
             </p>
           </div>
         </header>
@@ -95,7 +96,7 @@ export default function TeamCoordinatorsPage() {
           </p>
         )}
         {!loading && (
-          <label className="panel-form" style={{ display: "block" }}>
+          <label className="panel-form search-strip">
             חיפוש
             <input
               value={q}
@@ -106,7 +107,7 @@ export default function TeamCoordinatorsPage() {
         )}
         {!loading && filtered.length > 0 && (
           <section className="panel-form links-panel">
-            <div className="table-wrap">
+            <div className={`table-wrap${editId != null ? " is-editing" : ""}`}>
               <table>
                 <thead>
                   <tr>
@@ -125,25 +126,29 @@ export default function TeamCoordinatorsPage() {
                     const count = c.cluster_count ?? clusters.length;
                     const open = editId === c.id;
                     return (
-                      <tr key={c.id} className={open ? "row-editing" : undefined}>
-                        <td>{c.full_name}</td>
+                      <Fragment key={c.id}>
+                      <tr className={open ? "row-editing" : undefined}>
                         <td>
-                          {c.institutions.length
-                            ? c.institutions.map((i) => i.name).join(" · ")
-                            : "—"}
+                          <ShowMore text={c.full_name} />
                         </td>
-                        <td title={ashkolText || undefined}>
-                          {ashkolText || "—"}
-                          {open && (
-                            <CoordClusterEditor
-                              institutions={c.institutions}
-                              clusters={clusters}
-                              onChanged={load}
-                              onMessage={(kind, text) => {
-                                setMsgKind(kind);
-                                setMsg(text);
-                              }}
+                        <td>
+                          {open ? (
+                            <span className="muted-cell">נערך בשורה למטה</span>
+                          ) : (
+                            <ShowMore
+                              text={
+                                c.institutions.length
+                                  ? c.institutions.map((i) => i.name).join(" · ")
+                                  : ""
+                              }
                             />
+                          )}
+                        </td>
+                        <td title={open ? undefined : ashkolText || undefined}>
+                          {open ? (
+                            <span className="muted-cell">נערך בשורה למטה</span>
+                          ) : (
+                            <ShowMore text={ashkolText} />
                           )}
                         </td>
                         <td>
@@ -158,10 +163,27 @@ export default function TeamCoordinatorsPage() {
                               setEditId((id) => (id === c.id ? null : c.id))
                             }
                           >
-                            {open ? "סגור" : "עריכת אשכולות"}
+                            {open ? "סגור" : "קשרים"}
                           </button>
                         </td>
                       </tr>
+                      {open && (
+                        <tr className="edit-detail-row">
+                          <td colSpan={6}>
+                            <CoordinatorLinkRows
+                              coordinatorId={c.id}
+                              institutions={c.institutions}
+                              clusters={clusters}
+                              onChanged={load}
+                              onMessage={(kind, text) => {
+                                setMsgKind(kind);
+                                setMsg(text);
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FormMsg } from "@/components/FormMsg";
+import { ShowMore } from "@/components/ShowMore";
 import { useTimedFlash } from "@/hooks/useTimedFlash";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch } from "@/lib/text-search";
@@ -419,9 +420,13 @@ export default function UsersPage() {
         {canManage && (
           <form className="panel-form" onSubmit={saveUser}>
             <h2>
-              {editId
-                ? `עריכת משתמש: ${editingUser?.full_name ?? ""}`
-                : `הוספת ${meRole === "area_manager" ? "רכז" : "משתמש"}`}
+              {editId ? (
+                <>
+                  עריכת משתמש: <ShowMore text={editingUser?.full_name ?? ""} />
+                </>
+              ) : (
+                `הוספת ${meRole === "area_manager" ? "רכז" : "משתמש"}`
+              )}
             </h2>
             {editId && (
               <p className="edit-banner">
@@ -527,7 +532,7 @@ export default function UsersPage() {
                         const inst = institutionById.get(id);
                         return (
                           <li key={id}>
-                            <span>{institutionLabel(inst, id)}</span>
+                            <ShowMore text={institutionLabel(inst, id)} />
                             <button
                               type="button"
                               className="linkish"
@@ -583,11 +588,13 @@ export default function UsersPage() {
                         const coord = users.find((u) => u.id === id);
                         return (
                           <li key={id}>
-                            <span>
-                              {coord
-                                ? `${coord.full_name} (${coord.email})`
-                                : `רכז #${id}`}
-                            </span>
+                            <ShowMore
+                              text={
+                                coord
+                                  ? `${coord.full_name} (${coord.email})`
+                                  : `רכז #${id}`
+                              }
+                            />
                             <button
                               type="button"
                               className="linkish"
@@ -691,7 +698,9 @@ export default function UsersPage() {
             <tbody>
               {filteredUsers.map((u) => (
                 <tr key={u.id} className={editId === u.id ? "row-editing" : undefined}>
-                  <td>{u.full_name}</td>
+                  <td>
+                    <ShowMore text={u.full_name} />
+                  </td>
                   <td dir="ltr">{u.mobile}</td>
                   <td>{roleHe[u.role] ?? u.role}</td>
                   {canManage && (
