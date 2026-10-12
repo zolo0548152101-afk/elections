@@ -1030,6 +1030,48 @@ tbody tr.cluster-row-selected:hover {
   gap: 0.45rem;
 }
 
+.link-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 0.85rem;
+  align-items: start;
+}
+
+.link-group {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.link-group h3,
+.link-group-title,
+.link-groups > label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.link-group-title {
+  margin: 0 0 0.35rem;
+}
+
+.link-groups > label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.link-groups.cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+@media (max-width: 800px) {
+  .link-groups,
+  .link-groups.cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .coord-cluster-list {
   display: flex;
   flex-wrap: wrap;

@@ -4,14 +4,29 @@ import { getSql } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+type Coord = { id: number; full_name: string };
+
 type Row = {
   ashkol: string;
   settlement_name: string;
   institution_id: number;
   institution_name: string;
   coordinator_names: string;
+  coordinators: Coord[] | string | null;
   ops_done: boolean | null;
 };
+
+function parseCoords(value: Row["coordinators"]): Coord[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as Coord[];
+    } catch {
+      return [];
+    }
+  }
+  return value;
+}
 
 /**
  * Admin / רכז על: ashkols already linked to an institution (and optionally done),
@@ -44,6 +59,18 @@ export async function GET() {
               ),
               ''
             ) AS coordinator_names,
+            coalesce(
+              (
+                SELECT json_agg(
+                  json_build_object('id', u.id, 'full_name', u.full_name)
+                  ORDER BY u.full_name
+                )
+                FROM institution_coordinators link
+                JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+                WHERE link.institution_id = i.id
+              ),
+              '[]'
+            ) AS coordinators,
             ops.done AS ops_done
           FROM institution_clusters ic
           JOIN clusters cl ON cl.ashkol = ic.ashkol
@@ -68,6 +95,20 @@ export async function GET() {
               ),
               ''
             ) AS coordinator_names,
+            coalesce(
+              (
+                SELECT json_agg(
+                  json_build_object('id', u.id, 'full_name', u.full_name)
+                  ORDER BY u.full_name
+                )
+                FROM institution_coordinators link
+                JOIN users u ON u.id = link.user_id
+                  AND u.role = 'coordinator'
+                  AND u.manager_id = ${user!.id}
+                WHERE link.institution_id = i.id
+              ),
+              '[]'
+            ) AS coordinators,
             ops.done AS ops_done
           FROM institution_clusters ic
           JOIN clusters cl ON cl.ashkol = ic.ashkol
@@ -90,6 +131,7 @@ export async function GET() {
     institution_id: r.institution_id,
     institution_name: r.institution_name,
     coordinator_names: r.coordinator_names,
+    coordinators: parseCoords(r.coordinators),
     done: r.ops_done === true,
   }));
 

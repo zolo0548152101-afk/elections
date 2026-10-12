@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ClusterRowLinks, FirstClusterLink } from "@/components/ClusterLinks";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
+
+type Coord = { id: number; full_name: string };
 
 type Row = {
   ashkol: string;
@@ -12,6 +15,7 @@ type Row = {
   institution_id: number;
   institution_name: string;
   coordinator_names: string;
+  coordinators: Coord[];
   done: boolean;
 };
 
@@ -24,6 +28,7 @@ export default function TeamClustersPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
   const [busyAshkol, setBusyAshkol] = useState<string | null>(null);
+  const [editKey, setEditKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const me = await fetch("/api/auth/me").then((r) => r.json());
@@ -103,7 +108,7 @@ export default function TeamClustersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>אשכולות</h1>
             <p className="lede">
-              אשכולות שקושרו למוסד — סננו לפי סטטוס וסמנו בוצע / לא בוצע.
+              אשכולות שקושרו למוסד — קשרו מוסד ורכז, וסמנו בוצע / לא בוצע.
             </p>
           </div>
         </header>
@@ -141,8 +146,17 @@ export default function TeamClustersPage() {
             </label>
           </div>
         )}
+        {!loading && (
+          <FirstClusterLink
+            onChanged={load}
+            onMessage={(kind, text) => {
+              setMsgKind(kind);
+              setMsg(text);
+            }}
+          />
+        )}
         {!loading && filtered.length > 0 && (
-          <div className="table-wrap table-compact">
+          <div className={`table-wrap table-compact${editKey ? " is-editing" : ""}`}>
             <table>
               <thead>
                 <tr>
@@ -154,18 +168,40 @@ export default function TeamClustersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => (
-                  <tr key={`${r.ashkol}:${r.institution_id}`}>
+                {filtered.map((r) => {
+                  const key = `${r.ashkol}:${r.institution_id}`;
+                  const open = editKey === key;
+                  const institutions = [
+                    ...new Map(
+                      rows
+                        .filter((x) => x.ashkol === r.ashkol)
+                        .map((x) => [
+                          x.institution_id,
+                          { id: x.institution_id, name: x.institution_name },
+                        ]),
+                    ).values(),
+                  ];
+                  return (
+                  <Fragment key={key}>
+                  <tr className={open ? "row-editing" : undefined}>
                     <td className="mono">
                       <ShowMore
                         text={formatAshkolLabel(r.ashkol, r.settlement_name)}
                       />
                     </td>
                     <td>
-                      <ShowMore text={r.institution_name} />
+                      {open ? (
+                        <span className="muted-cell">נערך בשורה למטה</span>
+                      ) : (
+                        <ShowMore text={r.institution_name} />
+                      )}
                     </td>
                     <td>
-                      <ShowMore text={r.coordinator_names} />
+                      {open ? (
+                        <span className="muted-cell">נערך בשורה למטה</span>
+                      ) : (
+                        <ShowMore text={r.coordinator_names} />
+                      )}
                     </td>
                     <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
                     <td className="actions-cell">
@@ -189,9 +225,33 @@ export default function TeamClustersPage() {
                           ? "…"
                           : "לא בוצע"}
                       </button>
+                      <button
+                        type="button"
+                        className="export"
+                        onClick={() => setEditKey((cur) => (cur === key ? null : key))}
+                      >
+                        {open ? "סגור" : "קשרים"}
+                      </button>
                     </td>
                   </tr>
-                ))}
+                  {open && (
+                    <tr className="edit-detail-row">
+                      <td colSpan={5}>
+                        <ClusterRowLinks
+                          row={r}
+                          institutions={institutions}
+                          onChanged={load}
+                          onMessage={(kind, text) => {
+                            setMsgKind(kind);
+                            setMsg(text);
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table>
             <p className="map-credit" style={{ marginTop: "0.75rem" }}>

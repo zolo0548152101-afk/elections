@@ -7,6 +7,7 @@ import {
   type CoordCluster,
   type CoordInstitution,
 } from "@/components/CoordClusterEditor";
+import { CoordinatorInstitutionLinks } from "@/components/CoordinatorInstitutionLinks";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
@@ -81,8 +82,8 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
               {meRole === "super_admin"
-                ? "כל הרכזים במערכת — מוסדות, אשכולות והתקדמות. ניתן להוסיף/להסיר אשכולות."
-                : "רכזים תחתיכם — מוסדות, אשכולות והתקדמות. ניתן להוסיף/להסיר אשכולות."}
+                ? "כל הרכזים במערכת — קשרו מוסד ואשכול מכל רכז."
+                : "רכזים תחתיכם — קשרו מוסד ואשכול מכל רכז."}
             </p>
           </div>
         </header>
@@ -132,13 +133,17 @@ export default function TeamCoordinatorsPage() {
                           <ShowMore text={c.full_name} />
                         </td>
                         <td>
-                          <ShowMore
-                            text={
-                              c.institutions.length
-                                ? c.institutions.map((i) => i.name).join(" · ")
-                                : ""
-                            }
-                          />
+                          {open ? (
+                            <span className="muted-cell">נערך בשורה למטה</span>
+                          ) : (
+                            <ShowMore
+                              text={
+                                c.institutions.length
+                                  ? c.institutions.map((i) => i.name).join(" · ")
+                                  : ""
+                              }
+                            />
+                          )}
                         </td>
                         <td title={open ? undefined : ashkolText || undefined}>
                           {open ? (
@@ -159,22 +164,36 @@ export default function TeamCoordinatorsPage() {
                               setEditId((id) => (id === c.id ? null : c.id))
                             }
                           >
-                            {open ? "סגור" : "עריכת אשכולות"}
+                            {open ? "סגור" : "קשרים"}
                           </button>
                         </td>
                       </tr>
                       {open && (
                         <tr className="edit-detail-row">
                           <td colSpan={6}>
-                            <CoordClusterEditor
-                              institutions={c.institutions}
-                              clusters={clusters}
-                              onChanged={load}
-                              onMessage={(kind, text) => {
-                                setMsgKind(kind);
-                                setMsg(text);
-                              }}
-                            />
+                            <div className="link-groups">
+                              <CoordinatorInstitutionLinks
+                                coordinatorId={c.id}
+                                institutions={c.institutions}
+                                onChanged={load}
+                                onMessage={(kind, text) => {
+                                  setMsgKind(kind);
+                                  setMsg(text);
+                                }}
+                              />
+                              <div>
+                                <h3 className="link-group-title">אשכולות</h3>
+                                <CoordClusterEditor
+                                  institutions={c.institutions}
+                                  clusters={clusters}
+                                  onChanged={load}
+                                  onMessage={(kind, text) => {
+                                    setMsgKind(kind);
+                                    setMsg(text);
+                                  }}
+                                />
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       )}

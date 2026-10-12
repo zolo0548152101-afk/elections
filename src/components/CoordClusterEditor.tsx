@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AshkolSearch } from "@/components/AshkolSearch";
 import { ShowMore } from "@/components/ShowMore";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
@@ -41,6 +41,13 @@ export function CoordClusterEditor({
   const [ashkol, setAshkol] = useState("");
   const [pickerKey, setPickerKey] = useState(0);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setInstitutionId((cur) => {
+      if (institutions.some((i) => String(i.id) === cur)) return cur;
+      return institutions[0] ? String(institutions[0].id) : "";
+    });
+  }, [institutions]);
 
   if (institutions.length === 0) {
     return (
