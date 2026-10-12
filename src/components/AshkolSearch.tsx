@@ -10,13 +10,21 @@ export function AshkolSearch({
   disabled,
   onPick,
   onSubmit,
+  initialAshkol = "",
+  initialSettlement = null,
 }: {
   disabled?: boolean;
   onPick: (ashkol: string) => void;
   onSubmit?: () => void;
+  /** Shown as the current choice. The parent already holds the ashkol id. */
+  initialAshkol?: string;
+  initialSettlement?: string | null;
 }) {
-  const [q, setQ] = useState("");
-  const [pickedLabel, setPickedLabel] = useState("");
+  const initialLabel = initialAshkol
+    ? formatAshkolLabel(initialAshkol, initialSettlement)
+    : "";
+  const [q, setQ] = useState(initialLabel);
+  const [pickedLabel, setPickedLabel] = useState(initialLabel);
   const [hits, setHits] = useState<Hit[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);

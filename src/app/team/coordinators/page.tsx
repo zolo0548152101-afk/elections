@@ -2,12 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  CoordClusterEditor,
-  type CoordCluster,
-  type CoordInstitution,
+import type {
+  CoordCluster,
+  CoordInstitution,
 } from "@/components/CoordClusterEditor";
-import { CoordinatorInstitutionLinks } from "@/components/CoordinatorInstitutionLinks";
+import { CoordinatorLinkRows } from "@/components/CoordinatorLinkRows";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
@@ -82,8 +81,8 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
             <p className="lede">
               {meRole === "super_admin"
-                ? "כל הרכזים במערכת — קשרו מוסד ואשכול מכל רכז."
-                : "רכזים תחתיכם — קשרו מוסד ואשכול מכל רכז."}
+                ? "כל הרכזים במערכת — כל שורה מקשרת מוסד לאשכול."
+                : "רכזים תחתיכם — כל שורה מקשרת מוסד לאשכול."}
             </p>
           </div>
         </header>
@@ -171,29 +170,16 @@ export default function TeamCoordinatorsPage() {
                       {open && (
                         <tr className="edit-detail-row">
                           <td colSpan={6}>
-                            <div className="link-groups">
-                              <CoordinatorInstitutionLinks
-                                coordinatorId={c.id}
-                                institutions={c.institutions}
-                                onChanged={load}
-                                onMessage={(kind, text) => {
-                                  setMsgKind(kind);
-                                  setMsg(text);
-                                }}
-                              />
-                              <div>
-                                <h3 className="link-group-title">אשכולות</h3>
-                                <CoordClusterEditor
-                                  institutions={c.institutions}
-                                  clusters={clusters}
-                                  onChanged={load}
-                                  onMessage={(kind, text) => {
-                                    setMsgKind(kind);
-                                    setMsg(text);
-                                  }}
-                                />
-                              </div>
-                            </div>
+                            <CoordinatorLinkRows
+                              coordinatorId={c.id}
+                              institutions={c.institutions}
+                              clusters={clusters}
+                              onChanged={load}
+                              onMessage={(kind, text) => {
+                                setMsgKind(kind);
+                                setMsg(text);
+                              }}
+                            />
                           </td>
                         </tr>
                       )}

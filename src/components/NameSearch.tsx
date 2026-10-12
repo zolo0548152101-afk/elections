@@ -10,14 +10,17 @@ export function NameSearch({
   placeholder,
   disabled,
   onPick,
+  initialLabel = "",
 }: {
   endpoint: string;
   placeholder: string;
   disabled?: boolean;
   onPick: (id: string) => void;
+  /** Shown as the current choice. The parent already holds the id. */
+  initialLabel?: string;
 }) {
-  const [q, setQ] = useState("");
-  const [pickedLabel, setPickedLabel] = useState("");
+  const [q, setQ] = useState(initialLabel);
+  const [pickedLabel, setPickedLabel] = useState(initialLabel);
   const [hits, setHits] = useState<Hit[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);

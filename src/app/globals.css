@@ -1030,6 +1030,76 @@ tbody tr.cluster-row-selected:hover {
   gap: 0.45rem;
 }
 
+.coord-link-rows {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.coord-link-rows h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.coord-link-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coord-link-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.35rem 0.55rem;
+}
+
+.coord-link-part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.coord-link-k {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.coord-link-line-edit {
+  align-items: end;
+  background: transparent;
+  border: 0;
+  padding: 0.1rem 0;
+}
+
+.coord-link-line-edit label {
+  display: grid;
+  gap: 0.2rem;
+  flex: 1 1 16rem;
+  min-width: min(100%, 16rem);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.coord-link-line .export,
+.coord-link-line .reset {
+  padding: 0.4rem 0.75rem;
+  min-height: 0;
+  font-size: 0.85rem;
+}
+
 .link-groups {
   display: grid;
   grid-template-columns: 1fr 1fr;
