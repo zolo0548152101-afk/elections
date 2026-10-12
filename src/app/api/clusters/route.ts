@@ -106,17 +106,24 @@ export async function GET(req: NextRequest) {
   });
 
   const linked = await linkedAshkolSet(sql);
-  const doneStats = await ashkolStreetStatsForUser(
-    sql,
-    sorted.map((c) => c.ashkol),
-    user.id,
+  const ashkolList = sorted.map((c) => c.ashkol);
+  const doneStats = await ashkolStreetStatsForUser(sql, ashkolList, user.id);
+  const opsDone = new Set(
+    ashkolList.length === 0
+      ? []
+      : (
+          (await sql`
+            SELECT ashkol FROM ashkol_ops_status
+            WHERE done = true AND ashkol = ANY(${ashkolList})
+          `) as { ashkol: string }[]
+        ).map((r) => r.ashkol),
   );
 
   const withMap = sorted.map((c) => {
     const st = doneStats.get(c.ashkol);
     const status = {
       linked: linked.has(c.ashkol),
-      done: st?.done ?? false,
+      done: (st?.done ?? false) || opsDone.has(c.ashkol),
       street_total: st?.street_total ?? 0,
       street_done: st?.street_done ?? 0,
     };
