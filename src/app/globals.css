@@ -796,6 +796,16 @@ tbody tr.cluster-row-selected:hover {
   max-width: 260px;
 }
 
+.institution-add-search {
+  margin-top: 0.5rem;
+}
+
+.institution-add-search .ashkol-search {
+  flex: 1 1 100%;
+  max-width: none;
+  min-width: 0;
+}
+
 .links-subnav {
   display: flex;
   flex-wrap: wrap;
@@ -953,8 +963,11 @@ tbody tr.cluster-row-selected:hover {
 }
 
 /* Password show-button + long institution names need a full row */
-.form-grid > label.field-wide {
+.form-grid > label.field-wide,
+.form-grid > .field-wide {
   grid-column: 1 / -1;
+  min-width: 0;
+  overflow: visible;
 }
 
 .form-grid > label.field-password .password-field {
