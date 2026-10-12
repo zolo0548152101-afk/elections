@@ -5,7 +5,11 @@ import {
   coordinatorInstitutionIds,
   syncPrimaryInstitution,
 } from "@/lib/streets-access";
-import { ashkolStreetStats } from "@/lib/cluster-status";
+import {
+  ashkolStreetStats,
+  clusterIsDone,
+  opsDoneAshkols,
+} from "@/lib/cluster-status";
 
 export const runtime = "nodejs";
 
@@ -53,6 +57,7 @@ async function withClusterDoneStatus<T extends { linked_clusters?: unknown }>(
     ),
   ];
   const stats = await ashkolStreetStats(sql, ashkols);
+  const opsDone = await opsDoneAshkols(sql, ashkols);
   return institutions.map((inst) => {
     const clusters = parseLinkedClusters(inst.linked_clusters).map((c) => {
       const st = stats.get(c.ashkol);
@@ -60,7 +65,7 @@ async function withClusterDoneStatus<T extends { linked_clusters?: unknown }>(
         ...c,
         street_total: st?.street_total ?? 0,
         street_done: st?.street_done ?? 0,
-        done: st?.done ?? false,
+        done: clusterIsDone(st?.done ?? false, opsDone, c.ashkol),
       };
     });
     return { ...inst, linked_clusters: clusters };
