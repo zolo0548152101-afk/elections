@@ -180,6 +180,13 @@ h1 {
   transition: background-color 180ms ease, opacity 180ms ease, transform 180ms ease;
 }
 
+a.export {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .reset {
   background: var(--accent);
   color: white;
@@ -1529,5 +1536,170 @@ tbody tr.cluster-row-selected:hover {
 
   .map-side-cards {
     grid-template-columns: 1fr;
+  }
+}
+
+.sheet-doc {
+  background: #fff;
+  color: var(--ink);
+  border-radius: 16px;
+  padding: 0.65rem 0.8rem 0.75rem;
+  margin: 0.5rem auto 1rem;
+  width: min(100%, 210mm);
+  max-width: 210mm;
+  box-shadow: var(--shadow);
+}
+
+.sheet-doc h1,
+.sheet-doc h2,
+.sheet-doc h3 {
+  color: var(--ink);
+}
+
+.sheet-doc h1 {
+  font-size: 1.35rem;
+}
+
+.sheet-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: start;
+  margin-bottom: 0.35rem;
+}
+
+.sheet-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.sheet-people {
+  margin: 0;
+}
+
+.sheet-person {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  direction: ltr;
+  gap: 0.05rem;
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sheet-person + .sheet-person {
+  margin-top: 0.15rem;
+}
+
+.sheet-actions {
+  flex: 0 0 auto;
+}
+
+.sheet-section {
+  margin-top: 0.15rem;
+}
+
+.sheet-section + .sheet-section {
+  margin-top: 0.7rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+}
+
+.sheet-section h2 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+}
+
+.sheet-section h3 {
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.95rem;
+}
+
+.sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.2rem 0.45rem;
+  margin: 0.3rem 0 0.35rem;
+}
+
+.sheet-stats div {
+  margin: 0;
+}
+
+.sheet-stats dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.sheet-stats dd {
+  margin: 0.1rem 0 0;
+  font-weight: 700;
+}
+
+.sheet-k {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.sheet-map {
+  height: 52mm;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.sheet-streets {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.sheet-streets th,
+.sheet-streets td {
+  text-align: start;
+  padding: 0.14rem 0.28rem;
+  border-bottom: 1px solid var(--line);
+}
+
+@page {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  .app-nav,
+  .sheet-actions {
+    display: none !important;
+  }
+
+  .sheet-doc {
+    margin: 0;
+    width: auto;
+    max-width: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .sheet-map {
+    height: 55mm;
+    break-inside: avoid;
+  }
+
+  .sheet-streets tr {
+    break-inside: avoid;
+  }
+
+  .leaflet-control-container {
+    display: none !important;
   }
 }

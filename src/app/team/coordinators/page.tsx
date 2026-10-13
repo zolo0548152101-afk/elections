@@ -156,6 +156,14 @@ export default function TeamCoordinatorsPage() {
                         </td>
                         <td>{count}</td>
                         <td className="actions-cell">
+                          <a
+                            className="export"
+                            href={`/team/coordinators/${c.id}/sheet`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            PDF
+                          </a>
                           <button
                             type="button"
                             className="export"
