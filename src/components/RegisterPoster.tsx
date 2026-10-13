@@ -6,35 +6,6 @@ import { SHIRT_SIZES } from "@/lib/activists";
 
 type Hit = { id: number; name: string; settlement_name: string | null; label: string };
 
-const TIMELINE = [
-  { label: "בוקר", note: "מצביעים בעצמם, חוזרים לישיבה", tick: "black" },
-  { label: "13:00", note: "יוצאים לעיר", tick: "black" },
-  { label: "15:00", note: "כינוס וחלוקה לזוגות ורחובות", tick: "navy" },
-  { label: "סבב", note: "40–60 דקות של דפיקות", tick: "gold" },
-  { label: "כינוס", note: "אוכל, שתייה, שירה – ושוב לסבב", tick: "gold" },
-  { label: "21:00", note: "ספרינט אחרון: ממשיכים בכל הכח", tick: "wine" },
-  { label: "22:00", note: "הקלפיות נסגרות. עובדים עד הדקה האחרונה", tick: "red" },
-];
-
-const SCRIPTS = [
-  {
-    quote: "כן, כבר הצבענו",
-    reply: "כל הכבוד! יש עוד מישהו בבית שעוד לא הצביע?",
-  },
-  {
-    quote: "עוד לא / אחר כך",
-    reply: "הקלפי פתוחה עד 22:00. זה הזמן לצאת! צריך הסעה? אנחנו מסדרים.",
-  },
-  {
-    quote: "לא יודע איפה הקלפי שלי",
-    reply: "שנייה, בודקים יחד בטלפון שלכם. סורקים את הברקוד למטה.",
-  },
-  {
-    quote: "לא מעניין אותי / כל הפוליטיקאים מושחתים",
-    reply: "אח שלי, אלה בחירות גורליות. עם ישראל צריך אותך. בשבילנו – בוא, צא להצביע, ננצח בענק!",
-  },
-];
-
 export function RegisterPoster() {
   const params = useSearchParams();
   const preset = params.get("institution") ?? "";
@@ -125,52 +96,20 @@ export function RegisterPoster() {
 
   return (
     <main className="register-poster">
-      <header className="register-hero">
-        <img src="/brand/yotzim-logo.png" alt="יוצאים מצביעים את הימין" />
-        <div>
-          <p className="register-kicker">27.10 · יום שלישי · מבצע דלת לדלת</p>
-          <h1>היום שלנו: 15:00 עד 22:00</h1>
-          <p>
-            ההצלחה לא נמדדת במי שהתחיל הכי חזק – אלא במי שמחזיק את הדופק עד סגירת הקלפיות.
-          </p>
-        </div>
+      <header className="register-top">
+        <strong>מטה ימין מנצח</strong>
       </header>
-
-      <div className="register-timeline" aria-label="לוח הזמנים">
-        {TIMELINE.map((item) => (
-          <div key={item.label}>
-            <span className={`tick tick-${item.tick}`} />
-            <strong>{item.label}</strong>
-            <p>{item.note}</p>
-          </div>
-        ))}
-      </div>
-
-      <section className="register-script">
-        <h2>מה אומרים בדלת</h2>
-        <div className="register-opener">
-          <p>פותחים עם אמונה בלב וחיוך על הפנים</p>
-          <strong>״ערב טוב! אנחנו מתנדבים ממטה ימין מנצח. רק רצינו לוודא – כבר הספקתם להצביע היום?״</strong>
-        </div>
-        <div className="register-cards">
-          {SCRIPTS.map((card) => (
-            <article key={card.quote}>
-              <strong>״{card.quote}״</strong>
-              <p>{card.reply}</p>
-            </article>
-          ))}
-        </div>
+      <section className="register-hero">
+        <img src="/brand/yotzim-slogan.jpg" alt="יוצאים. מצביעים. מצילים את הימין!" />
       </section>
-
       <section className="register-card">
-        <h2>רישום פעילים</h2>
+        <h1>רישום פעילים</h1>
         {done ? (
           <div className="register-success">
             <p>ההרשמה נקלטה.</p>
             <p>
               {done.name} · {done.institution} · מידה {done.shirt}
             </p>
-            <p>היום שלנו: 15:00 עד 22:00.</p>
           </div>
         ) : (
           <form onSubmit={submit}>
@@ -237,23 +176,11 @@ export function RegisterPoster() {
             </label>
             {error ? <p className="register-error">{error}</p> : null}
             <button type="submit" className="register-submit" disabled={busy}>
-              {busy ? "שולח…" : "נרשמים למבצע"}
+              {busy ? "שולח…" : "שליחה"}
             </button>
           </form>
         )}
       </section>
-
-      <section className="register-where">
-        <div>
-          <h2>איפה אני מצביע? סורקים ובודקים</h2>
-          <p>
-            הבוחר מזיז בעצמו בטלפון שלו מספר תעודת זהות ותאריך הנפקה, ומקבל את כתובת הקלפי.
-          </p>
-          <a href="https://gov.il/apps/moin/bocharim">gov.il/apps/moin/bocharim</a>
-        </div>
-      </section>
-
-      <p className="register-footer">תזכירו לכל בוחר: לקחת תעודה מזהה עם תמונה!</p>
     </main>
   );
 }
