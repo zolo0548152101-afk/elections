@@ -121,6 +121,7 @@ export function RoutePlanner({
   onMode,
   onFeatures,
   onStages,
+  onActive,
   bindRef,
 }: {
   ashkol: string;
@@ -134,6 +135,7 @@ export function RoutePlanner({
       streets: { street_id: string; reversed: boolean; from_ratio: number; to_ratio: number }[];
     }[],
   ) => void;
+  onActive: (stageNo: number | null) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
   const [stages, setStages] = useState<RouteStage[]>([]);
@@ -154,6 +156,8 @@ export function RoutePlanner({
   const ticket = useRef(0);
   const onFeaturesRef = useRef(onFeatures);
   const onStagesRef = useRef(onStages);
+  const onActiveRef = useRef(onActive);
+  onActiveRef.current = onActive;
   stagesRef.current = stages;
   activeRef.current = active;
   ashkolRef.current = ashkol;
@@ -177,6 +181,10 @@ export function RoutePlanner({
       })),
     );
   }, [stages, stageFilter]);
+
+  useEffect(() => {
+    onActiveRef.current(active);
+  }, [active]);
 
   useEffect(() => {
     let cancelled = false;
@@ -573,12 +581,20 @@ export function RoutePlanner({
       {shownStages.map((stage) => {
         const expanded = openStage === stage.stage_no;
         return (
-          <article className="route-stage" key={stage.stage_no}>
+          <article
+            className={`route-stage${active === stage.stage_no ? " is-current" : ""}`}
+            key={stage.stage_no}
+          >
             <div className="route-stage-summary">
               <button
                 type="button"
                 aria-expanded={expanded}
-                onClick={() => setOpenStage(expanded ? null : stage.stage_no)}
+                aria-pressed={active === stage.stage_no}
+                onClick={() => {
+                  setActive(stage.stage_no);
+                  activeRef.current = stage.stage_no;
+                  setOpenStage(expanded ? null : stage.stage_no);
+                }}
               >
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>
               </button>

@@ -1631,6 +1631,10 @@ tbody tr.cluster-row-selected:hover {
   background: #fff;
 }
 
+.route-stage.is-current {
+  border-color: #6d28d9;
+}
+
 .route-stage-summary {
   display: flex;
   align-items: center;

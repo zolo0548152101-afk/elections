@@ -239,10 +239,10 @@ export function StreetMap({
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
   const [routeStages, setRouteStages] = useState<{ stage_no: number; hasPoint: boolean }[]>([]);
+  const [activeStage, setActiveStage] = useState<number | null>(null);
   const routeStreetRef = useRef<
     Record<string, { reversed: boolean; from: number; to: number }>
   >({});
-  const [stageMenu, setStageMenu] = useState(false);
   const routeModeRef = useRef<RouteMode>("off");
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
@@ -1575,7 +1575,6 @@ export function StreetMap({
     setPanel({ kind: "start", lat, lng, mode: "choose" });
   };
   openStreetPanelRef.current = (id, name) => {
-    setStageMenu(false);
     const saved = routeStreetRef.current[id];
     const portion = portionFromSaved(saved?.from ?? 0, saved?.to ?? 1);
     setPanel({
@@ -1836,40 +1835,24 @@ export function StreetMap({
             </button>
           </div>
           <div className="route-inline route-stage-row">
-            {routeStages.length > 0 ? (
-              <button
-                type="button"
-                className="route-icon-btn route-stage-dot"
-                style={{ background: stageColor(routeStages.length === 1 ? routeStages[0]!.stage_no : 1) }}
-                aria-label={routeStages.length > 1 ? "בחירת שלב" : `שלב ${routeStages[0]!.stage_no}`}
-                aria-expanded={routeStages.length > 1 ? stageMenu : undefined}
-                onClick={() => {
-                  if (routeStages.length > 1) {
-                    setStageMenu((open) => !open);
-                    return;
-                  }
-                  addPanelStreet(routeStages[0]!.stage_no);
-                }}
-              />
-            ) : null}
-            {stageMenu && routeStages.length > 1 ? (
-              <div className="route-stage-menu" role="menu">
-                {routeStages.map((stage) => (
-                  <button
-                    key={stage.stage_no}
-                    type="button"
-                    role="menuitem"
-                    className="route-icon-btn route-stage-dot"
-                    style={{ background: stageColor(stage.stage_no) }}
-                    aria-label={`שלב ${stage.stage_no}`}
-                    onClick={() => {
-                      setStageMenu(false);
-                      addPanelStreet(stage.stage_no);
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
+            <button
+              type="button"
+              className="route-icon-btn route-stage-dot"
+              style={{ background: stageColor(activeStage ?? routeStages[0]?.stage_no ?? 1) }}
+              aria-label={
+                activeStage
+                  ? `הוסף לשלב ${activeStage}`
+                  : routeStages[0]
+                    ? `הוסף לשלב ${routeStages[0].stage_no}`
+                    : "הוסף לשלב"
+              }
+              onClick={() => {
+                const target =
+                  routeStages.find((stage) => stage.stage_no === activeStage)?.stage_no ??
+                  routeStages[0]?.stage_no;
+                addPanelStreet(target ?? "new");
+              }}
+            />
             <button
               type="button"
               className="route-icon-btn"
@@ -2171,6 +2154,7 @@ export function StreetMap({
                 mode={routeMode}
                 onMode={setRouteMode}
                 onFeatures={setRouteFeatures}
+                onActive={setActiveStage}
                 onStages={(stages) => {
                   setRouteStages(
                     stages.map((stage) => ({ stage_no: stage.stage_no, hasPoint: stage.hasPoint })),
