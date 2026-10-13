@@ -6,16 +6,20 @@ import type { RouteStage } from "@/lib/cluster-route-types";
 
 const STAGE_COLORS = ["#c45c26", "#2f6fed", "#0f766e", "#7c3aed", "#be123c", "#a16207"];
 
+export function stageColor(stageNo: number) {
+  return STAGE_COLORS[(Math.max(stageNo, 1) - 1) % STAGE_COLORS.length]!;
+}
+
 export type RouteMode = "off" | "street" | "point";
 
-type RouteApi = {
-  addStreet: (street: { id: string; name_he: string }) => void;
+type StreetPick = { id: string; name_he: string };
+
+export type RouteApi = {
+  addStreet: (street: StreetPick) => void;
+  addStreetToStage: (street: StreetPick, stageNo: number) => void;
+  addStreetToNewStage: (street: StreetPick) => void;
   addPoint: (lat: number, lng: number) => void;
 };
-
-function stageColor(stageNo: number) {
-  return STAGE_COLORS[(stageNo - 1) % STAGE_COLORS.length]!;
-}
 
 function toFeatures(stages: RouteStage[]): Feature[] {
   const features: Feature[] = [];
@@ -67,12 +71,14 @@ export function RoutePlanner({
   mode,
   onMode,
   onFeatures,
+  onStages,
   bindRef,
 }: {
   ashkol: string;
   mode: RouteMode;
   onMode: (mode: RouteMode) => void;
   onFeatures: (features: Feature[]) => void;
+  onStages: (stages: { stage_no: number }[]) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
   const [stages, setStages] = useState<RouteStage[]>([]);
@@ -84,13 +90,16 @@ export function RoutePlanner({
   const ashkolRef = useRef(ashkol);
   const ticket = useRef(0);
   const onFeaturesRef = useRef(onFeatures);
+  const onStagesRef = useRef(onStages);
   stagesRef.current = stages;
   activeRef.current = active;
   ashkolRef.current = ashkol;
   onFeaturesRef.current = onFeatures;
+  onStagesRef.current = onStages;
 
   useEffect(() => {
     onFeaturesRef.current(toFeatures(stages));
+    onStagesRef.current(stages.map((stage) => ({ stage_no: stage.stage_no })));
   }, [stages]);
 
   useEffect(() => {
@@ -155,6 +164,28 @@ export function RoutePlanner({
     return { stages: prev, stageNo: no };
   }
 
+  function placeStreet(street: StreetPick, stageNo: number, baseStages: RouteStage[]) {
+    let note = "";
+    let geometry: RouteStage["streets"][number]["geometry"] = null;
+    for (const stage of baseStages) {
+      const found = stage.streets.find((s) => s.street_id === street.id);
+      if (!found) continue;
+      note = found.note;
+      geometry = found.geometry;
+    }
+    return baseStages.map((stage) => {
+      const streets = stage.streets.filter((s) => s.street_id !== street.id);
+      if (stage.stage_no !== stageNo) return { ...stage, streets };
+      return {
+        ...stage,
+        streets: [
+          ...streets,
+          { street_id: street.id, name_he: street.name_he, note, geometry },
+        ],
+      };
+    });
+  }
+
   bindRef.current = {
     addStreet(street) {
       const { stages: base, stageNo } = withStage(activeRef.current);
@@ -178,6 +209,33 @@ export function RoutePlanner({
       });
       if (next.every((stage, i) => stage === base[i])) return;
       void persist(next);
+    },
+    addStreetToStage(street, stageNo) {
+      const prev = stagesRef.current;
+      if (!prev.some((stage) => stage.stage_no === stageNo)) return;
+      if (prev.some((stage) => stage.stage_no === stageNo && stage.streets.some((s) => s.street_id === street.id))) {
+        return;
+      }
+      activeRef.current = stageNo;
+      setActive(stageNo);
+      void persist(placeStreet(street, stageNo, prev));
+    },
+    addStreetToNewStage(street) {
+      const stripped = stagesRef.current.map((stage) => ({
+        ...stage,
+        streets: stage.streets.filter((s) => s.street_id !== street.id),
+      }));
+      const stageNo = (stripped.at(-1)?.stage_no ?? 0) + 1;
+      activeRef.current = stageNo;
+      setActive(stageNo);
+      void persist([
+        ...stripped,
+        {
+          stage_no: stageNo,
+          streets: [{ street_id: street.id, name_he: street.name_he, note: "", geometry: null }],
+          point: null,
+        },
+      ]);
     },
     addPoint(lat, lng) {
       const { stages: base, stageNo } = withStage(activeRef.current);
@@ -275,9 +333,13 @@ export function RoutePlanner({
       {loading ? <p className="assign-empty">טוען מסלול…</p> : null}
       {!loading && stages.length === 0 ? (
         <p className="assign-empty">
-          הוסיפו שלב, סמנו רחובות על המפה, ואז נקודת איסוף.
+          לחיצה ארוכה על רחוב פותחת בחירת שלב. נצבעים רק הרחובות ששויכו לשלב.
         </p>
-      ) : null}
+      ) : (
+        <p className="assign-empty">
+          לחיצה ארוכה על רחוב כדי לשייך אותו לשלב. כל שלב בצבע משלו.
+        </p>
+      )}
       {stages.map((stage) => {
         const pickingStreet = mode === "street" && active === stage.stage_no;
         const pickingPoint = mode === "point" && active === stage.stage_no;

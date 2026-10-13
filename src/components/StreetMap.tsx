@@ -18,7 +18,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { RoutePlanner, type RouteMode } from "@/components/RoutePlanner";
+import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
 type SearchStreet = {
   id: string;
@@ -114,10 +114,12 @@ function clusterFromProps(p: Record<string, unknown>): ClusterView {
   };
 }
 
-/** Status colors: blue unassigned, orange assigned-open, green done. */
+/** Street status. Cluster dots from the filter use a separate gold. */
 const COLOR_UNASSIGNED = "#2563eb";
 const COLOR_ASSIGNED = "#c45c26";
 const COLOR_DONE = "#16a34a";
+const COLOR_FILTERED = "#f5b942";
+const COLOR_SEARCH = "#22d3ee";
 
 function streetStatusPaint() {
   return {
@@ -215,12 +217,11 @@ export function StreetMap({
   const [mapFailed, setMapFailed] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
+  const routeStagesRef = useRef<{ stage_no: number }[]>([]);
   const routeModeRef = useRef<RouteMode>("off");
-  const routeApiRef = useRef<{
-    addStreet: (street: { id: string; name_he: string }) => void;
-    addPoint: (lat: number, lng: number) => void;
-  } | null>(null);
+  const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
+  const [searchPlace, setSearchPlace] = useState("");
   const [routeFeatures, setRouteFeatures] = useState<Feature[]>([]);
 
   useEffect(() => {
@@ -373,9 +374,9 @@ export function StreetMap({
                 "case",
                 ["==", ["get", "done"], 1],
                 COLOR_DONE,
-                ["==", ["get", "linked"], 1],
-                COLOR_ASSIGNED,
-                COLOR_UNASSIGNED,
+                ["==", ["get", "searched"], 1],
+                COLOR_SEARCH,
+                COLOR_FILTERED,
               ],
               "circle-stroke-width": [
                 "case",
@@ -466,7 +467,95 @@ export function StreetMap({
     });
 
     let routeClickHandled = false;
+    let longFired = false;
+    let pressTimer: number | null = null;
+    let pressAt: { x: number; y: number } | null = null;
+
+    function clearPress() {
+      if (pressTimer != null) window.clearTimeout(pressTimer);
+      pressTimer = null;
+      pressAt = null;
+    }
+
+    function openStagePopup(e: MapLayerMouseEvent) {
+      const feature = e.features?.[0];
+      const id = String(feature?.properties?.id ?? "");
+      const name = String(feature?.properties?.name_he ?? "");
+      if (!id) return;
+      longFired = true;
+      const street = { id, name_he: name || id };
+      const stages = routeStagesRef.current;
+      const buttons = stages
+        .map(
+          (stage) =>
+            `<button type="button" class="route-pop-btn" data-stage="${stage.stage_no}"><span class="route-pop-swatch" style="background:${stageColor(stage.stage_no)}"></span>שלב ${stage.stage_no}</button>`,
+        )
+        .join("");
+      streetPopupRef.current?.remove();
+      const popup = new Popup({ closeButton: true, closeOnClick: true, maxWidth: "280px" })
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div dir="rtl" class="route-pop"><strong>${esc(street.name_he)}</strong><p>הוספה לשלב. נצבע רק הרחוב הזה.</p>${buttons}<button type="button" class="route-pop-btn" data-stage="new">שלב חדש</button></div>`,
+        )
+        .addTo(map);
+      streetPopupRef.current = popup;
+      const root = popup.getElement();
+      root?.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const which = button.dataset.stage;
+          if (which === "new") routeApiRef.current?.addStreetToNewStage(street);
+          else if (which) routeApiRef.current?.addStreetToStage(street, Number(which));
+          popup.remove();
+        });
+      });
+    }
+
+    function armPress(e: {
+      point: { x: number; y: number };
+      lngLat: MapLayerMouseEvent["lngLat"];
+      features?: MapLayerMouseEvent["features"];
+    }) {
+      clearPress();
+      longFired = false;
+      pressAt = { x: e.point.x, y: e.point.y };
+      const origin = e.lngLat;
+      const feature = e.features?.[0];
+      pressTimer = window.setTimeout(() => {
+        pressTimer = null;
+        if (!feature) return;
+        openStagePopup({
+          ...e,
+          lngLat: origin,
+          features: [feature],
+        } as MapLayerMouseEvent);
+      }, 550);
+    }
+
+    map.on("mousedown", "streets-line", armPress);
+    map.on("touchstart", "streets-line", armPress);
+    map.on("contextmenu", "streets-line", (e: MapLayerMouseEvent) => {
+      e.preventDefault();
+      clearPress();
+      openStagePopup(e);
+    });
+    const endPress = () => clearPress();
+    map.on("mouseup", endPress);
+    map.on("touchend", endPress);
+    map.on("touchcancel", endPress);
+    const movePress = (e: { point: { x: number; y: number } }) => {
+      if (!pressAt || pressTimer == null) return;
+      if (Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 12) clearPress();
+    };
+    map.on("mousemove", movePress);
+    map.on("touchmove", movePress);
+
     map.on("click", "streets-line", async (e: MapLayerMouseEvent) => {
+      if (longFired) {
+        longFired = false;
+        return;
+      }
       const mode = routeModeRef.current;
       if (mode === "street" || mode === "point") {
         routeClickHandled = true;
@@ -613,6 +702,8 @@ export function StreetMap({
             linked: linked ? 1 : 0,
             done: done ? 1 : 0,
             selected: selectedAshkol === c.ashkol ? 1 : 0,
+            searched:
+              searchPlace !== "" && c.settlement_name === searchPlace ? 1 : 0,
           },
           geometry: {
             type: "Point" as const,
@@ -626,7 +717,7 @@ export function StreetMap({
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [clusters, selectedAshkol, linkedOverride, doneOverride]);
+  }, [clusters, selectedAshkol, linkedOverride, doneOverride, searchPlace]);
 
   useEffect(() => {
     if (!picked) return;
@@ -879,6 +970,7 @@ export function StreetMap({
   function goToCity(city: SearchCity) {
     const map = mapRef.current;
     if (!map) return;
+    setSearchPlace(city.name_he);
     map.flyTo({ center: [city.lng, city.lat], zoom: 13 });
     setQ(`${city.name_he} `);
     clearHits();
@@ -889,6 +981,7 @@ export function StreetMap({
   async function goToStreet(hit: SearchStreet) {
     const map = mapRef.current;
     if (!map) return;
+    if (hit.near_settlement) setSearchPlace(hit.near_settlement);
     map.flyTo({ center: [hit.lng, hit.lat], zoom: 15 });
     setQ(
       hit.near_settlement
@@ -1449,6 +1542,9 @@ export function StreetMap({
                 mode={routeMode}
                 onMode={setRouteMode}
                 onFeatures={setRouteFeatures}
+                onStages={(stages) => {
+                  routeStagesRef.current = stages;
+                }}
                 bindRef={routeApiRef}
               />
             </>
