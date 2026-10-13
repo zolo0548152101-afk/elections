@@ -6,6 +6,7 @@ import { visibleClusterAshkols } from "@/lib/streets-access";
 import {
   ashkolStreetStatsForUser,
   linkedAshkolSet,
+  opsDoneAshkols,
 } from "@/lib/cluster-status";
 
 export const runtime = "nodejs";
@@ -105,18 +106,16 @@ export async function GET(req: NextRequest) {
     return dir === "ASC" ? an - bn : bn - an;
   });
 
+  const ids = sorted.map((c) => c.ashkol);
   const linked = await linkedAshkolSet(sql);
-  const doneStats = await ashkolStreetStatsForUser(
-    sql,
-    sorted.map((c) => c.ashkol),
-    user.id,
-  );
+  const doneStats = await ashkolStreetStatsForUser(sql, ids, user.id);
+  const opsDone = await opsDoneAshkols(sql, ids);
 
   const withMap = sorted.map((c) => {
     const st = doneStats.get(c.ashkol);
     const status = {
       linked: linked.has(c.ashkol),
-      done: st?.done ?? false,
+      done: (st?.done ?? false) || opsDone.has(c.ashkol),
       street_total: st?.street_total ?? 0,
       street_done: st?.street_done ?? 0,
     };

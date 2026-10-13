@@ -69,6 +69,20 @@ export async function ashkolStreetStatsForUser(
   return out;
 }
 
+/** Clusters marked done from the map button, even when no streets are linked. */
+export async function opsDoneAshkols(
+  sql: Sql,
+  ashkols: string[],
+): Promise<Set<string>> {
+  if (ashkols.length === 0) return new Set();
+  const rows = (await sql`
+    SELECT ashkol
+    FROM ashkol_ops_status
+    WHERE done AND ashkol = ANY(${ashkols})
+  `) as { ashkol: string }[];
+  return new Set(rows.map((r) => r.ashkol));
+}
+
 export async function linkedAshkolSet(sql: Sql): Promise<Set<string>> {
   const rows = (await sql`
     SELECT DISTINCT ashkol FROM institution_clusters

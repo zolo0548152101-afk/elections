@@ -18,6 +18,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
+import { RoutePlanner, type RouteMode } from "@/components/RoutePlanner";
 
 type SearchStreet = {
   id: string;
@@ -166,6 +167,7 @@ export function StreetMap({
   focus,
   focusAshkol,
   focusAshkolToken,
+  onClusterDone,
 }: {
   clusters: ClusterView[];
   focus?: MapFocus | null;
@@ -173,6 +175,8 @@ export function StreetMap({
   focusAshkol?: string | null;
   /** Bump to re-apply the same ashkol focus after another click. */
   focusAshkolToken?: number;
+  /** Parent drops a finished cluster from the coordinator map. */
+  onClusterDone?: (ashkol: string, done: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -211,6 +215,13 @@ export function StreetMap({
   const [mapFailed, setMapFailed] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
+  const routeModeRef = useRef<RouteMode>("off");
+  const routeApiRef = useRef<{
+    addStreet: (street: { id: string; name_he: string }) => void;
+    addPoint: (lat: number, lng: number) => void;
+  } | null>(null);
+  const [routeMode, setRouteMode] = useState<RouteMode>("off");
+  const [routeFeatures, setRouteFeatures] = useState<Feature[]>([]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -315,6 +326,10 @@ export function StreetMap({
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           },
+          route: {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          },
         },
         layers: [
           { id: "osm", type: "raster", source: "osm" },
@@ -381,6 +396,46 @@ export function StreetMap({
               "line-opacity": 0.95,
             },
           },
+          {
+            id: "route-line",
+            type: "line",
+            source: "route",
+            filter: ["==", ["geometry-type"], "LineString"],
+            paint: {
+              "line-color": ["get", "color"],
+              "line-width": 6,
+              "line-opacity": 0.95,
+            },
+          },
+          {
+            id: "route-point",
+            type: "circle",
+            source: "route",
+            filter: ["==", ["geometry-type"], "Point"],
+            paint: {
+              "circle-radius": 8,
+              "circle-color": ["get", "color"],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#ffffff",
+            },
+          },
+          {
+            id: "route-point-label",
+            type: "symbol",
+            source: "route",
+            filter: ["==", ["get", "kind"], "point"],
+            layout: {
+              "text-field": ["to-string", ["get", "stage"]],
+              "text-size": 12,
+              "text-font": ["Noto Sans Regular"],
+              "text-offset": [0, -1.3],
+            },
+            paint: {
+              "text-color": "#102033",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 1.2,
+            },
+          },
         ],
       },
       center: [34.8, 31.5],
@@ -393,7 +448,7 @@ export function StreetMap({
     }
 
     map.addControl(new NavigationControl(), "top-left");
-    map.on("load", () => setStatus("לחצו על רחוב לסימון · חיפוש עיר או רחוב"));
+    map.on("load", () => setStatus("לחצו על רחוב לסימון"));
     map.on("error", (e) => {
       const msg = String(
         (e as { error?: { message?: string } }).error?.message ?? "",
@@ -410,7 +465,21 @@ export function StreetMap({
       }
     });
 
+    let routeClickHandled = false;
     map.on("click", "streets-line", async (e: MapLayerMouseEvent) => {
+      const mode = routeModeRef.current;
+      if (mode === "street" || mode === "point") {
+        routeClickHandled = true;
+        const f = e.features?.[0];
+        const id = String(f?.properties?.id ?? "");
+        const name = String(f?.properties?.name_he ?? "");
+        if (mode === "street" && id) {
+          routeApiRef.current?.addStreet({ id, name_he: name || id });
+        } else if (mode === "point") {
+          routeApiRef.current?.addPoint(e.lngLat.lat, e.lngLat.lng);
+        }
+        return;
+      }
       const f = e.features?.[0];
       if (!f) return;
       const id = String(f.properties?.id ?? "");
@@ -468,7 +537,18 @@ export function StreetMap({
       }
     });
 
+    map.on("click", (e) => {
+      if (routeClickHandled) {
+        routeClickHandled = false;
+        return;
+      }
+      if (routeModeRef.current === "point") {
+        routeApiRef.current?.addPoint(e.lngLat.lat, e.lngLat.lng);
+      }
+    });
+
     map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
+      if (routeModeRef.current !== "off") return;
       const raw = e.features?.[0]?.properties;
       if (!raw) return;
       const cluster = clusterFromProps(raw as Record<string, unknown>);
@@ -709,6 +789,51 @@ export function StreetMap({
   }, [focusAshkol, focusAshkolToken, clusters]);
 
   useEffect(() => {
+    routeModeRef.current = routeMode;
+  }, [routeMode]);
+
+  useEffect(() => {
+    setRouteMode("off");
+    routeModeRef.current = "off";
+  }, [selectedAshkol]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource("route") as GeoJSONSource | undefined;
+      src?.setData({ type: "FeatureCollection", features: routeFeatures });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [routeFeatures]);
+
+  const isCoordinator = me?.role === "coordinator";
+
+  useEffect(() => {
+    if (!isCoordinator) return;
+    if (clusters.length === 0) {
+      if (selectedAshkol) {
+        setSelectedAshkol("");
+        setPicked(null);
+      }
+      return;
+    }
+    if (clusters.some((c) => c.ashkol === selectedAshkol)) return;
+    const next = clusters[0]!;
+    setSelectedAshkol(next.ashkol);
+    setPicked(next);
+    if (next.map_lng == null || next.map_lat == null) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      map.flyTo({ center: [next.map_lng!, next.map_lat!], zoom: 14 });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [isCoordinator, clusters, selectedAshkol]);
+
+  useEffect(() => {
     if (q.trim().length < 1) {
       setCityHits([]);
       setStreetHits([]);
@@ -911,13 +1036,17 @@ export function StreetMap({
     setStatus(
       data.updated
         ? `${done ? "סומנו" : "הוסרו"} ${data.updated} רחובות באשכול ${selectedAshkol}`
-        : data.message || "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)",
+        : data.message ||
+            (done
+              ? `אשכול ${selectedAshkol} סומן כבוצע`
+              : "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)"),
     );
-    if (data.updated) {
+    if (res.ok) {
       setDoneOverride((prev) => ({ ...prev, [selectedAshkol]: done }));
       if (picked?.ashkol === selectedAshkol) {
         setPicked({ ...picked, done });
       }
+      onClusterDone?.(selectedAshkol, done);
     }
     refreshStreetTiles();
     if (selectedAshkol) void loadClusterStreets(selectedAshkol);
@@ -1056,6 +1185,7 @@ export function StreetMap({
   return (
     <div className="street-map-wrap">
       <div className="street-map-toolbar">
+        {me != null && me.role !== "coordinator" && (
         <label className="search-box" ref={searchBoxRef}>
           חיפוש עיר או רחוב
           <input
@@ -1129,6 +1259,7 @@ export function StreetMap({
             </ul>
           )}
         </label>
+        )}
         <label>
           אשכול
           <select
@@ -1146,7 +1277,9 @@ export function StreetMap({
               }
             }}
           >
-            <option value="">בחרו אשכול</option>
+            {me?.role === "coordinator" ? null : (
+              <option value="">בחרו אשכול</option>
+            )}
             {clusters.map((c) => (
               <option key={c.ashkol} value={c.ashkol}>
                 {c.settlement_name} · {c.ashkol}
@@ -1311,6 +1444,13 @@ export function StreetMap({
                 !(picked.linked || linkedOverride.has(picked.ashkol)) && (
                   <p className="link-success-note">אשכול בוצע</p>
                 )}
+              <RoutePlanner
+                ashkol={picked.ashkol}
+                mode={routeMode}
+                onMode={setRouteMode}
+                onFeatures={setRouteFeatures}
+                bindRef={routeApiRef}
+              />
             </>
           ) : (
             <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>

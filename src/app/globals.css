@@ -1450,6 +1450,74 @@ tbody tr.cluster-row-selected:hover {
   color: var(--accent-2);
 }
 
+.route-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.route-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.route-stage {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: #fff;
+}
+
+.route-stage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.route-street {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.route-street textarea {
+  width: 100%;
+  min-height: 2.4rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+}
+
+.route-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  cursor: pointer;
+}
+
+.route-btn[aria-pressed="true"] {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
 .street-map-canvas {
   height: min(70vh, 720px);
   border-radius: 18px;
