@@ -1282,18 +1282,81 @@ tbody tr.cluster-row-selected:hover {
   z-index: 4;
   top: 12px;
   right: 12px;
+  width: auto;
+  pointer-events: none;
+}
+
+.route-map-menu.is-open {
   bottom: 12px;
-  width: min(340px, 46vw);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  width: 25vw;
+  max-width: 25vw;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.96);
   color: var(--ink);
   border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 0.7rem 0.75rem;
+  padding: 0.45rem 0.5rem 0.55rem;
+  pointer-events: auto;
 }
 
-.street-map-stage:has(.route-map-menu) .map-side-panel {
-  right: calc(min(340px, 46vw) + 24px);
+.route-menu-toggle {
+  pointer-events: auto;
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 0.75rem;
+}
+
+.route-map-menu.is-open .route-menu-toggle {
+  align-self: flex-start;
+  margin-bottom: 0.35rem;
+  box-shadow: none;
+  border: 1px solid rgba(16, 32, 51, 0.16);
+}
+
+.route-menu-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.route-menu-body[hidden] {
+  display: none;
+}
+
+.route-map-menu .route-stage-head,
+.route-map-menu .route-inline,
+.route-map-menu .route-stage-summary {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.route-map-menu .route-stage-names {
+  flex-basis: 100%;
+  margin-inline-start: 0;
+  justify-content: flex-start;
+}
+
+.route-map-menu .route-choice {
+  min-width: 0;
+  flex: 1 1 7rem;
+}
+
+.route-menu-toggle:focus-visible {
+  outline: 2px solid #6d28d9;
+  outline-offset: 2px;
+}
+
+.street-map-stage:has(.route-map-menu.is-open) .map-side-panel {
+  right: calc(25vw + 20px);
+  width: min(200px, calc(75vw - 40px));
 }
 
 .map-side-panel {

@@ -525,6 +525,7 @@ export function StreetMap({
   const routeModeRef = useRef<RouteMode>("off");
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
+  const [menuOpen, setMenuOpen] = useState(true);
   const [panel, setPanel] = useState<
     | {
         kind: "street";
@@ -2755,7 +2756,17 @@ export function StreetMap({
       </div>
       <div className="street-map-stage">
         {picked ? (
-          <aside className="route-map-menu">
+          <aside className={menuOpen ? "route-map-menu is-open" : "route-map-menu"}>
+            <button
+              type="button"
+              className="route-menu-toggle"
+              aria-expanded={menuOpen}
+              aria-label={menuOpen ? "סגור מסלול" : "פתח מסלול"}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? "סגור" : "מסלול"}
+            </button>
+            <div className="route-menu-body" hidden={!menuOpen}>
             <RoutePlanner
               ashkol={picked.ashkol}
               mode={routeMode}
@@ -2783,6 +2794,7 @@ export function StreetMap({
               }}
               bindRef={routeApiRef}
             />
+            </div>
           </aside>
         ) : null}
         {sidePanel}
