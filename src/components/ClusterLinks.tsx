@@ -11,7 +11,7 @@ type Coord = { id: number; full_name: string };
 export type ClusterLinkRow = {
   ashkol: string;
   settlement_name: string;
-  institution_id: number;
+  institution_id: number | null;
   institution_name: string;
   coordinators: Coord[];
 };
@@ -183,7 +183,7 @@ export function ClusterRowLinks({
 
   async function addCoordinator() {
     const id = Number(coordId);
-    if (!Number.isInteger(id) || id <= 0) return;
+    if (!row.institution_id || !Number.isInteger(id) || id <= 0) return;
     setBusy(true);
     try {
       const res = await fetch(
@@ -208,6 +208,7 @@ export function ClusterRowLinks({
   }
 
   async function removeCoordinator(id: string) {
+    if (!row.institution_id) return;
     setBusy(true);
     try {
       const res = await fetch(
@@ -253,35 +254,41 @@ export function ClusterRowLinks({
           </>
         }
       />
-      <LinkGroup
-        title={`רכזים · ${row.institution_name}`}
-        chips={row.coordinators.map((c) => ({
-          id: String(c.id),
-          label: c.full_name,
-        }))}
-        busy={busy}
-        onRemove={(id) => void removeCoordinator(id)}
-        empty="אין רכז על המוסד הזה"
-        search={
-          <>
-            <NameSearch
-              key={`coord-${key}`}
-              endpoint="/api/coordinators/search"
-              placeholder="שם רכז"
-              disabled={busy}
-              onPick={setCoordId}
-            />
-            <button
-              type="button"
-              className="export"
-              disabled={busy || !coordId}
-              onClick={() => void addCoordinator()}
-            >
-              קשר
-            </button>
-          </>
-        }
-      />
+      {row.institution_id ? (
+        <LinkGroup
+          title={`רכזים · ${row.institution_name}`}
+          chips={row.coordinators.map((c) => ({
+            id: String(c.id),
+            label: c.full_name,
+          }))}
+          busy={busy}
+          onRemove={(id) => void removeCoordinator(id)}
+          empty="אין רכז על המוסד הזה"
+          search={
+            <>
+              <NameSearch
+                key={`coord-${key}`}
+                endpoint="/api/coordinators/search"
+                placeholder="שם רכז"
+                disabled={busy}
+                onPick={setCoordId}
+              />
+              <button
+                type="button"
+                className="export"
+                disabled={busy || !coordId}
+                onClick={() => void addCoordinator()}
+              >
+                קשר
+              </button>
+            </>
+          }
+        />
+      ) : (
+        <p className="lede" style={{ margin: 0 }}>
+          קשרו מוסד קודם, ואז אפשר לשייך רכז.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClusterRowLinks, FirstClusterLink } from "@/components/ClusterLinks";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
@@ -12,32 +12,36 @@ type Coord = { id: number; full_name: string };
 type Row = {
   ashkol: string;
   settlement_name: string;
-  institution_id: number;
+  institution_id: number | null;
   institution_name: string;
   coordinator_names: string;
   coordinators: Coord[];
   done: boolean;
 };
 
+type StatusFilter = "linked" | "all" | "open" | "done";
+
 export default function TeamClustersPage() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"" | "open" | "done">("");
+  const [status, setStatus] = useState<StatusFilter>("linked");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
   const [busyAshkol, setBusyAshkol] = useState<string | null>(null);
   const [editKey, setEditKey] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     const me = await fetch("/api/auth/me").then((r) => r.json());
     const role = me.user?.role;
     if (role !== "super_admin" && role !== "area_manager") {
       router.replace("/");
       return;
     }
-    const res = await fetch("/api/team/clusters");
+    const scope = status === "all" ? "all" : "linked";
+    const res = await fetch(`/api/team/clusters?scope=${scope}`);
     const data = await res.json();
     if (!res.ok) {
       setMsgKind("err");
@@ -47,10 +51,13 @@ export default function TeamClustersPage() {
     }
     setRows(data.clusters ?? []);
     setLoading(false);
-  }, [router]);
+  }, [router, status]);
 
+  const firstLoad = useRef(true);
   useEffect(() => {
-    void load();
+    const quiet = !firstLoad.current;
+    firstLoad.current = false;
+    void load({ quiet });
   }, [load]);
 
   const filtered = rows.filter((r) => {
@@ -108,7 +115,7 @@ export default function TeamClustersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>אשכולות</h1>
             <p className="lede">
-              אשכולות שקושרו למוסד — קשרו מוסד ורכז, וסמנו בוצע / לא בוצע.
+              ברירת המחדל היא אשכולות שקושרו. כולם מציג כל אשכול.
             </p>
           </div>
         </header>
@@ -135,11 +142,13 @@ export default function TeamClustersPage() {
               סטטוס
               <select
                 value={status}
-                onChange={(e) =>
-                  setStatus(e.target.value as "" | "open" | "done")
-                }
+                onChange={(e) => {
+                  setEditKey(null);
+                  setStatus(e.target.value as StatusFilter);
+                }}
               >
-                <option value="">הכל</option>
+                <option value="linked">קושרו</option>
+                <option value="all">כולם</option>
                 <option value="open">לא בוצע</option>
                 <option value="done">בוצע</option>
               </select>
@@ -148,7 +157,7 @@ export default function TeamClustersPage() {
         )}
         {!loading && (
           <FirstClusterLink
-            onChanged={load}
+            onChanged={() => load({ quiet: true })}
             onMessage={(kind, text) => {
               setMsgKind(kind);
               setMsg(text);
@@ -169,15 +178,15 @@ export default function TeamClustersPage() {
               </thead>
               <tbody>
                 {filtered.map((r) => {
-                  const key = `${r.ashkol}:${r.institution_id}`;
+                  const key = `${r.ashkol}:${r.institution_id ?? "none"}`;
                   const open = editKey === key;
                   const institutions = [
                     ...new Map(
                       rows
-                        .filter((x) => x.ashkol === r.ashkol)
+                        .filter((x) => x.ashkol === r.ashkol && x.institution_id != null)
                         .map((x) => [
-                          x.institution_id,
-                          { id: x.institution_id, name: x.institution_name },
+                          x.institution_id as number,
+                          { id: x.institution_id as number, name: x.institution_name },
                         ]),
                     ).values(),
                   ];
@@ -192,15 +201,19 @@ export default function TeamClustersPage() {
                     <td>
                       {open ? (
                         <span className="muted-cell">נערך בשורה למטה</span>
-                      ) : (
+                      ) : r.institution_name ? (
                         <ShowMore text={r.institution_name} />
+                      ) : (
+                        <span className="muted-cell">—</span>
                       )}
                     </td>
                     <td>
                       {open ? (
                         <span className="muted-cell">נערך בשורה למטה</span>
-                      ) : (
+                      ) : r.coordinator_names ? (
                         <ShowMore text={r.coordinator_names} />
+                      ) : (
+                        <span className="muted-cell">—</span>
                       )}
                     </td>
                     <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
@@ -240,7 +253,7 @@ export default function TeamClustersPage() {
                         <ClusterRowLinks
                           row={r}
                           institutions={institutions}
-                          onChanged={load}
+                          onChanged={() => load({ quiet: true })}
                           onMessage={(kind, text) => {
                             setMsgKind(kind);
                             setMsg(text);
