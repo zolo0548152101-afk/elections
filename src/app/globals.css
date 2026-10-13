@@ -1537,14 +1537,24 @@ tbody tr.cluster-row-selected:hover {
   margin-bottom: 0.35rem;
 }
 
+.sheet-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  text-align: left;
+}
+
 .sheet-people {
-  margin-top: 0.15rem;
+  margin: 0;
 }
 
 .sheet-person {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.85rem;
+  flex-direction: column;
+  align-items: flex-start;
+  direction: ltr;
+  gap: 0.05rem;
   margin: 0;
   font-weight: 700;
   line-height: 1.25;

@@ -83,6 +83,8 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
         <div>
           <p className="eyebrow">דף עבודה</p>
           <h1>{sheet.title}</h1>
+        </div>
+        <div className="sheet-side">
           <div className="sheet-people">
             {coordinators.length === 0 ? (
               <p className="sheet-person">לא קושר רכז</p>
@@ -100,16 +102,16 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
               ))
             )}
           </div>
-        </div>
-        <div className="sheet-actions">
-          <button
-            type="button"
-            className="export"
-            disabled={!mapsReady}
-            onClick={() => window.print()}
-          >
-            {mapsReady ? "שמירה כ-PDF" : "טוען מפה…"}
-          </button>
+          <div className="sheet-actions">
+            <button
+              type="button"
+              className="export"
+              disabled={!mapsReady}
+              onClick={() => window.print()}
+            >
+              {mapsReady ? "שמירה כ-PDF" : "טוען מפה…"}
+            </button>
+          </div>
         </div>
       </header>
 
