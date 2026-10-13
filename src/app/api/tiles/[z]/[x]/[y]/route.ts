@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import geojsonvt from "geojson-vt";
 import vtpbf from "vt-pbf";
-import { getSessionUser } from "@/lib/auth";
 import { getSql, type StreetRow } from "@/lib/db";
-import { streetVisibilityFilter } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
+
+const TILE_CACHE = {
+  "Cache-Control": "public, max-age=300",
+  "CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+  "Vercel-CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+};
 
 function tileToBBox(z: number, x: number, y: number) {
   const n = 2 ** z;
@@ -18,13 +22,14 @@ function tileToBBox(z: number, x: number, y: number) {
   return { west, south, east, north };
 }
 
+function emptyTile() {
+  return new NextResponse(null, { status: 204, headers: TILE_CACHE });
+}
+
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ z: string; x: string; y: string }> },
 ) {
-  const user = await getSessionUser();
-  if (!user) return new NextResponse("unauthorized", { status: 401 });
-
   const { z: zs, x: xs, y: ys } = await ctx.params;
   const z = Number(zs);
   const x = Number(xs);
@@ -34,51 +39,20 @@ export async function GET(
   }
 
   // At country zoom, skip street vectors — LIMIT would drop arbitrary streets.
-  if (z < 11) {
-    return new NextResponse(null, { status: 204 });
-  }
+  if (z < 11) return emptyTile();
 
   const { west, south, east, north } = tileToBBox(z, x, y);
   const sql = getSql();
-  const vis = await streetVisibilityFilter(sql, user);
   const limit = z <= 12 ? 2500 : z <= 14 ? 5000 : 8000;
 
-  const rows = (
-    vis.active
-      ? await sql`
-          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
-                 COALESCE(m.done, false) AS done,
-                 EXISTS (
-                   SELECT 1 FROM institution_clusters ic
-                   WHERE ic.ashkol = s.ashkol
-                 ) AS linked
-          FROM streets s
-          LEFT JOIN street_marks m
-            ON m.street_id = s.id AND m.user_id = ${user.id}
-          WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
-            AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
-            AND s.ashkol = ANY(${vis.ashkols})
-          ORDER BY s.id
-          LIMIT ${limit}
-        `
-      : await sql`
-          SELECT s.id, s.name_he, s.geom_geojson, s.ashkol,
-                 COALESCE(m.done, false) AS done,
-                 EXISTS (
-                   SELECT 1 FROM institution_clusters ic
-                   WHERE ic.ashkol = s.ashkol
-                 ) AS linked
-          FROM streets s
-          LEFT JOIN street_marks m
-            ON m.street_id = s.id AND m.user_id = ${user.id}
-          WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
-            AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
-          ORDER BY s.id
-          LIMIT ${limit}
-        `
-  ) as (Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol" | "done"> & {
-    linked: boolean;
-  })[];
+  const rows = (await sql`
+    SELECT s.id, s.name_he, s.geom_geojson, s.ashkol
+    FROM streets s
+    WHERE s.bbox_xmax >= ${west} AND s.bbox_xmin <= ${east}
+      AND s.bbox_ymax >= ${south} AND s.bbox_ymin <= ${north}
+    ORDER BY s.id
+    LIMIT ${limit}
+  `) as Pick<StreetRow, "id" | "name_he" | "geom_geojson" | "ashkol">[];
 
   const fc = {
     type: "FeatureCollection" as const,
@@ -88,8 +62,6 @@ export async function GET(
         id: s.id,
         name_he: s.name_he,
         ashkol: s.ashkol ?? "",
-        done: s.done ? 1 : 0,
-        linked: s.linked ? 1 : 0,
       },
       geometry: JSON.parse(s.geom_geojson),
     })),
@@ -101,14 +73,13 @@ export async function GET(
     indexMaxPoints: 0,
   });
   const tile = index.getTile(z, x, y);
-  if (!tile) {
-    return new NextResponse(null, { status: 204 });
-  }
+  if (!tile) return emptyTile();
+
   const buf = Buffer.from(vtpbf.fromGeojsonVt({ streets: tile }, { version: 2 }));
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/x-protobuf",
-      "Cache-Control": "private, max-age=15",
+      ...TILE_CACHE,
     },
   });
 }

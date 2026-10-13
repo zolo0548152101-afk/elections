@@ -15,8 +15,14 @@ if (!url || !url.startsWith("postgres")) {
 const sql = neon(url);
 await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`;
 await sql`CREATE INDEX IF NOT EXISTS streets_name_he_trgm_idx ON streets USING gin (name_he gin_trgm_ops)`;
+await sql`
+  CREATE INDEX IF NOT EXISTS streets_name_he_clean_trgm_idx
+  ON streets USING gin ((regexp_replace(name_he, '[''׳״"]+', '', 'g')) gin_trgm_ops)
+`;
 const rows = await sql`
   SELECT indexname FROM pg_indexes
-  WHERE tablename = 'streets' AND indexname = 'streets_name_he_trgm_idx'
+  WHERE tablename = 'streets'
+    AND indexname IN ('streets_name_he_trgm_idx', 'streets_name_he_clean_trgm_idx')
+  ORDER BY indexname
 `;
-console.log({ index: rows[0]?.indexname ?? null });
+console.log({ indexes: rows.map((row) => row.indexname) });

@@ -7,7 +7,6 @@ import {
   setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
-  type VectorTileSource,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -20,6 +19,7 @@ import { matchesSearch } from "@/lib/text-search";
 import { directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
+import { streetsTilePath } from "@/lib/tiles-version";
 
 type SearchStreet = {
   id: string;
@@ -115,33 +115,219 @@ const COLOR_FILTERED = "#f5b942";
 const COLOR_SEARCH = "#22d3ee";
 const COLOR_SELECTED = "#dc2626";
 
-function streetStatusPaint() {
+const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
+
+type MapState = {
+  doneStreetIds: string[];
+  visibleAshkols: string[] | null;
+  scopeActive: boolean;
+  linkedAshkols: string[];
+};
+
+type Expr = unknown[];
+
+function doneFlag(): Expr {
+  return ["boolean", ["feature-state", "done"], false];
+}
+
+function linkedFlag(linkedAshkols: string[]): Expr {
+  if (linkedAshkols.length === 0) return ["literal", 0];
+  return ["match", ["get", "ashkol"], linkedAshkols, 1, 0];
+}
+
+function streetLinePaint(linkedAshkols: string[], selectedAshkol = "", streetId = "") {
+  const done = doneFlag();
+  const linked = linkedFlag(linkedAshkols);
+  const selectedStreet: Expr = streetId ? ["==", ["get", "id"], streetId] : ["literal", false];
+  const selectedCluster: Expr = selectedAshkol
+    ? ["==", ["get", "ashkol"], selectedAshkol]
+    : ["literal", false];
   return {
-    "line-color": [
-      "case",
-      ["==", ["get", "done"], 1],
-      COLOR_DONE,
-      ["==", ["get", "linked"], 1],
-      COLOR_ASSIGNED,
-      COLOR_UNASSIGNED,
-    ] as unknown as string,
-    "line-width": [
-      "case",
-      ["==", ["get", "done"], 1],
-      5,
-      ["==", ["get", "linked"], 1],
-      3.5,
-      2.5,
-    ] as unknown as number,
+    "line-color": ["case", done, COLOR_DONE, ["==", linked, 1], COLOR_ASSIGNED, COLOR_UNASSIGNED],
+    "line-width": ["case", selectedStreet, 7, selectedCluster, 6, done, 5, ["==", linked, 1], 3.5, 2.5],
     "line-opacity": [
       "case",
-      ["==", ["get", "done"], 1],
+      selectedStreet,
+      1,
+      selectedCluster,
+      0.95,
+      done,
       0.9,
-      ["==", ["get", "linked"], 1],
+      ["==", linked, 1],
       0.85,
       0.75,
-    ] as unknown as number,
+    ],
   };
+}
+
+function scopeFilter(active: boolean, ashkols: string[] | null): Expr | null {
+  if (!active) return null;
+  if (!ashkols || ashkols.length === 0) return ["literal", false];
+  return ["match", ["get", "ashkol"], ashkols, true, false];
+}
+
+function streetFeature(id: string) {
+  return { source: "streets", sourceLayer: "streets", id };
+}
+
+function applyStreetState(map: MapLibreMap, state: MapState, doneIds: Set<string>) {
+  if (!map.getLayer("streets-line")) return;
+  for (const id of doneIds) map.removeFeatureState(streetFeature(id));
+  doneIds.clear();
+  for (const id of state.doneStreetIds) {
+    map.setFeatureState(streetFeature(id), { done: true });
+    doneIds.add(id);
+  }
+  const filter = scopeFilter(state.scopeActive, state.visibleAshkols);
+  for (const layer of ["streets-line", "streets-label"]) {
+    if (!map.getLayer(layer)) continue;
+    map.setFilter(layer, filter as never);
+  }
+}
+
+function addMapOverlays(map: MapLibreMap) {
+  if (map.getSource("streets")) return;
+  map.addSource("streets", {
+    type: "vector",
+    tiles: [`${window.location.origin}${streetsTilePath()}`],
+    minzoom: 10,
+    maxzoom: 16,
+    promoteId: { streets: "id" },
+  });
+  map.addSource("clusters", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  map.addSource("highlight", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  map.addSource("route", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+  const hidden: Expr = ["literal", false];
+  map.addLayer({
+    id: "streets-line",
+    type: "line",
+    source: "streets",
+    "source-layer": "streets",
+    filter: hidden as never,
+    paint: streetLinePaint([]) as never,
+  });
+  map.addLayer({
+    id: "streets-label",
+    type: "symbol",
+    source: "streets",
+    "source-layer": "streets",
+    filter: hidden as never,
+    layout: {
+      "symbol-placement": "line",
+      "text-field": ["get", "name_he"],
+      "text-size": 12,
+      "text-font": ["Noto Sans Regular"],
+    },
+    paint: {
+      "text-color": "#111827",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.2,
+    },
+    minzoom: 13,
+  });
+  map.addLayer({
+    id: "clusters-circle",
+    type: "circle",
+    source: "clusters",
+    paint: {
+      "circle-radius": 8,
+      "circle-color": [
+        "case",
+        ["==", ["get", "selected"], 1],
+        COLOR_SELECTED,
+        ["==", ["get", "done"], 1],
+        COLOR_DONE,
+        ["==", ["get", "searched"], 1],
+        COLOR_SEARCH,
+        COLOR_FILTERED,
+      ],
+      "circle-stroke-width": ["case", ["==", ["get", "selected"], 1], 3, 1],
+      "circle-stroke-color": "#fff",
+    },
+  });
+  map.addLayer({
+    id: "highlight-line",
+    type: "line",
+    source: "highlight",
+    paint: { "line-color": "#2563eb", "line-width": 7, "line-opacity": 0.95 },
+  });
+  map.addLayer({
+    id: "highlight-arrow",
+    type: "symbol",
+    source: "highlight",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 70,
+      "icon-image": "route-dir",
+      "icon-size": 0.55,
+      "icon-allow-overlap": true,
+      "icon-rotation-alignment": "map",
+      "icon-keep-upright": false,
+    },
+    paint: { "icon-color": "#102033" },
+  });
+  map.addLayer({
+    id: "route-line",
+    type: "line",
+    source: "route",
+    filter: ["==", ["geometry-type"], "LineString"],
+    paint: { "line-color": ["get", "color"], "line-width": 6, "line-opacity": 0.95 },
+  });
+  map.addLayer({
+    id: "route-arrow",
+    type: "symbol",
+    source: "route",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 70,
+      "icon-image": "route-dir",
+      "icon-size": 0.55,
+      "icon-allow-overlap": true,
+      "icon-rotation-alignment": "map",
+      "icon-keep-upright": false,
+    },
+    paint: { "icon-color": ["get", "color"] },
+  });
+  map.addLayer({
+    id: "route-point",
+    type: "circle",
+    source: "route",
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 8,
+      "circle-color": ["get", "color"],
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#ffffff",
+    },
+  });
+  map.addLayer({
+    id: "route-point-label",
+    type: "symbol",
+    source: "route",
+    filter: ["==", ["get", "kind"], "point"],
+    layout: {
+      "text-field": ["coalesce", ["get", "label"], ["to-string", ["get", "stage"]]],
+      "text-size": 12,
+      "text-font": ["Noto Sans Regular"],
+      "text-offset": [0, -1.3],
+    },
+    paint: {
+      "text-color": "#102033",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.2,
+    },
+  });
 }
 
 export function StreetMap({
@@ -162,6 +348,9 @@ export function StreetMap({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const doneIdsRef = useRef<Set<string>>(new Set());
+  const mapStateRef = useRef<MapState | null>(null);
+  const setStreetDoneRef = useRef<(id: string, done: boolean) => void>(() => {});
   const openStreetPanelRef = useRef<(id: string, name: string) => void>(() => {});
   const openStartRef = useRef<(lat: number, lng: number) => void>(() => {});
   const openClusterPanelRef = useRef<(cluster: ClusterView) => void>(() => {});
@@ -194,6 +383,7 @@ export function StreetMap({
     Record<string, number>
   >({});
   const [linkedOverride, setLinkedOverride] = useState<Set<string>>(() => new Set());
+  const [mapState, setMapState] = useState<MapState | null>(null);
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
   const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
@@ -301,173 +491,12 @@ export function StreetMap({
     try {
       map = new MapLibreMap({
       container: containerRef.current,
-      style: {
-        version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors (ODbL)",
-          },
-          streets: {
-            type: "vector",
-            tiles: [`${window.location.origin}/api/tiles/{z}/{x}/{y}`],
-            minzoom: 10,
-            maxzoom: 16,
-          },
-          clusters: {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          },
-          highlight: {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          },
-          route: {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          },
-        },
-        layers: [
-          { id: "osm", type: "raster", source: "osm" },
-          {
-            id: "streets-line",
-            type: "line",
-            source: "streets",
-            "source-layer": "streets",
-            paint: streetStatusPaint(),
-          },
-          {
-            id: "streets-label",
-            type: "symbol",
-            source: "streets",
-            "source-layer": "streets",
-            layout: {
-              "symbol-placement": "line",
-              "text-field": ["get", "name_he"],
-              "text-size": 12,
-              "text-font": ["Noto Sans Regular"],
-            },
-            paint: {
-              "text-color": "#111827",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-            minzoom: 13,
-          },
-          {
-            id: "clusters-circle",
-            type: "circle",
-            source: "clusters",
-            paint: {
-              "circle-radius": 8,
-              "circle-color": [
-                "case",
-                ["==", ["get", "selected"], 1],
-                COLOR_SELECTED,
-                ["==", ["get", "done"], 1],
-                COLOR_DONE,
-                ["==", ["get", "searched"], 1],
-                COLOR_SEARCH,
-                COLOR_FILTERED,
-              ],
-              "circle-stroke-width": [
-                "case",
-                ["==", ["get", "selected"], 1],
-                3,
-                1,
-              ],
-              "circle-stroke-color": "#fff",
-            },
-          },
-          {
-            id: "highlight-line",
-            type: "line",
-            source: "highlight",
-            paint: {
-              "line-color": "#2563eb",
-              "line-width": 7,
-              "line-opacity": 0.95,
-            },
-          },
-          {
-            id: "highlight-arrow",
-            type: "symbol",
-            source: "highlight",
-            filter: ["==", ["geometry-type"], "LineString"],
-            layout: {
-              "symbol-placement": "line",
-              "symbol-spacing": 70,
-              "icon-image": "route-dir",
-              "icon-size": 0.55,
-              "icon-allow-overlap": true,
-              "icon-rotation-alignment": "map",
-              "icon-keep-upright": false,
-            },
-            paint: { "icon-color": "#102033" },
-          },
-          {
-            id: "route-line",
-            type: "line",
-            source: "route",
-            filter: ["==", ["geometry-type"], "LineString"],
-            paint: {
-              "line-color": ["get", "color"],
-              "line-width": 6,
-              "line-opacity": 0.95,
-            },
-          },
-          {
-            id: "route-arrow",
-            type: "symbol",
-            source: "route",
-            filter: ["==", ["geometry-type"], "LineString"],
-            layout: {
-              "symbol-placement": "line",
-              "symbol-spacing": 70,
-              "icon-image": "route-dir",
-              "icon-size": 0.55,
-              "icon-allow-overlap": true,
-              "icon-rotation-alignment": "map",
-              "icon-keep-upright": false,
-            },
-            paint: { "icon-color": ["get", "color"] },
-          },
-          {
-            id: "route-point",
-            type: "circle",
-            source: "route",
-            filter: ["==", ["geometry-type"], "Point"],
-            paint: {
-              "circle-radius": 8,
-              "circle-color": ["get", "color"],
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#ffffff",
-            },
-          },
-          {
-            id: "route-point-label",
-            type: "symbol",
-            source: "route",
-            filter: ["==", ["get", "kind"], "point"],
-            layout: {
-              "text-field": ["coalesce", ["get", "label"], ["to-string", ["get", "stage"]]],
-              "text-size": 12,
-              "text-font": ["Noto Sans Regular"],
-              "text-offset": [0, -1.3],
-            },
-            paint: {
-              "text-color": "#102033",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-          },
-        ],
-      },
+      style: OPENFREEMAP_STYLE,
       center: [34.8, 31.5],
       zoom: 8,
+      attributionControl: {
+        customAttribution: "© OpenFreeMap © OpenMapTiles © OpenStreetMap",
+      },
     });
     } catch {
       setMapFailed(true);
@@ -476,7 +505,14 @@ export function StreetMap({
     }
 
     map.addControl(new NavigationControl(), "top-left");
+    let overlayBound = false;
     map.on("load", () => {
+      addMapOverlays(map);
+      if (mapStateRef.current) applyStreetState(map, mapStateRef.current, doneIdsRef.current);
+      if (!overlayBound) {
+        overlayBound = true;
+        bindOverlayInteractions();
+      }
       if (!map.hasImage("route-dir")) {
         const size = 32;
         const canvas = document.createElement("canvas");
@@ -556,6 +592,7 @@ export function StreetMap({
       }, 550);
     }
 
+    function bindOverlayInteractions() {
     map.on("mousedown", "streets-line", armPress);
     map.on("touchstart", "streets-line", armPress);
     map.on("mousedown", "route-line", armPress);
@@ -620,14 +657,14 @@ export function StreetMap({
       const f = e.features?.[0];
       if (!f) return;
       const id = String(f.properties?.id ?? "");
+      if (!id) return;
       const name = String(f.properties?.name_he ?? "");
       const ashkolRaw = f.properties?.ashkol;
       const ashkol =
         ashkolRaw != null && String(ashkolRaw).trim() !== ""
           ? String(ashkolRaw)
           : null;
-      const done = Number(f.properties?.done ?? 0) === 1;
-      if (!id) return;
+      const done = map.getFeatureState(streetFeature(id)).done === true;
 
       const street: SearchStreet = {
         id,
@@ -647,13 +684,7 @@ export function StreetMap({
         body: JSON.stringify({ done: !done }),
       });
       if (res.ok) {
-        const src = map.getSource("streets") as VectorTileSource & {
-          setTiles?: (tiles: string[]) => void;
-        };
-        src.setTiles?.([
-          `${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`,
-        ]);
-        map.triggerRepaint();
+        setStreetDoneRef.current(id, !done);
         setPickedStreet({ ...street, done: !done });
         setClusterStreets((list) =>
           list.map((s) => (s.id === id ? { ...s, done: !done } : s)),
@@ -743,6 +774,7 @@ export function StreetMap({
     map.on("mouseleave", "clusters-circle", () => {
       map.getCanvas().style.cursor = "";
     });
+    }
 
     function occupied(point: { x: number; y: number }) {
       if (!map.isStyleLoaded()) return false;
@@ -865,47 +897,25 @@ export function StreetMap({
   /** Status colors; selection only thickens the line. */
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.getLayer("streets-line")) return;
+    if (!map) return;
     const ashkol = selectedAshkol || "";
     const streetId = pickedStreet?.id || "";
+    const linked = [
+      ...new Set([...(mapState?.linkedAshkols ?? []), ...linkedOverride]),
+    ];
     const apply = () => {
       if (!map.getLayer("streets-line")) return;
-      map.setPaintProperty("streets-line", "line-color", [
-        "case",
-        ["==", ["get", "done"], 1],
-        COLOR_DONE,
-        ["==", ["get", "linked"], 1],
-        COLOR_ASSIGNED,
-        COLOR_UNASSIGNED,
-      ]);
-      map.setPaintProperty("streets-line", "line-width", [
-        "case",
-        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
-        7,
-        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
-        6,
-        ["==", ["get", "done"], 1],
-        5,
-        ["==", ["get", "linked"], 1],
-        3.5,
-        2.5,
-      ]);
-      map.setPaintProperty("streets-line", "line-opacity", [
-        "case",
-        ["all", ["!=", ["literal", streetId], ""], ["==", ["get", "id"], streetId]],
-        1,
-        ["all", ["!=", ["literal", ashkol], ""], ["==", ["get", "ashkol"], ashkol]],
-        0.95,
-        ["==", ["get", "done"], 1],
-        0.9,
-        ["==", ["get", "linked"], 1],
-        0.85,
-        0.75,
-      ]);
+      const paint = streetLinePaint(linked, ashkol, streetId);
+      map.setPaintProperty("streets-line", "line-color", paint["line-color"] as never);
+      map.setPaintProperty("streets-line", "line-width", paint["line-width"] as never);
+      map.setPaintProperty("streets-line", "line-opacity", paint["line-opacity"] as never);
     };
-    if (map.isStyleLoaded()) apply();
+    if (map.getLayer("streets-line")) apply();
     else map.once("load", apply);
-  }, [selectedAshkol, pickedStreet?.id]);
+    return () => {
+      map.off("load", apply);
+    };
+  }, [selectedAshkol, pickedStreet?.id, mapState, linkedOverride]);
 
   async function loadClusterStreets(ashkol: string) {
     if (!ashkol) {
@@ -932,17 +942,49 @@ export function StreetMap({
     void loadClusterStreets(selectedAshkol);
   }, [selectedAshkol]);
 
-  function refreshStreetTiles() {
-    const map = mapRef.current;
-    if (!map) return;
-    const src = map.getSource("streets") as VectorTileSource & {
-      setTiles?: (tiles: string[]) => void;
-    };
-    src.setTiles?.([
-      `${window.location.origin}/api/tiles/{z}/{x}/{y}?t=${Date.now()}`,
-    ]);
-    map.triggerRepaint();
+  async function reloadMapState() {
+    const res = await fetch("/api/map/state");
+    if (!res.ok) return;
+    const data = (await res.json()) as MapState;
+    mapStateRef.current = data;
+    setMapState(data);
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/map/state")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: MapState | null) => {
+        if (cancelled || !data) return;
+        mapStateRef.current = data;
+        setMapState(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setStreetDoneRef.current = (id: string, done: boolean) => {
+      const map = mapRef.current;
+      if (!map?.getSource("streets")) return;
+      map.setFeatureState(streetFeature(id), { done });
+      if (done) doneIdsRef.current.add(id);
+      else doneIdsRef.current.delete(id);
+    };
+  });
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapState) return;
+    const apply = () => applyStreetState(map, mapState, doneIdsRef.current);
+    if (map.getLayer("streets-line")) apply();
+    else map.once("load", apply);
+    return () => {
+      map.off("load", apply);
+    };
+  }, [mapState]);
 
   async function toggleStreetDone(street: SearchStreet, done: boolean) {
     setStatus(done ? `מסמן בוצע: ${street.name_he}` : `מסיר סימון: ${street.name_he}`);
@@ -961,7 +1003,7 @@ export function StreetMap({
     if (pickedStreet?.id === street.id) {
       setPickedStreet({ ...pickedStreet, done });
     }
-    refreshStreetTiles();
+    setStreetDoneRef.current(street.id, done);
     setStatus(done ? `סומן בוצע: ${street.name_he}` : `הוסר סימון: ${street.name_he}`);
   }
 
@@ -1225,7 +1267,7 @@ export function StreetMap({
     }));
     setLinkCoordId("");
     setInstHitsOpen(false);
-    refreshStreetTiles();
+    void reloadMapState();
   }
 
   async function linkCoordinatorToInstitution() {
@@ -1306,7 +1348,7 @@ export function StreetMap({
             : "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)"),
       );
     }
-    refreshStreetTiles();
+    void reloadMapState();
     if (ashkol) void loadClusterStreets(ashkol);
   }
 
@@ -2138,7 +2180,7 @@ export function StreetMap({
         )}
       </div>
       <p className="map-credit">
-        © OpenStreetMap contributors · data available under ODbL · Hebrew names from OSM
+        © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors · Hebrew names from OSM
       </p>
     </div>
   );
