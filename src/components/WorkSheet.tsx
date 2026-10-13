@@ -135,8 +135,24 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                   <dd><bdi dir="ltr">{fmtPct(section.cluster.right_pct)}</bdi></dd>
                 </div>
                 <div>
-                  <dt>מחל</dt>
-                  <dd><bdi dir="ltr">{fmtPct(section.cluster.likud_pct)}</bdi></dd>
+                  <dt>רכז</dt>
+                  <dd>
+                    {section.coordinators.length === 0 ? (
+                      "לא קושר"
+                    ) : (
+                      section.coordinators.map((c) => (
+                        <span className="sheet-coord" key={c.id}>
+                          <span>
+                            <span className="sheet-k">שם</span> {c.full_name}
+                          </span>
+                          <span className="sheet-coord-phone">
+                            <span className="sheet-k">נייד</span>{" "}
+                            <bdi dir="ltr">{c.mobile?.trim() || "—"}</bdi>
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>קלפיות</dt>

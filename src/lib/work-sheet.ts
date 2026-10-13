@@ -27,14 +27,19 @@ export type SheetCluster = {
   turnout_pct: number;
   right_votes: number;
   right_pct: number;
-  likud_votes: number;
-  likud_pct: number;
   ballot_count: number;
+};
+
+export type SheetCoordinator = {
+  id: number;
+  full_name: string;
+  mobile: string | null;
 };
 
 export type SheetSection = {
   institutions: SheetInstitution[];
   cluster: SheetCluster;
+  coordinators: SheetCoordinator[];
   marker: { lat: number; lng: number } | null;
   streets: SheetStreet[];
   street_total: number;
@@ -59,8 +64,6 @@ type ClusterSql = {
   turnout_pct: number;
   right_votes: number;
   right_pct: number;
-  likud_votes: number;
-  likud_pct: number;
   ballot_count: number;
   lat: number | null;
   lng: number | null;
@@ -150,8 +153,7 @@ async function sectionsFor(
 
   const clusters = (await sql`
     SELECT c.ashkol, c.settlement_name, c.bzb, c.voters, c.valid,
-           c.turnout_pct, c.right_votes, c.right_pct,
-           c.likud_votes, c.likud_pct, c.ballot_count,
+           c.turnout_pct, c.right_votes, c.right_pct, c.ballot_count,
            s.lat, s.lng
     FROM clusters c
     LEFT JOIN settlements s ON s.name_he = c.settlement_name
@@ -216,6 +218,7 @@ async function sectionsFor(
     const total = countByAshkol.get(ashkol) ?? 0;
     sections.push({
       institutions: grouped.get(ashkol) ?? [],
+      coordinators: [],
       cluster: {
         ashkol: row.ashkol,
         settlement_name: row.settlement_name,
@@ -225,8 +228,6 @@ async function sectionsFor(
         turnout_pct: num(row.turnout_pct),
         right_votes: num(row.right_votes),
         right_pct: num(row.right_pct),
-        likud_votes: num(row.likud_votes),
-        likud_pct: num(row.likud_pct),
         ballot_count: num(row.ballot_count),
       },
       marker,
@@ -240,6 +241,50 @@ async function sectionsFor(
     a.cluster.ashkol.localeCompare(b.cluster.ashkol, "he"),
   );
   return sections;
+}
+
+async function coordinatorsForAshkols(
+  sql: Sql,
+  ashkols: string[],
+  managerId: number | null,
+): Promise<Map<string, SheetCoordinator[]>> {
+  const grouped = new Map<string, SheetCoordinator[]>();
+  if (ashkols.length === 0) return grouped;
+  const rows = (managerId == null
+    ? await sql`
+        SELECT DISTINCT ic.ashkol, u.id, u.full_name, u.mobile
+        FROM institution_clusters ic
+        JOIN institution_coordinators link ON link.institution_id = ic.institution_id
+        JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+        WHERE ic.ashkol = ANY(${ashkols})
+        ORDER BY u.full_name, u.id
+      `
+    : await sql`
+        SELECT DISTINCT ic.ashkol, u.id, u.full_name, u.mobile
+        FROM institution_clusters ic
+        JOIN institution_coordinators link ON link.institution_id = ic.institution_id
+        JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+        WHERE ic.ashkol = ANY(${ashkols})
+          AND u.manager_id = ${managerId}
+        ORDER BY u.full_name, u.id
+      `) as {
+    ashkol: string;
+    id: number;
+    full_name: string;
+    mobile: string | null;
+  }[];
+  for (const row of rows) {
+    const list = grouped.get(row.ashkol) ?? [];
+    if (!list.some((c) => c.id === row.id)) {
+      list.push({
+        id: row.id,
+        full_name: row.full_name,
+        mobile: row.mobile?.trim() || null,
+      });
+    }
+    grouped.set(row.ashkol, list);
+  }
+  return grouped;
 }
 
 export async function coordinatorWorkSheet(
@@ -300,6 +345,12 @@ export async function coordinatorWorkSheet(
     })),
     coord.id,
   );
+  const person: SheetCoordinator = {
+    id: coord.id,
+    full_name: coord.full_name,
+    mobile: coord.mobile?.trim() || null,
+  };
+  for (const section of sections) section.coordinators = [person];
 
   return {
     sheet: {
@@ -358,6 +409,14 @@ export async function clusterWorkSheet(
   );
   if (institutions.length === 0 && sections[0]) {
     sections[0].institutions = [];
+  }
+  const people = await coordinatorsForAshkols(
+    sql,
+    [id],
+    viewer.role === "area_manager" ? viewer.id : null,
+  );
+  for (const section of sections) {
+    section.coordinators = people.get(section.cluster.ashkol) ?? [];
   }
 
   return {
