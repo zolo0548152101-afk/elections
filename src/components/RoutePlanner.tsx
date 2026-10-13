@@ -71,13 +71,17 @@ export type RouteApi = {
   commitStretch: () => void;
   newStretchSegment: () => void;
   finishStretch: () => boolean;
+  selectStretch: (stageNo: number, index: number) => void;
   splitStretch: (stageNo: number, drawIndex: number, vertex: number) => void;
   flipStageStretches: (stageNo: number) => void;
   setStretchDone: (stageNo: number, drawIndex: number, done: boolean) => void;
   removeStretch: (stageNo: number, drawIndex: number) => void;
 };
 
-function toFeatures(stages: RouteStage[]): Feature[] {
+function toFeatures(
+  stages: RouteStage[],
+  picked: { stage: number; index: number } | null,
+): Feature[] {
   const features: Feature[] = [];
   for (const stage of stages) {
     const color = stageColor(stage.stage_no);
@@ -99,14 +103,27 @@ function toFeatures(stages: RouteStage[]): Feature[] {
           geometry: { type: "LineString", coordinates },
         });
         const last = coordinates[coordinates.length - 1]!;
+        const mid = coordinates[Math.floor((coordinates.length - 1) / 2)]!;
+        const selected = picked?.stage === stage.stage_no && picked.index === index;
         features.push({
           type: "Feature",
           properties: {
             kind: "meter",
-            label: formatLengthPill(lineLengthMeters(coordinates)),
+            label: `${index + 1} · ${formatLengthPill(lineLengthMeters(coordinates))}`,
             stage: stage.stage_no,
           },
           geometry: { type: "Point", coordinates: last },
+        });
+        features.push({
+          type: "Feature",
+          properties: {
+            kind: "stretch-no",
+            label: String(index + 1),
+            stage: stage.stage_no,
+            draw: index,
+            selected: selected ? 1 : 0,
+          },
+          geometry: { type: "Point", coordinates: mid },
         });
       }
       coordinates.forEach((coord, vertex) => {
@@ -203,6 +220,7 @@ export function RoutePlanner({
   const [stageFilter, setStageFilter] = useState<number | "all">("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [openStage, setOpenStage] = useState<number | null>(null);
+  const [pickedDraw, setPickedDraw] = useState<{ stage: number; index: number } | null>(null);
   const [noteEdit, setNoteEdit] = useState<
     | { kind: "street"; stageNo: number; streetId: string; title: string }
     | { kind: "point"; stageNo: number; title: string }
@@ -229,7 +247,7 @@ export function RoutePlanner({
   useEffect(() => {
     const shown =
       stageFilter === "all" ? stages : stages.filter((stage) => stage.stage_no === stageFilter);
-    onFeaturesRef.current(toFeatures(shown));
+    onFeaturesRef.current(toFeatures(shown, pickedDraw));
     onStagesRef.current(
       stages.map((stage) => ({
         stage_no: stage.stage_no,
@@ -242,7 +260,7 @@ export function RoutePlanner({
         })),
       })),
     );
-  }, [stages, stageFilter]);
+  }, [stages, stageFilter, pickedDraw]);
 
   useEffect(() => {
     onActiveRef.current(active);
@@ -583,6 +601,11 @@ export function RoutePlanner({
       bindRef.current?.finishStretch();
       chainRef.current = null;
     },
+    selectStretch(stageNo, index) {
+      setPickedDraw({ stage: stageNo, index });
+      activeRef.current = stageNo;
+      setActive(stageNo);
+    },
     splitStretch(stageNo, drawIndex, vertex) {
       const next = stagesRef.current.map((stage) => {
         if (Number(stage.stage_no) !== Number(stageNo)) return stage;
@@ -650,14 +673,15 @@ export function RoutePlanner({
     return stagesRef.current.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
   }
 
-  function addStage() {
+  function addStage(keepStretch = false) {
+    bindRef.current?.finishStretch();
+    chainRef.current = null;
     const nextNo = nextStageNo();
-    const next = [
-      ...stagesRef.current,
-      blankStage(nextNo),
-    ];
+    const next = [...stagesRef.current, blankStage(nextNo)];
+    activeRef.current = nextNo;
     setActive(nextNo);
-    onMode("off");
+    setPickedDraw(null);
+    if (!keepStretch) onMode("off");
     void persist(next);
   }
 
@@ -775,7 +799,7 @@ export function RoutePlanner({
           >
             <FilterMark />
           </button>
-          <button type="button" className="route-icon-btn" aria-label="שלב חדש" onClick={addStage}>
+          <button type="button" className="route-icon-btn" aria-label="שלב חדש" onClick={() => addStage()}>
             +
           </button>
         </span>
@@ -793,21 +817,10 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn route-choice"
-          aria-label="מקטע חדש"
-          onClick={() => bindRef.current?.newStretchSegment()}
+          aria-label="שלב חדש"
+          onClick={() => addStage(true)}
         >
-          מקטע חדש
-        </button>
-        <button
-          type="button"
-          className="route-icon-btn route-choice"
-          aria-label="הפוך כיוון"
-          disabled={active == null}
-          onClick={() => {
-            if (active != null) bindRef.current?.flipStageStretches(active);
-          }}
-        >
-          הפוך כיוון
+          שלב חדש
         </button>
       </div>
       {filterOpen ? (
@@ -895,12 +908,13 @@ export function RoutePlanner({
                     key={`draw-${index}`}
                     type="button"
                     className={draw.done ? "route-name-done" : undefined}
+                    aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
                     onClick={(event) => {
                       event.stopPropagation();
-                      bindRef.current?.setStretchDone(stage.stage_no, index, !draw.done);
+                      bindRef.current?.selectStretch(stage.stage_no, index);
                     }}
                   >
-                    מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
+                    מתיחה {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
                     {draw.done ? " · בוצע" : ""}
                   </button>
                 ))}

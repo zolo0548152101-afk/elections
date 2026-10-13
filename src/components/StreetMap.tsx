@@ -393,6 +393,25 @@ function addMapOverlays(map: MapLibreMap) {
     },
   });
   map.addLayer({
+    id: "draw-number",
+    type: "symbol",
+    source: "route",
+    filter: ["==", ["get", "kind"], "stretch-no"],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-size": ["case", ["==", ["get", "selected"], 1], 22, 16],
+      "text-font": ["Noto Sans Regular"],
+      "text-offset": [0, -1.5],
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": "#111111",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 2,
+    },
+  });
+  map.addLayer({
     id: "draw-end-label",
     type: "symbol",
     source: "route",
@@ -865,6 +884,15 @@ export function StreetMap({
       clickTimer = null;
       clearPress();
       void openStagePopup(e);
+    });
+    map.on("click", "route-line", (e: MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      if (String(feature?.properties?.kind) !== "draw") return;
+      routeClickHandled = true;
+      routeApiRef.current?.selectStretch(
+        Number(feature?.properties?.stage),
+        Number(feature?.properties?.draw),
+      );
     });
     map.on("dblclick", "route-line", (e: MapLayerMouseEvent) => {
       if (finishByDoubleClick(e)) return;
@@ -1977,30 +2005,8 @@ export function StreetMap({
   openDrawPanelRef.current = (next) => {
     setPanel({ kind: "draw", ...next });
   };
-  openStreetPanelRef.current = (id, name) => {
-    const saved = routeStreetRef.current[id];
-    const portion = portionFromSaved(saved?.from ?? 0, saved?.to ?? 1);
-    setPanel({
-      kind: "street",
-      id,
-      name,
-      keep: portion.keep,
-      anchor: portion.anchor,
-      frozen: portion.frozen,
-      reversed: Boolean(saved?.reversed),
-      geometry: null,
-    });
-    void fetch(`/api/streets/${encodeURIComponent(id)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data) return;
-        setPanel((prev) =>
-          prev?.kind === "street" && prev.id === id
-            ? { ...prev, geometry: (data.geometry ?? null) as RouteGeometry | null }
-            : prev,
-        );
-      })
-      .catch(() => {});
+  openStreetPanelRef.current = () => {
+    // The street length card is not the route. A press on a street must not open it.
   };
   openClusterPanelRef.current = (cluster) => {
     setSelectedAshkol(cluster.ashkol);
