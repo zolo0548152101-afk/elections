@@ -26,14 +26,6 @@ export async function POST(
     SELECT id FROM streets WHERE ashkol = ${ashkol}
   `) as { id: string }[];
 
-  if (streets.length === 0) {
-    return NextResponse.json({
-      ashkol,
-      updated: 0,
-      message: "אין רחובות מקושרים לאשכול זה עדיין",
-    });
-  }
-
   let updated = 0;
   for (const s of streets) {
     if (!(await canMarkStreet(sql, user, s.id))) continue;
@@ -53,5 +45,24 @@ export async function POST(
     updated += 1;
   }
 
-  return NextResponse.json({ ashkol, updated, done });
+  await sql`
+    INSERT INTO ashkol_ops_status (ashkol, done, updated_by, updated_at)
+    VALUES (${ashkol}, ${done}, ${user.id}, now())
+    ON CONFLICT (ashkol) DO UPDATE SET
+      done = ${done},
+      updated_by = ${user.id},
+      updated_at = now()
+  `;
+
+  return NextResponse.json({
+    ashkol,
+    updated,
+    done,
+    message:
+      streets.length === 0
+        ? done
+          ? "האשכול סומן כבוצע"
+          : "האשכול חזר לפתוח"
+        : undefined,
+  });
 }

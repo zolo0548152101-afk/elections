@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClusterTable, type ClusterView } from "./ClusterTable";
 import { downloadClustersCsv } from "@/lib/csv";
 
@@ -111,6 +111,17 @@ export function Dashboard() {
       setSort(key);
       setDir(key === "settlement_name" || key === "ashkol" ? "asc" : "desc");
     }
+  }
+
+  const openClusters = useMemo(
+    () => (isCoordinator ? clusters.filter((c) => !c.done) : clusters),
+    [clusters, isCoordinator],
+  );
+
+  function onClusterDone(ashkol: string, done: boolean) {
+    setClusters((prev) =>
+      prev.map((c) => (c.ashkol === ashkol ? { ...c, done } : c)),
+    );
   }
 
   const withMap = clusters.filter((c) => c.map_lat != null).length;
@@ -255,22 +266,24 @@ export function Dashboard() {
           {error}
         </p>
       )}
-      {!loading && !error && count === 0 && (
+      {!loading && !error && openClusters.length === 0 && (
         <p className="lede" style={{ color: "var(--sand)" }}>
-          אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד»
-          על האשכולות הרלוונטיים — רק הם יופיעו כאן.
+          {isCoordinator && count > 0
+            ? "כל האשכולות סומנו כבוצע."
+            : "אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד» על האשכולות הרלוונטיים — רק הם יופיעו כאן."}
         </p>
       )}
 
       <div className="unified">
         <StreetMap
-          clusters={clusters}
-          focus={focus}
+          clusters={openClusters}
+          focus={isCoordinator ? null : focus}
           focusAshkol={selectedAshkol || null}
           focusAshkolToken={tableFocusToken}
+          onClusterDone={onClusterDone}
         />
         <ClusterTable
-          clusters={clusters}
+          clusters={openClusters}
           sort={sort}
           dir={dir}
           onSort={onSort}

@@ -1470,6 +1470,110 @@ tbody tr.cluster-row-selected:hover {
   color: var(--accent-2);
 }
 
+.route-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.route-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.route-stage {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: #fff;
+}
+
+.route-stage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-street {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.route-street textarea {
+  width: 100%;
+  min-height: 2.4rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+}
+
+.route-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 999px;
+  min-height: 44px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.route-pop {
+  display: grid;
+  gap: 8px;
+  min-width: 190px;
+}
+
+.route-pop p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.route-pop-btn {
+  min-height: 44px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(16, 32, 51, 0.16);
+  border-radius: 10px;
+  background: #fff;
+  color: #102033;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+}
+
+.route-pop-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.route-btn[aria-pressed="true"] {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
 .street-map-canvas {
   height: min(70vh, 720px);
   border-radius: 18px;

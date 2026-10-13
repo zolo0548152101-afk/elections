@@ -107,10 +107,10 @@ export async function GET(req: NextRequest) {
     return dir === "ASC" ? an - bn : bn - an;
   });
 
+  const ids = sorted.map((c) => c.ashkol);
   const linked = await linkedAshkolSet(sql);
-  const ashkolList = sorted.map((c) => c.ashkol);
-  const doneStats = await ashkolStreetStatsForUser(sql, ashkolList, user.id);
-  const opsDone = await opsDoneAshkols(sql, ashkolList);
+  const doneStats = await ashkolStreetStatsForUser(sql, ids, user.id);
+  const opsDone = await opsDoneAshkols(sql, ids);
 
   const withMap = sorted.map((c) => {
     const st = doneStats.get(c.ashkol);
