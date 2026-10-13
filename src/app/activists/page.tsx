@@ -59,12 +59,11 @@ export default function ActivistsPage() {
     return [...counts.entries()].map(([size, n]) => `${size} ${n}`).join(" · ");
   }, [rows]);
 
+  const registerOrigin = "https://election-day-ops.vercel.app";
   const link =
-    typeof window === "undefined"
-      ? "/register"
-      : filter === "all"
-        ? `${window.location.origin}/register`
-        : `${window.location.origin}/register?institution=${filter}`;
+    filter === "all"
+      ? `${registerOrigin}/register`
+      : `${registerOrigin}/register?institution=${filter}`;
 
   return (
     <main>
