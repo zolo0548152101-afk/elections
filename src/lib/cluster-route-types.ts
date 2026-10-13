@@ -23,6 +23,8 @@ export type RoutePoint = {
 export type RouteDraw = {
   coordinates: number[][];
   done: boolean;
+  /** Double-click closed the route, so the last handle is B. */
+  finished: boolean;
 };
 
 export type RouteStage = {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
 import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
-import { directedGeometry, formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
+import { formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
 
 /** Stage colors stay off blue, green, gold, cyan, orange, red, and near-black. */
 const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
@@ -70,6 +70,7 @@ export type RouteApi = {
   insertStretchVertex: (stageNo: number, drawIndex: number, after: number, lng: number, lat: number) => number;
   commitStretch: () => void;
   newStretchSegment: () => void;
+  finishStretch: () => boolean;
   splitStretch: (stageNo: number, drawIndex: number, vertex: number) => void;
   flipStageStretches: (stageNo: number) => void;
   setStretchDone: (stageNo: number, drawIndex: number, done: boolean) => void;
@@ -80,27 +81,6 @@ function toFeatures(stages: RouteStage[]): Feature[] {
   const features: Feature[] = [];
   for (const stage of stages) {
     const color = stageColor(stage.stage_no);
-    for (const street of stage.streets) {
-      const geometry = directedGeometry(street.geometry, street.reversed);
-      if (!geometry) continue;
-      const lines =
-        geometry.type === "LineString" ? [geometry.coordinates] : geometry.coordinates;
-      for (const coordinates of lines) {
-        if (coordinates.length < 2) continue;
-        const line: Feature<LineString> = {
-          type: "Feature",
-          properties: {
-            color: street.done ? "#16a34a" : color,
-            stage: stage.stage_no,
-            kind: "street",
-            id: street.street_id,
-            name_he: street.name_he,
-          },
-          geometry: { type: "LineString", coordinates },
-        };
-        features.push(line);
-      }
-    }
     for (const [index, draw] of asDraws(stage.draws).entries()) {
       const coordinates = draw.coordinates ?? [];
       const color = draw.done ? "#16a34a" : stageColor(stage.stage_no);
@@ -130,6 +110,8 @@ function toFeatures(stages: RouteStage[]): Feature[] {
         });
       }
       coordinates.forEach((coord, vertex) => {
+        const label =
+          vertex === 0 ? "A" : draw.finished && vertex === coordinates.length - 1 ? "B" : "";
         features.push({
           type: "Feature",
           properties: {
@@ -139,6 +121,7 @@ function toFeatures(stages: RouteStage[]): Feature[] {
             draw: index,
             vertex,
             count: coordinates.length,
+            label,
           },
           geometry: { type: "Point", coordinates: coord },
         });
@@ -179,6 +162,7 @@ function payload(stages: RouteStage[]) {
       draws: asDraws(stage.draws).map((draw) => ({
         coordinates: draw.coordinates,
         done: Boolean(draw.done),
+        finished: Boolean(draw.finished),
       })),
       point: stage.point
         ? { lat: stage.point.lat, lng: stage.point.lng, note: stage.point.note }
@@ -524,7 +508,7 @@ export function RoutePlanner({
           };
         }
         if (draws.length >= DRAW_MAX) return stage;
-        const added = [...draws, { coordinates: [[lng, lat]], done: false }];
+        const added = [...draws, { coordinates: [[lng, lat]], done: false, finished: false }];
         chainRef.current = { stageNo, index: added.length - 1 };
         return { ...stage, draws: added };
       });
@@ -572,7 +556,31 @@ export function RoutePlanner({
     commitStretch() {
       void persist(stagesRef.current);
     },
+    finishStretch() {
+      const chain = chainRef.current;
+      chainRef.current = null;
+      const stageNo = chain?.stageNo ?? activeRef.current;
+      if (stageNo == null) return false;
+      let closed = false;
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        const draws = asDraws(stage.draws);
+        const index = chain && chain.stageNo === stageNo ? chain.index : draws.length - 1;
+        return {
+          ...stage,
+          draws: draws.map((draw, drawIndex) => {
+            if (drawIndex !== index || draw.finished || draw.coordinates.length < 2) return draw;
+            closed = true;
+            return { ...draw, finished: true };
+          }),
+        };
+      });
+      if (!closed) return false;
+      void persist(next);
+      return true;
+    },
     newStretchSegment() {
+      bindRef.current?.finishStretch();
       chainRef.current = null;
     },
     splitStretch(stageNo, drawIndex, vertex) {

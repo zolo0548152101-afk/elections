@@ -393,6 +393,25 @@ function addMapOverlays(map: MapLibreMap) {
     },
   });
   map.addLayer({
+    id: "draw-end-label",
+    type: "symbol",
+    source: "route",
+    filter: ["in", ["get", "label"], ["literal", ["A", "B"]]],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-size": 13,
+      "text-font": ["Noto Sans Regular"],
+      "text-anchor": "center",
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": "#111111",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.2,
+    },
+  });
+  map.addLayer({
     id: "draw-meter",
     type: "symbol",
     source: "route",
@@ -661,6 +680,7 @@ export function StreetMap({
       y: number;
     } | null = null;
     let clickTimer: number | null = null;
+    let stretchFinishedAt = 0;
     let lastStreetTap: { id: string; time: number } | null = null;
 
     function clearPress() {
@@ -747,6 +767,23 @@ export function StreetMap({
       );
     }
 
+    function finishByDoubleClick(e: { preventDefault: () => void; originalEvent?: { preventDefault: () => void } }) {
+      if (routeModeRef.current !== "stretch") return false;
+      e.preventDefault();
+      e.originalEvent?.preventDefault();
+      if (clickTimer != null) window.clearTimeout(clickTimer);
+      clickTimer = null;
+      clearPress();
+      pendingLeg = null;
+      const closed = routeApiRef.current?.finishStretch() ?? false;
+      if (closed) stretchFinishedAt = Date.now();
+      if (closed || Date.now() - stretchFinishedAt > 400) {
+        setStatus(closed ? "המסלול הסתיים" : "צריך עוד נקודה לפני סיום");
+      }
+      window.setTimeout(() => map.stop(), 0);
+      return true;
+    }
+
     function bindOverlayInteractions() {
     map.on("mousedown", "streets-line", armPress);
     let stretchDrag: { stage: number; draw: number; vertex: number; moved: boolean } | null = null;
@@ -822,7 +859,7 @@ export function StreetMap({
       void openStagePopup(e);
     });
     map.on("dblclick", "streets-line", (e: MapLayerMouseEvent) => {
-      if (routeModeRef.current === "stretch") return;
+      if (finishByDoubleClick(e)) return;
       e.preventDefault();
       if (clickTimer != null) window.clearTimeout(clickTimer);
       clickTimer = null;
@@ -830,6 +867,7 @@ export function StreetMap({
       void openStagePopup(e);
     });
     map.on("dblclick", "route-line", (e: MapLayerMouseEvent) => {
+      if (finishByDoubleClick(e)) return;
       e.preventDefault();
       if (clickTimer != null) window.clearTimeout(clickTimer);
       clickTimer = null;
@@ -960,7 +998,14 @@ export function StreetMap({
           const layer = feature.layer?.id;
           return kind === "draw" || kind === "handle" || kind === "point" || layer === "clusters-circle";
         });
-        if (!blocked) routeApiRef.current?.stretchPoint(e.lngLat.lng, e.lngLat.lat);
+        if (blocked) return;
+        if (clickTimer != null) window.clearTimeout(clickTimer);
+        const lng = e.lngLat.lng;
+        const lat = e.lngLat.lat;
+        clickTimer = window.setTimeout(() => {
+          clickTimer = null;
+          routeApiRef.current?.stretchPoint(lng, lat);
+        }, 280);
         return;
       }
       if (routeModeRef.current !== "off") return;
@@ -1161,7 +1206,7 @@ export function StreetMap({
       if (Math.hypot(e.point.x - startAt.x, e.point.y - startAt.y) > 12) clearStart();
     });
     map.on("dblclick", (e) => {
-      if (routeModeRef.current === "stretch") return;
+      if (finishByDoubleClick(e)) return;
       if (occupied(e.point)) return;
       e.preventDefault();
       e.originalEvent.preventDefault();

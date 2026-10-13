@@ -149,11 +149,11 @@ export async function readClusterRoute(
     WHERE stage_id = ANY(${stageIds})
   `) as { stage_id: number; lat: number; lng: number; note: string }[];
   const draws = (await sql`
-    SELECT stage_id, sort_order, path_geojson, done
+    SELECT stage_id, sort_order, path_geojson, done, finished
     FROM cluster_route_draws
     WHERE stage_id = ANY(${stageIds})
     ORDER BY sort_order, id
-  `) as { stage_id: number; path_geojson: string; done: boolean }[];
+  `) as { stage_id: number; path_geojson: string; done: boolean; finished: boolean }[];
 
   const byStage = new Map<number, RouteStage>();
   for (const stage of stages) {
@@ -186,7 +186,11 @@ export async function readClusterRoute(
       parsed && typeof parsed === "object" ? (parsed as { coordinates?: unknown }).coordinates : null,
     );
     if (coordinates.length === 0) continue;
-    stage.draws.push({ coordinates, done: Boolean(draw.done) });
+    stage.draws.push({
+      coordinates,
+      done: Boolean(draw.done),
+      finished: Boolean(draw.finished),
+    });
   }
   for (const point of points) {
     const stage = byStage.get(point.stage_id);
@@ -211,7 +215,7 @@ type IncomingStage = {
     done?: unknown;
   }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
-  draws?: { coordinates?: unknown; done?: unknown }[];
+  draws?: { coordinates?: unknown; done?: unknown; finished?: unknown }[];
   stage_no?: unknown;
 };
 
@@ -297,12 +301,13 @@ export async function saveClusterRoute(
       const coordinates = drawCoordinates(draw.coordinates);
       if (coordinates.length === 0) continue;
       await sql`
-        INSERT INTO cluster_route_draws (stage_id, sort_order, path_geojson, done)
+        INSERT INTO cluster_route_draws (stage_id, sort_order, path_geojson, done, finished)
         VALUES (
           ${stageId},
           ${drawOrder},
           ${JSON.stringify({ type: "LineString", coordinates })},
-          ${truthy(draw.done)}
+          ${truthy(draw.done)},
+          ${truthy(draw.finished)}
         )
       `;
       drawOrder += 1;
