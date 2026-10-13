@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FormMsg } from "@/components/FormMsg";
 import { ShowMore } from "@/components/ShowMore";
 import { useTimedFlash } from "@/hooks/useTimedFlash";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
-import { matchesSearch } from "@/lib/text-search";
+import { matchesSearch, normalizeSearch } from "@/lib/text-search";
 
 type LinkedCluster = { ashkol: string; settlement_name?: string };
 type Institution = {
   id: number;
   name: string;
+  kind?: string | null;
   settlement_name?: string | null;
   linked_clusters?: LinkedCluster[] | string;
 };
@@ -120,8 +121,6 @@ export default function UsersPage() {
   const [sentOkId, setSentOkId] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
-  const [addInstitutionId, setAddInstitutionId] = useState("");
-  const [instPickerQ, setInstPickerQ] = useState("");
   const [addCoordinatorId, setAddCoordinatorId] = useState("");
 
   async function load() {
@@ -146,8 +145,6 @@ export default function UsersPage() {
     setForm(freshForm());
     setEditId(null);
     setShowPassword(false);
-    setAddInstitutionId("");
-    setInstPickerQ("");
     setAddCoordinatorId("");
   }
 
@@ -163,23 +160,19 @@ export default function UsersPage() {
       coordinator_ids: parseIds(u.coordinator_ids),
       manager_id: u.manager_id ? String(u.manager_id) : "",
     });
-    setAddInstitutionId("");
-    setInstPickerQ("");
     setAddCoordinatorId("");
     setShowPassword(false);
     flash("info", "עריכה: השאירו סיסמה ריקה כדי לא לשנות. לסיסמה חדשה — לפחות 8 תווים.");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function addInstitution() {
-    const id = Number(addInstitutionId);
+  function addInstitution(id: number) {
     if (!Number.isInteger(id) || id <= 0) return;
     setForm((prev) =>
       prev.institution_ids.includes(id)
         ? prev
         : { ...prev, institution_ids: [...prev.institution_ids, id] },
     );
-    setAddInstitutionId("");
   }
 
   function removeInstitution(id: number) {
@@ -207,16 +200,6 @@ export default function UsersPage() {
     }));
   }
 
-  /** Include dropdown selection even if הוסף wasn't clicked. */
-  function effectiveInstitutionIds(): number[] {
-    const ids = [...form.institution_ids];
-    const pending = Number(addInstitutionId);
-    if (Number.isInteger(pending) && pending > 0 && !ids.includes(pending)) {
-      ids.push(pending);
-    }
-    return ids;
-  }
-
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     clearMsg();
@@ -231,8 +214,7 @@ export default function UsersPage() {
       return;
     }
 
-    const institutionIds =
-      role === "coordinator" ? effectiveInstitutionIds() : [];
+    const institutionIds = role === "coordinator" ? form.institution_ids : [];
 
     setSaving(true);
     const payload = {
@@ -365,24 +347,6 @@ export default function UsersPage() {
       .map((id) => institutionLabel(institutionById.get(id), id))
       .join(" · ");
   }
-
-  const pickerInstitutions = useMemo(() => {
-    return institutions
-      .filter((i) => !form.institution_ids.includes(i.id))
-      .filter((i) => {
-        if (!instPickerQ.trim()) return true;
-        const clusters = institutionClusters(i);
-        const hay = [
-          i.name,
-          i.settlement_name,
-          ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
-          ...clusters.map((c) => c.settlement_name),
-        ]
-          .filter(Boolean)
-          .join(" ");
-        return matchesSearch(hay, instPickerQ);
-      });
-  }, [institutions, form.institution_ids, instPickerQ]);
 
   const filteredUsers = users.filter((u) => {
     if (roleFilter && u.role !== roleFilter) return false;
@@ -524,7 +488,7 @@ export default function UsersPage() {
                   <span className="field-label">מוסדות</span>
                   {form.institution_ids.length === 0 ? (
                     <p className="lede" style={{ margin: "0.35rem 0" }}>
-                      אין מוסדות משויכים — בחרו מוסד ולחצו הוסף (או שמירה ישירות)
+                      אין מוסדות משויכים — חפשו מוסד או אשכול ובחרו כדי להוסיף
                     </p>
                   ) : (
                     <ul className="coord-link-list">
@@ -545,34 +509,11 @@ export default function UsersPage() {
                       })}
                     </ul>
                   )}
-                  <div className="coord-link-add" style={{ marginTop: "0.5rem" }}>
-                    <input
-                      type="search"
-                      value={instPickerQ}
-                      onChange={(e) => setInstPickerQ(e.target.value)}
-                      placeholder="חיפוש מוסד או אשכול…"
-                      autoComplete="off"
-                    />
-                    <select
-                      value={addInstitutionId}
-                      onChange={(e) => setAddInstitutionId(e.target.value)}
-                    >
-                      <option value="">הוספת מוסד…</option>
-                      {pickerInstitutions.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {institutionLabel(i)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="export"
-                      disabled={!addInstitutionId}
-                      onClick={addInstitution}
-                    >
-                      הוסף
-                    </button>
-                  </div>
+                  <InstitutionAddSearch
+                    institutions={institutions}
+                    excludeIds={form.institution_ids}
+                    onAdd={addInstitution}
+                  />
                 </div>
               )}
               {meRole === "super_admin" && form.role === "area_manager" && (
@@ -749,5 +690,150 @@ export default function UsersPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function institutionHay(inst: Institution): string {
+  const clusters = institutionClusters(inst);
+  return [
+    inst.name,
+    inst.kind,
+    inst.settlement_name,
+    ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
+    ...clusters.map((c) => c.settlement_name),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function searchLabel(inst: Institution): string {
+  const clusters = formatAshkolLabels(institutionClusters(inst));
+  return [inst.name, inst.kind, clusters].filter(Boolean).join(" · ");
+}
+
+function searchRank(inst: Institution, term: string): number {
+  const needle = normalizeSearch(term);
+  const name = normalizeSearch(inst.name);
+  if (name.startsWith(needle)) return 0;
+  if (name.includes(needle)) return 1;
+  const clusters = institutionClusters(inst);
+  const place = normalizeSearch(
+    [
+      inst.settlement_name,
+      ...clusters.map((c) => formatAshkolLabel(c.ashkol, c.settlement_name)),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (place.includes(needle)) return 2;
+  return 3;
+}
+
+/** One field: type a institution or cluster, then choose it to attach. */
+function InstitutionAddSearch({
+  institutions,
+  excludeIds,
+  onAdd,
+}: {
+  institutions: Institution[];
+  excludeIds: number[];
+  onAdd: (id: number) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  const hits = useMemo(() => {
+    const term = q.trim();
+    if (!term) return [];
+    return institutions
+      .filter((i) => !excludeIds.includes(i.id))
+      .filter((i) => matchesSearch(institutionHay(i), term))
+      .sort((a, b) => searchRank(a, term) - searchRank(b, term) || a.name.localeCompare(b.name, "he"))
+      .slice(0, 12);
+  }, [institutions, excludeIds, q]);
+
+  useEffect(() => {
+    setActive(0);
+  }, [q]);
+
+  useEffect(() => {
+    function onDoc(e: PointerEvent) {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, []);
+
+  function choose(inst: Institution) {
+    onAdd(inst.id);
+    setQ("");
+    setOpen(false);
+  }
+
+  const showList = open && q.trim().length > 0;
+
+  return (
+    <div className="coord-link-add institution-add-search">
+      <div className="ashkol-search" ref={boxRef}>
+        <input
+          type="search"
+          value={q}
+          placeholder="חיפוש והוספת מוסד או אשכול…"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showList}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setActive((i) => Math.min(i + 1, Math.max(hits.length - 1, 0)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (showList && hits[active]) choose(hits[active]);
+            }
+          }}
+        />
+        {showList && (
+          <ul className="search-hits" id={listId} role="listbox">
+            {hits.length === 0 ? (
+              <li className="search-hint">אין תוצאות</li>
+            ) : (
+              hits.map((h, i) => (
+                <li key={h.id} role="option" aria-selected={i === active}>
+                  <button
+                    type="button"
+                    className={i === active ? "active" : undefined}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      choose(h);
+                    }}
+                  >
+                    {searchLabel(h)}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
