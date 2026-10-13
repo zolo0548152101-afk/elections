@@ -8,6 +8,7 @@ export type RouteStreet = {
   note: string;
   from_ratio: number;
   to_ratio: number;
+  reversed: boolean;
   geometry: RouteGeometry | null;
 };
 

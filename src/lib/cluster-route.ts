@@ -102,7 +102,7 @@ export async function readClusterRoute(
 
   const stageIds = stages.map((s) => s.id);
   const streets = (await sql`
-    SELECT r.stage_id, r.street_id, r.note, r.sort_order, r.from_ratio, r.to_ratio,
+    SELECT r.stage_id, r.street_id, r.note, r.sort_order, r.from_ratio, r.to_ratio, r.reversed,
            s.name_he, s.geom_geojson
     FROM cluster_route_streets r
     JOIN streets s ON s.id = r.street_id
@@ -115,6 +115,7 @@ export async function readClusterRoute(
     sort_order: number;
     from_ratio: number;
     to_ratio: number;
+    reversed: boolean;
     name_he: string;
     geom_geojson: string;
   }[];
@@ -137,6 +138,7 @@ export async function readClusterRoute(
       note: street.note ?? "",
       from_ratio: Math.min(fromRatio, toRatio),
       to_ratio: Math.max(fromRatio, toRatio),
+      reversed: Boolean(street.reversed),
       geometry: spanOf(geometryFromGeoJson(street.geom_geojson), fromRatio, toRatio),
     });
   }
@@ -154,7 +156,13 @@ export async function readClusterRoute(
 }
 
 type IncomingStage = {
-  streets?: { street_id?: unknown; note?: unknown; from_ratio?: unknown; to_ratio?: unknown }[];
+  streets?: {
+    street_id?: unknown;
+    note?: unknown;
+    from_ratio?: unknown;
+    to_ratio?: unknown;
+    reversed?: unknown;
+  }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
 };
 
@@ -218,14 +226,15 @@ export async function saveClusterRoute(
       const toRatio = clampRatio(street.to_ratio, 1);
       await sql`
         INSERT INTO cluster_route_streets
-          (stage_id, street_id, note, sort_order, from_ratio, to_ratio)
+          (stage_id, street_id, note, sort_order, from_ratio, to_ratio, reversed)
         VALUES (
           ${stageId},
           ${streetId},
           ${clipNote(street.note)},
           ${order},
           ${Math.min(fromRatio, toRatio)},
-          ${Math.max(fromRatio, toRatio)}
+          ${Math.max(fromRatio, toRatio)},
+          ${street.reversed === true || street.reversed === 1 || street.reversed === "true"}
         )
       `;
       order += 1;

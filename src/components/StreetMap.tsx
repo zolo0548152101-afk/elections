@@ -17,7 +17,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { spanOf } from "@/lib/street-span";
+import { directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
@@ -163,6 +163,7 @@ export function StreetMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const openStreetPanelRef = useRef<(id: string, name: string) => void>(() => {});
+  const openStartRef = useRef<(lat: number, lng: number) => void>(() => {});
   const openClusterPanelRef = useRef<(cluster: ClusterView) => void>(() => {});
   const zoomClusterRef = useRef<(lng: number, lat: number, ashkol: string) => void>(() => {});
   const [q, setQ] = useState("");
@@ -200,11 +201,21 @@ export function StreetMap({
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
   const [routeStages, setRouteStages] = useState<{ stage_no: number }[]>([]);
+  const routeDirRef = useRef<Record<string, boolean>>({});
   const routeModeRef = useRef<RouteMode>("off");
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
   const [panel, setPanel] = useState<
-    | { kind: "street"; id: string; name: string; from: number; to: number; geometry: RouteGeometry | null }
+    | {
+        kind: "street";
+        id: string;
+        name: string;
+        from: number;
+        to: number;
+        reversed: boolean;
+        geometry: RouteGeometry | null;
+      }
+    | { kind: "start"; lat: number; lng: number }
     | { kind: "cluster"; cluster: ClusterView }
     | null
   >(null);
@@ -382,6 +393,22 @@ export function StreetMap({
             },
           },
           {
+            id: "highlight-arrow",
+            type: "symbol",
+            source: "highlight",
+            filter: ["==", ["geometry-type"], "LineString"],
+            layout: {
+              "symbol-placement": "line",
+              "symbol-spacing": 70,
+              "icon-image": "route-dir",
+              "icon-size": 0.55,
+              "icon-allow-overlap": true,
+              "icon-rotation-alignment": "map",
+              "icon-keep-upright": false,
+            },
+            paint: { "icon-color": "#102033" },
+          },
+          {
             id: "route-line",
             type: "line",
             source: "route",
@@ -391,6 +418,22 @@ export function StreetMap({
               "line-width": 6,
               "line-opacity": 0.95,
             },
+          },
+          {
+            id: "route-arrow",
+            type: "symbol",
+            source: "route",
+            filter: ["==", ["geometry-type"], "LineString"],
+            layout: {
+              "symbol-placement": "line",
+              "symbol-spacing": 70,
+              "icon-image": "route-dir",
+              "icon-size": 0.55,
+              "icon-allow-overlap": true,
+              "icon-rotation-alignment": "map",
+              "icon-keep-upright": false,
+            },
+            paint: { "icon-color": ["get", "color"] },
           },
           {
             id: "route-point",
@@ -410,7 +453,7 @@ export function StreetMap({
             source: "route",
             filter: ["==", ["get", "kind"], "point"],
             layout: {
-              "text-field": ["to-string", ["get", "stage"]],
+              "text-field": ["coalesce", ["get", "label"], ["to-string", ["get", "stage"]]],
               "text-size": 12,
               "text-font": ["Noto Sans Regular"],
               "text-offset": [0, -1.3],
@@ -433,7 +476,28 @@ export function StreetMap({
     }
 
     map.addControl(new NavigationControl(), "top-left");
-    map.on("load", () => setStatus("לחצו על רחוב לסימון"));
+    map.on("load", () => {
+      if (!map.hasImage("route-dir")) {
+        const size = 32;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, size, size);
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.moveTo(16, 3);
+          ctx.lineTo(27, 26);
+          ctx.lineTo(16, 20);
+          ctx.lineTo(5, 26);
+          ctx.closePath();
+          ctx.fill();
+          map.addImage("route-dir", ctx.getImageData(0, 0, size, size), { sdf: true });
+        }
+      }
+      setStatus("לחצו על רחוב לסימון");
+    });
     map.on("error", (e) => {
       const msg = String(
         (e as { error?: { message?: string } }).error?.message ?? "",
@@ -452,6 +516,7 @@ export function StreetMap({
 
     let routeClickHandled = false;
     let longFired = false;
+    let startLong = false;
     let pressTimer: number | null = null;
     let pressAt: { x: number; y: number } | null = null;
 
@@ -600,6 +665,10 @@ export function StreetMap({
     }
 
     map.on("click", (e) => {
+      if (startLong) {
+        startLong = false;
+        return;
+      }
       if (routeClickHandled) {
         routeClickHandled = false;
         return;
@@ -673,6 +742,54 @@ export function StreetMap({
     });
     map.on("mouseleave", "clusters-circle", () => {
       map.getCanvas().style.cursor = "";
+    });
+
+    function occupied(point: { x: number; y: number }) {
+      if (!map.isStyleLoaded()) return false;
+      const layers = ["streets-line", "route-line", "clusters-circle", "route-point"].filter(
+        (id) => map.getLayer(id),
+      );
+      if (layers.length === 0) return false;
+      return map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
+    }
+    let startTimer: number | null = null;
+    let startAt: { x: number; y: number } | null = null;
+    function clearStart() {
+      if (startTimer != null) window.clearTimeout(startTimer);
+      startTimer = null;
+      startAt = null;
+    }
+    function armStart(e: { point: { x: number; y: number }; lngLat: { lat: number; lng: number } }) {
+      if (occupied(e.point)) return;
+      clearStart();
+      startLong = false;
+      startAt = { x: e.point.x, y: e.point.y };
+      const { lat, lng } = e.lngLat;
+      startTimer = window.setTimeout(() => {
+        startTimer = null;
+        startLong = true;
+        openStartRef.current(lat, lng);
+      }, 550);
+    }
+    map.on("mousedown", armStart);
+    map.on("touchstart", armStart);
+    map.on("mouseup", clearStart);
+    map.on("touchend", clearStart);
+    map.on("touchcancel", clearStart);
+    map.on("mousemove", (e) => {
+      if (!startAt || startTimer == null) return;
+      if (Math.hypot(e.point.x - startAt.x, e.point.y - startAt.y) > 12) clearStart();
+    });
+    map.on("touchmove", (e) => {
+      if (!startAt || startTimer == null) return;
+      if (Math.hypot(e.point.x - startAt.x, e.point.y - startAt.y) > 12) clearStart();
+    });
+    map.on("dblclick", (e) => {
+      if (occupied(e.point)) return;
+      e.preventDefault();
+      e.originalEvent.preventDefault();
+      window.setTimeout(() => map.stop(), 0);
+      openStartRef.current(e.lngLat.lat, e.lngLat.lng);
     });
 
     mapRef.current = map;
@@ -1323,8 +1440,19 @@ export function StreetMap({
     );
   }
 
+  openStartRef.current = (lat, lng) => {
+    setPanel({ kind: "start", lat, lng });
+  };
   openStreetPanelRef.current = (id, name) => {
-    setPanel({ kind: "street", id, name, from: 0, to: 100, geometry: null });
+    setPanel({
+      kind: "street",
+      id,
+      name,
+      from: 0,
+      to: 100,
+      reversed: Boolean(routeDirRef.current[id]),
+      geometry: null,
+    });
     void fetch(`/api/streets/${encodeURIComponent(id)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -1366,7 +1494,10 @@ export function StreetMap({
       src.setData({ type: "FeatureCollection", features: [] });
       return;
     }
-    const sliced = spanOf(panel.geometry, panel.from / 100, panel.to / 100);
+    const sliced = directedGeometry(
+      spanOf(panel.geometry, panel.from / 100, panel.to / 100),
+      panel.reversed,
+    );
     src.setData({
       type: "FeatureCollection",
       features: sliced ? [{ type: "Feature", properties: {}, geometry: sliced }] : [],
@@ -1389,6 +1520,17 @@ export function StreetMap({
     );
   }
 
+  function saveStartPoint() {
+    if (panel?.kind !== "start") return;
+    if (!routeApiRef.current) {
+      setStatus("בחרו אשכול כדי לשמור נקודת התחלה");
+      return;
+    }
+    routeApiRef.current.addStartPoint(panel.lat, panel.lng);
+    setPanel(null);
+    setStatus("נקודת התחלה נשמרה");
+  }
+
   function addPanelStreet(stage: number | "new") {
     if (panel?.kind !== "street") return;
     const from = Math.min(panel.from, panel.to) / 100;
@@ -1398,6 +1540,7 @@ export function StreetMap({
       name_he: panel.name,
       from_ratio: from,
       to_ratio: to,
+      reversed: panel.reversed,
     };
     if (stage === "new") routeApiRef.current?.addStreetToNewStage(street);
     else routeApiRef.current?.addStreetToStage(street, stage);
@@ -1428,6 +1571,15 @@ export function StreetMap({
             <li>קלפיות <bdi dir="ltr">{fmtInt(panel.cluster.ballot_count)}</bdi></li>
           </ul>
         </>
+      ) : panel.kind === "start" ? (
+        <>
+          <strong>נקודת התחלה</strong>
+          <p>המקום שנלחץ על המפה, לשלב הראשון.</p>
+          <button type="button" className="route-pop-btn" onClick={saveStartPoint} disabled={!picked}>
+            שמור נקודת התחלה
+          </button>
+          {!picked ? <p>בחרו אשכול כדי לשמור.</p> : null}
+        </>
       ) : (
         <>
           <strong>{panel.name}</strong>
@@ -1456,8 +1608,30 @@ export function StreetMap({
                 setPanel((prev) => (prev?.kind === "street" ? { ...prev, to } : prev));
               }}
             />
-          </label>
-          {routeStages.map((stage) => (
+              </label>
+              <div className="route-dir" role="group" aria-label="כיוון ההתקדמות">
+                <button
+                  type="button"
+                  className="route-pop-btn"
+                  aria-pressed={!panel.reversed}
+                  onClick={() =>
+                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: false } : prev))
+                  }
+                >
+                  ▲ כיוון הרחוב
+                </button>
+                <button
+                  type="button"
+                  className="route-pop-btn"
+                  aria-pressed={panel.reversed}
+                  onClick={() =>
+                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: true } : prev))
+                  }
+                >
+                  ▼ כיוון הפוך
+                </button>
+              </div>
+              {routeStages.map((stage) => (
             <button
               key={stage.stage_no}
               type="button"
@@ -1763,7 +1937,14 @@ export function StreetMap({
                 mode={routeMode}
                 onMode={setRouteMode}
                 onFeatures={setRouteFeatures}
-                onStages={setRouteStages}
+                onStages={(stages) => {
+                  setRouteStages(stages.map((stage) => ({ stage_no: stage.stage_no })));
+                  const dirs: Record<string, boolean> = {};
+                  for (const stage of stages) {
+                    for (const street of stage.streets) dirs[street.street_id] = street.reversed;
+                  }
+                  routeDirRef.current = dirs;
+                }}
                 bindRef={routeApiRef}
               />
             </>

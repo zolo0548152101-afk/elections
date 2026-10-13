@@ -1338,6 +1338,23 @@ tbody tr.cluster-row-selected:hover {
   min-height: 36px;
 }
 
+.route-dir {
+  display: grid;
+  gap: 6px;
+}
+
+.map-side-panel .route-pop-btn[aria-pressed="true"],
+.route-row-actions .route-btn[aria-pressed="true"] {
+  background: #f5f3ff;
+  border-color: #6d28d9;
+  color: var(--ink);
+}
+
+.map-side-panel .route-pop-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .street-map-toolbar {
   display: grid;
   grid-template-columns: 1.4fr 1fr auto auto;
