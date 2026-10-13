@@ -16,7 +16,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { arrowMarks, arrowMarksEvery, closestInsert, directedGeometry, lineLengthMeters, spanOf } from "@/lib/street-span";
+import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
 import { streetsTilePath } from "@/lib/tiles-version";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
@@ -1476,33 +1476,12 @@ export function StreetMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-    let alive = true;
-
-    const lines = () => {
-      const out: { key: string; coords: number[][]; meters: number }[] = [];
-      const push = (key: string, coords: number[][]) => {
-        const meters = lineLengthMeters(coords);
-        if (meters < 1) return;
-        out.push({ key, coords, meters });
-      };
-      if (panel?.kind === "street") {
-        const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
-        const sliced = directedGeometry(
-          spanOf(panel.geometry, ratios.from, ratios.to),
-          panel.reversed,
-        );
-        if (sliced?.type === "LineString") push(`preview-${panel.id}`, sliced.coordinates);
-      }
-      return out;
-    };
-
-    const phases = new Map<string, number>();
-    let last = performance.now();
-    const draw = () => {
+    const apply = () => {
       const src = map.getSource("arrows") as GeoJSONSource | undefined;
       if (!src) return;
+      // Street geometry is not a route. A ring's first and last points are the
+      // same corner, and walking arrows around it makes that corner look like
+      // both the start and the end. Arrows belong only to a stretched segment.
       const features = routeFeatures.flatMap((feature) => {
         if (feature.properties?.kind !== "draw" || feature.geometry.type !== "LineString") return [];
         return arrowMarksEvery(feature.geometry.coordinates as number[][], 40).map((mark) => ({
@@ -1511,55 +1490,11 @@ export function StreetMap({
           geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
         }));
       });
-      for (const line of lines()) {
-        const current = phases.get(line.key) ?? 0;
-        for (const mark of arrowMarks(line.coords, current)) {
-          features.push({
-            type: "Feature" as const,
-            properties: { bearing: mark.bearing, kind: "arrow", scale: 1.15 },
-            geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
-          });
-        }
-      }
       src.setData({ type: "FeatureCollection", features });
     };
-
-    const tick = (now: number) => {
-      if (!alive) return;
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (!media.matches) {
-        for (const line of lines()) {
-          const current = phases.get(line.key) ?? 0;
-          phases.set(line.key, (current + (4 * dt) / line.meters) % 1);
-        }
-      }
-      draw();
-      frame = window.requestAnimationFrame(tick);
-    };
-
-    const start = () => {
-      if (!alive) return;
-      window.cancelAnimationFrame(frame);
-      last = performance.now();
-      if (media.matches || lines().length === 0) {
-        draw();
-        return;
-      }
-      frame = window.requestAnimationFrame(tick);
-    };
-
-    if (map.isStyleLoaded()) start();
-    else map.once("load", start);
-    const onMotion = () => start();
-    media.addEventListener("change", onMotion);
-    return () => {
-      alive = false;
-      window.cancelAnimationFrame(frame);
-      media.removeEventListener("change", onMotion);
-      map.off("load", start);
-    };
-  }, [routeFeatures, panel]);
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [routeFeatures]);
 
   useEffect(() => {
     const map = mapRef.current;
