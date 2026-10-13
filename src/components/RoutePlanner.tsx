@@ -100,6 +100,7 @@ function toFeatures(stages: RouteStage[]): Feature[] {
 function payload(stages: RouteStage[]) {
   return {
     stages: stages.map((stage) => ({
+      stage_no: stage.stage_no,
       streets: stage.streets.map((s) => ({
         street_id: s.street_id,
         note: s.note,
@@ -323,7 +324,7 @@ export function RoutePlanner({
         ...stage,
         streets: stage.streets.filter((s) => s.street_id !== street.id),
       }));
-      const stageNo = (stripped.at(-1)?.stage_no ?? 0) + 1;
+      const stageNo = stripped.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
       activeRef.current = stageNo;
       setActive(stageNo);
       void persist([
@@ -398,7 +399,7 @@ export function RoutePlanner({
         return;
       }
       const base = prev.length === 0 ? [{ stage_no: 1, streets: [], point: null }] : prev;
-      const nextNo = (base.at(-1)?.stage_no ?? 1) + 1;
+      const nextNo = base.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
       const stageNo = nextNo < 2 ? 2 : nextNo;
       const withFirst =
         base.some((stage) => stage.stage_no === 1)
@@ -411,8 +412,12 @@ export function RoutePlanner({
     },
   };
 
+  function nextStageNo() {
+    return stagesRef.current.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
+  }
+
   function addStage() {
-    const nextNo = (stagesRef.current.at(-1)?.stage_no ?? 0) + 1;
+    const nextNo = nextStageNo();
     const next = [
       ...stagesRef.current,
       { stage_no: nextNo, streets: [], point: null },
@@ -423,13 +428,16 @@ export function RoutePlanner({
   }
 
   function removeStage(stageNo: number) {
-    const next = stagesRef.current
-      .filter((s) => s.stage_no !== stageNo)
-      .map((s, i) => ({ ...s, stage_no: i + 1 }));
-    if (activeRef.current === stageNo) {
-      setActive(next[0]?.stage_no ?? null);
-      onMode("off");
+    const target = Number(stageNo);
+    const next = stagesRef.current.filter((stage) => Number(stage.stage_no) !== target);
+    if (Number(activeRef.current) === target) {
+      const fallback = next[0]?.stage_no ?? null;
+      activeRef.current = fallback;
+      setActive(fallback);
     }
+    if (openStage === target) setOpenStage(null);
+    if (stageFilter === target) setStageFilter("all");
+    onMode("off");
     void persist(next);
   }
 
@@ -588,6 +596,18 @@ export function RoutePlanner({
             <div className="route-stage-summary">
               <button
                 type="button"
+                className="route-icon-btn"
+                aria-label={`מחק שלב ${stage.stage_no}`}
+                data-stage={stage.stage_no}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  removeStage(Number(event.currentTarget.dataset.stage));
+                }}
+              >
+                ×
+              </button>
+              <button
+                type="button"
                 aria-expanded={expanded}
                 aria-pressed={active === stage.stage_no}
                 onClick={() => {
@@ -665,9 +685,6 @@ export function RoutePlanner({
                       הסר נקודה
                     </button>
                   ) : null}
-                  <button type="button" className="route-btn" onClick={() => removeStage(stage.stage_no)}>
-                    מחק שלב
-                  </button>
                 </div>
               </div>
             ) : null}

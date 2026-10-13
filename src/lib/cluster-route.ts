@@ -167,6 +167,7 @@ type IncomingStage = {
     done?: unknown;
   }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
+  stage_no?: unknown;
 };
 
 export async function saveClusterRoute(
@@ -212,9 +213,11 @@ export async function saveClusterRoute(
   for (let i = 0; i < incoming.length; i++) {
     const stage = incoming[i];
     if (!stage || typeof stage !== "object") continue;
+    const requested = Number(stage.stage_no);
+    const stageNo = Number.isInteger(requested) && requested > 0 ? requested : i + 1;
     const [created] = (await sql`
       INSERT INTO cluster_route_stages (ashkol, stage_no)
-      VALUES (${id}, ${i + 1})
+      VALUES (${id}, ${stageNo})
       RETURNING id
     `) as { id: number }[];
     const stageId = created!.id;
