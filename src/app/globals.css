@@ -1807,3 +1807,279 @@ tbody tr.cluster-row-selected:hover {
     display: none !important;
   }
 }
+
+body:has(.register-poster) {
+  background: #f4f6f8;
+  color: #102033;
+}
+
+.register-poster {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 0 2rem;
+  background: #f4f6f8;
+  color: #102033;
+  font-family: "Heebo", sans-serif;
+}
+
+.register-hero {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  background: #0c1f4a;
+  color: #fff;
+  padding: 1rem 1rem 1.15rem;
+}
+
+.register-hero img {
+  width: 96px;
+  height: auto;
+  flex: 0 0 auto;
+  border-radius: 16px;
+}
+
+.register-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+
+.register-hero h1 {
+  margin: 0;
+  color: #fff;
+  font-family: "Assistant", sans-serif;
+  font-size: 1.7rem;
+  line-height: 1.15;
+}
+
+.register-hero p {
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.register-timeline {
+  display: flex;
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding: 0.85rem 0.8rem;
+  background: #fff;
+}
+
+.register-timeline > div {
+  min-width: 7.2rem;
+  flex: 1 0 7.2rem;
+}
+
+.register-timeline strong,
+.register-timeline p {
+  display: block;
+  margin: 0.2rem 0 0;
+}
+
+.register-timeline p {
+  color: #3d4d60;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.tick {
+  display: block;
+  height: 6px;
+  border-radius: 99px;
+}
+
+.tick-red { background: #e10600; }
+.tick-wine { background: #8e1d3a; }
+.tick-gold { background: #f5c400; }
+.tick-navy { background: #0c1f4a; }
+.tick-black { background: #111; }
+
+.register-script,
+.register-card,
+.register-where {
+  margin: 0.85rem 0.8rem 0;
+}
+
+.register-script h2,
+.register-card h2,
+.register-where h2 {
+  margin: 0 0 0.55rem;
+  font-family: "Assistant", sans-serif;
+  color: #0c1f4a;
+}
+
+.register-opener {
+  background: #0c1f4a;
+  color: #fff;
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+}
+
+.register-opener p {
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.register-opener strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.register-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.register-cards article {
+  background: #fff;
+  border: 1px solid #d7deea;
+  border-radius: 16px;
+  padding: 0.75rem 0.8rem;
+}
+
+.register-cards strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.register-cards p,
+.register-where p {
+  margin: 0;
+  color: #243246;
+  line-height: 1.4;
+  font-size: 0.9rem;
+}
+
+.register-card {
+  background: #fff;
+  border: 1px solid #d7deea;
+  border-radius: 16px;
+  padding: 0.9rem 0.9rem 1rem;
+}
+
+.register-card form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.register-card label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 700;
+}
+
+.register-card input,
+.register-card select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #c5d0df;
+  border-radius: 12px;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  color: #102033;
+  background: #fff;
+}
+
+.register-hits {
+  list-style: none;
+  margin: -0.3rem 0 0;
+  padding: 0;
+  border: 1px solid #c5d0df;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.register-hits button {
+  width: 100%;
+  text-align: start;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 1px solid #e6edf5;
+  background: #fff;
+  font: inherit;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+
+.register-error {
+  margin: 0;
+  color: #9f1239;
+  font-weight: 700;
+}
+
+.register-submit {
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: #f5c400;
+  color: #111;
+  font-family: "Assistant", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.register-submit:disabled {
+  opacity: 0.6;
+}
+
+.register-success p {
+  margin: 0.25rem 0;
+  font-size: 1.05rem;
+}
+
+.register-where {
+  background: #f5c400;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+}
+
+.register-where a {
+  display: inline-block;
+  margin-top: 0.45rem;
+  color: #111;
+  font-weight: 800;
+}
+
+.register-footer {
+  margin: 0.85rem 0.8rem 0;
+  background: #f5c400;
+  color: #111;
+  text-align: center;
+  font-family: "Assistant", sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  border-radius: 12px;
+  padding: 0.75rem 0.6rem;
+}
+
+.activists-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.activists-bar label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .register-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .register-hero h1 {
+    font-size: 1.35rem;
+  }
+}

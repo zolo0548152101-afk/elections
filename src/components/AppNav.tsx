@@ -24,6 +24,8 @@ export function AppNav({
       label: user.role === "coordinator" ? "המוסד שלי" : "מוסדות",
     },
   ];
+  const institutionIndex = links.findIndex((link) => link.href === "/institutions");
+  links.splice(institutionIndex + 1, 0, { href: "/activists", label: "פעילים" });
   if (user.role === "super_admin" || user.role === "area_manager") {
     links.splice(1, 0, { href: "/users", label: "משתמשים" });
     links.push({ href: "/team/clusters", label: "אשכולות" });

@@ -13,7 +13,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (path === "/login") {
+    if (path === "/login" || path === "/register") {
       setReady(true);
       return;
     }
@@ -35,7 +35,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     };
   }, [path, router]);
 
-  if (path === "/login") return <>{children}</>;
+  if (path === "/login" || path === "/register") return <>{children}</>;
   if (!ready || !user) {
     return (
       <main className="shell-loading" aria-busy="true" aria-live="polite">
