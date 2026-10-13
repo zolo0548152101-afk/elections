@@ -5,8 +5,8 @@ import type { Feature, LineString } from "geojson";
 import type { RouteStage } from "@/lib/cluster-route-types";
 import { directedGeometry } from "@/lib/street-span";
 
-/** Stage colors stay off the map's blue, green, gold, cyan, orange, and red. */
-const STAGE_COLORS = ["#6d28d9", "#db2777", "#a21caf", "#713f12", "#9d174d", "#e879f9"];
+/** Stage colors stay off blue, green, gold, cyan, orange, red, and near-black. */
+const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
 
 function pointName(stageNo: number) {
   return stageNo === 1 ? "נקודת התחלה" : "נקודת איסוף";
@@ -14,6 +14,14 @@ function pointName(stageNo: number) {
 
 export function stageColor(stageNo: number) {
   return STAGE_COLORS[(Math.max(stageNo, 1) - 1) % STAGE_COLORS.length]!;
+}
+
+function DirMark({ flip = false }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className={flip ? "route-icon-flip" : undefined}>
+      <path d="M12 3 L19 19 L12 15 L5 19 Z" fill="currentColor" />
+    </svg>
+  );
 }
 
 export type RouteMode = "off" | "street" | "point";
@@ -108,7 +116,10 @@ export function RoutePlanner({
   onMode: (mode: RouteMode) => void;
   onFeatures: (features: Feature[]) => void;
   onStages: (
-    stages: { stage_no: number; streets: { street_id: string; reversed: boolean }[] }[],
+    stages: {
+      stage_no: number;
+      streets: { street_id: string; reversed: boolean; from_ratio: number; to_ratio: number }[];
+    }[],
   ) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
@@ -141,6 +152,8 @@ export function RoutePlanner({
         streets: stage.streets.map((street) => ({
           street_id: street.street_id,
           reversed: Boolean(street.reversed),
+          from_ratio: street.from_ratio ?? 0,
+          to_ratio: street.to_ratio ?? 1,
         })),
       })),
     );
@@ -508,21 +521,21 @@ export function RoutePlanner({
                     <span className="route-row-actions">
                       <button
                         type="button"
-                        className="route-btn"
+                        className="route-icon-btn"
                         aria-pressed={!street.reversed}
                         aria-label="כיוון הרחוב"
                         onClick={() => setReversed(stage.stage_no, street.street_id, false)}
                       >
-                        ▲
+                        <DirMark />
                       </button>
                       <button
                         type="button"
-                        className="route-btn"
+                        className="route-icon-btn"
                         aria-pressed={street.reversed}
                         aria-label="כיוון הפוך"
                         onClick={() => setReversed(stage.stage_no, street.street_id, true)}
                       >
-                        ▼
+                        <DirMark flip />
                       </button>
                       <button
                         type="button"

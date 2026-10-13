@@ -73,6 +73,57 @@ export function spanOf(
   return out.length >= 2 ? { type: "LineString", coordinates: out } : null;
 }
 
+export type ArrowMark = { lng: number; lat: number; bearing: number };
+
+/** Clockwise degrees from north for the step from a to b. */
+function bearingOf(a: number[], b: number[]) {
+  const rad = Math.atan2(b[0]! - a[0]!, b[1]! - a[1]!);
+  const deg = (rad * 180) / Math.PI;
+  return (deg + 360) % 360;
+}
+
+/**
+ * A few arrow positions along a directed line.
+ * `phase` is 0–1 and slides them forward. Bearing 0 is north.
+ */
+export function arrowMarks(
+  coordinates: number[][],
+  phase: number,
+  count = 3,
+): ArrowMark[] {
+  if (coordinates.length < 2) return [];
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < coordinates.length; i++) {
+    const length = dist(coordinates[i - 1]!, coordinates[i]!);
+    lengths.push(length);
+    total += length;
+  }
+  if (total === 0) return [];
+  const n = count < 1 ? 1 : count;
+  const shift = ((phase % 1) + 1) % 1;
+  const marks: ArrowMark[] = [];
+  for (let k = 0; k < n; k++) {
+    const distAlong = ((shift + k / n) % 1) * total;
+    let walked = 0;
+    for (let i = 1; i < coordinates.length; i++) {
+      const seg = lengths[i - 1]!;
+      const next = walked + seg;
+      if (next + 1e-9 < distAlong && i < coordinates.length - 1) {
+        walked = next;
+        continue;
+      }
+      const t = seg === 0 ? 0 : Math.min(1, Math.max(0, (distAlong - walked) / seg));
+      const a = coordinates[i - 1]!;
+      const b = coordinates[i]!;
+      const point = lerp(a, b, t);
+      marks.push({ lng: point[0]!, lat: point[1]!, bearing: bearingOf(a, b) });
+      break;
+    }
+  }
+  return marks;
+}
+
 /** Walk the same portion from the other end. */
 export function directedGeometry(
   geometry: RouteGeometry | null,

@@ -17,7 +17,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { directedGeometry, spanOf } from "@/lib/street-span";
+import { arrowMarks, directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
@@ -80,6 +80,44 @@ type MapFocus = { lat: number; lng: number };
 function fmtInt(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString("he-IL") : "—";
+}
+
+function DirMark({ flip = false }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className={flip ? "route-icon-flip" : undefined}>
+      <path d="M12 3 L19 19 L12 15 L5 19 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function TrimMark({ end }: { end: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className={end ? "route-icon-flip" : undefined}>
+      <path d="M3 11 H13 V13 H3 Z" fill="currentColor" />
+      <path d="M14 6 L22 12 L14 18 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function keptRatios(keep: number, anchor: "start" | "end") {
+  const span = Math.min(100, Math.max(0, keep)) / 100;
+  if (anchor === "start") return { from: 0, to: span };
+  return { from: 1 - span, to: 1 };
+}
+
+function portionFromSaved(from: number, to: number) {
+  const middle = from > 0.01 && to < 0.99;
+  if (middle) {
+    return {
+      keep: Math.round((to - from) * 100),
+      anchor: "start" as const,
+      frozen: { from, to },
+    };
+  }
+  if (from <= 0.01) {
+    return { keep: Math.round(to * 100), anchor: "start" as const, frozen: null };
+  }
+  return { keep: Math.round((1 - from) * 100), anchor: "end" as const, frozen: null };
 }
 
 function fmtPct(value: unknown) {
@@ -201,7 +239,10 @@ export function StreetMap({
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
   const [routeStages, setRouteStages] = useState<{ stage_no: number }[]>([]);
-  const routeDirRef = useRef<Record<string, boolean>>({});
+  const routeStreetRef = useRef<
+    Record<string, { reversed: boolean; from: number; to: number }>
+  >({});
+  const [stageMenu, setStageMenu] = useState(false);
   const routeModeRef = useRef<RouteMode>("off");
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
@@ -210,8 +251,12 @@ export function StreetMap({
         kind: "street";
         id: string;
         name: string;
-        from: number;
-        to: number;
+        /** 0–100, how much of the street to keep. */
+        keep: number;
+        /** Which end the kept portion is anchored to. */
+        anchor: "start" | "end";
+        /** A middle slice already saved, until the slider or icon moves. */
+        frozen: { from: number; to: number } | null;
         reversed: boolean;
         geometry: RouteGeometry | null;
       }
@@ -329,6 +374,10 @@ export function StreetMap({
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           },
+          arrows: {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          },
         },
         layers: [
           { id: "osm", type: "raster", source: "osm" },
@@ -393,22 +442,6 @@ export function StreetMap({
             },
           },
           {
-            id: "highlight-arrow",
-            type: "symbol",
-            source: "highlight",
-            filter: ["==", ["geometry-type"], "LineString"],
-            layout: {
-              "symbol-placement": "line",
-              "symbol-spacing": 70,
-              "icon-image": "route-dir",
-              "icon-size": 0.55,
-              "icon-allow-overlap": true,
-              "icon-rotation-alignment": "map",
-              "icon-keep-upright": false,
-            },
-            paint: { "icon-color": "#102033" },
-          },
-          {
             id: "route-line",
             type: "line",
             source: "route",
@@ -420,20 +453,23 @@ export function StreetMap({
             },
           },
           {
-            id: "route-arrow",
+            id: "route-arrows",
             type: "symbol",
-            source: "route",
-            filter: ["==", ["geometry-type"], "LineString"],
+            source: "arrows",
             layout: {
-              "symbol-placement": "line",
-              "symbol-spacing": 70,
               "icon-image": "route-dir",
-              "icon-size": 0.55,
+              "icon-size": 0.7,
               "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-rotate": ["get", "bearing"],
               "icon-rotation-alignment": "map",
-              "icon-keep-upright": false,
+              "icon-pitch-alignment": "viewport",
             },
-            paint: { "icon-color": ["get", "color"] },
+            paint: {
+              "icon-color": "#111111",
+              "icon-halo-color": "#ffffff",
+              "icon-halo-width": 1.4,
+            },
           },
           {
             id: "route-point",
@@ -487,10 +523,11 @@ export function StreetMap({
           ctx.clearRect(0, 0, size, size);
           ctx.fillStyle = "#fff";
           ctx.beginPath();
-          ctx.moveTo(16, 3);
-          ctx.lineTo(27, 26);
-          ctx.lineTo(16, 20);
-          ctx.lineTo(5, 26);
+          // Tip points north. icon-rotate is the street bearing, 0 = north.
+          ctx.moveTo(16, 2);
+          ctx.lineTo(28, 28);
+          ctx.lineTo(16, 21);
+          ctx.lineTo(4, 28);
           ctx.closePath();
           ctx.fill();
           map.addImage("route-dir", ctx.getImageData(0, 0, size, size), { sdf: true });
@@ -1035,6 +1072,75 @@ export function StreetMap({
     else map.once("load", apply);
   }, [routeFeatures]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let phase = 0;
+    let frame = 0;
+    let alive = true;
+
+    const lines = () => {
+      const out: number[][][] = [];
+      for (const feature of routeFeatures) {
+        if (feature.geometry.type === "LineString") {
+          out.push(feature.geometry.coordinates as number[][]);
+        }
+      }
+      if (panel?.kind === "street") {
+        const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
+        const sliced = directedGeometry(
+          spanOf(panel.geometry, ratios.from, ratios.to),
+          panel.reversed,
+        );
+        if (sliced?.type === "LineString") out.push(sliced.coordinates);
+      }
+      return out;
+    };
+
+    const draw = () => {
+      const src = map.getSource("arrows") as GeoJSONSource | undefined;
+      if (!src) return;
+      const features = lines().flatMap((coords) =>
+        arrowMarks(coords, phase).map((mark) => ({
+          type: "Feature" as const,
+          properties: { bearing: mark.bearing, kind: "arrow" },
+          geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
+        })),
+      );
+      src.setData({ type: "FeatureCollection", features });
+    };
+
+    const tick = () => {
+      if (!alive) return;
+      if (!media.matches) phase = (phase + 0.004) % 1;
+      draw();
+      frame = window.requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      if (!alive) return;
+      window.cancelAnimationFrame(frame);
+      if (media.matches) {
+        phase = 0;
+        draw();
+        return;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+
+    if (map.isStyleLoaded()) start();
+    else map.once("load", start);
+    const onMotion = () => start();
+    media.addEventListener("change", onMotion);
+    return () => {
+      alive = false;
+      window.cancelAnimationFrame(frame);
+      media.removeEventListener("change", onMotion);
+      map.off("load", start);
+    };
+  }, [routeFeatures, panel]);
+
   const isCoordinator = me?.role === "coordinator";
 
   useEffect(() => {
@@ -1444,13 +1550,17 @@ export function StreetMap({
     setPanel({ kind: "start", lat, lng });
   };
   openStreetPanelRef.current = (id, name) => {
+    setStageMenu(false);
+    const saved = routeStreetRef.current[id];
+    const portion = portionFromSaved(saved?.from ?? 0, saved?.to ?? 1);
     setPanel({
       kind: "street",
       id,
       name,
-      from: 0,
-      to: 100,
-      reversed: Boolean(routeDirRef.current[id]),
+      keep: portion.keep,
+      anchor: portion.anchor,
+      frozen: portion.frozen,
+      reversed: Boolean(saved?.reversed),
       geometry: null,
     });
     void fetch(`/api/streets/${encodeURIComponent(id)}`)
@@ -1494,8 +1604,9 @@ export function StreetMap({
       src.setData({ type: "FeatureCollection", features: [] });
       return;
     }
+    const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
     const sliced = directedGeometry(
-      spanOf(panel.geometry, panel.from / 100, panel.to / 100),
+      spanOf(panel.geometry, ratios.from, ratios.to),
       panel.reversed,
     );
     src.setData({
@@ -1533,13 +1644,12 @@ export function StreetMap({
 
   function addPanelStreet(stage: number | "new") {
     if (panel?.kind !== "street") return;
-    const from = Math.min(panel.from, panel.to) / 100;
-    const to = Math.max(panel.from, panel.to) / 100;
+    const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
     const street = {
       id: panel.id,
       name_he: panel.name,
-      from_ratio: from,
-      to_ratio: to,
+      from_ratio: ratios.from,
+      to_ratio: ratios.to,
       reversed: panel.reversed,
     };
     if (stage === "new") routeApiRef.current?.addStreetToNewStage(street);
@@ -1583,68 +1693,111 @@ export function StreetMap({
       ) : (
         <>
           <strong>{panel.name}</strong>
-          <label className="route-span">
-            התחלה <bdi dir="ltr">{panel.from}%</bdi>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={panel.from}
-              onChange={(event) => {
-                const from = Number(event.target.value);
-                setPanel((prev) => (prev?.kind === "street" ? { ...prev, from } : prev));
-              }}
-            />
-          </label>
-          <label className="route-span">
-            סוף <bdi dir="ltr">{panel.to}%</bdi>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={panel.to}
-              onChange={(event) => {
-                const to = Number(event.target.value);
-                setPanel((prev) => (prev?.kind === "street" ? { ...prev, to } : prev));
-              }}
-            />
-              </label>
-              <div className="route-dir" role="group" aria-label="כיוון ההתקדמות">
-                <button
-                  type="button"
-                  className="route-pop-btn"
-                  aria-pressed={!panel.reversed}
-                  onClick={() =>
-                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: false } : prev))
-                  }
-                >
-                  ▲ כיוון הרחוב
-                </button>
-                <button
-                  type="button"
-                  className="route-pop-btn"
-                  aria-pressed={panel.reversed}
-                  onClick={() =>
-                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: true } : prev))
-                  }
-                >
-                  ▼ כיוון הפוך
-                </button>
-              </div>
-              {routeStages.map((stage) => (
+          <div className="route-inline">
+            <label className="route-span">
+              אורך <bdi dir="ltr">{panel.keep}%</bdi>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={panel.keep}
+                onChange={(event) => {
+                  const keep = Number(event.target.value);
+                  setPanel((prev) =>
+                    prev?.kind === "street" ? { ...prev, keep, frozen: null } : prev,
+                  );
+                }}
+              />
+            </label>
             <button
-              key={stage.stage_no}
               type="button"
-              className="route-pop-btn"
-              onClick={() => addPanelStreet(stage.stage_no)}
+              className="route-icon-btn"
+              aria-pressed={panel.anchor === "end"}
+              aria-label={panel.anchor === "end" ? "הקיצור מההתחלה" : "הקיצור מהסוף"}
+              onClick={() =>
+                setPanel((prev) =>
+                  prev?.kind === "street"
+                    ? {
+                        ...prev,
+                        anchor: prev.anchor === "start" ? "end" : "start",
+                        frozen: null,
+                      }
+                    : prev,
+                )
+              }
             >
-              <span className="route-pop-swatch" style={{ background: stageColor(stage.stage_no) }} />
-              שלב {stage.stage_no}
+              <TrimMark end={panel.anchor === "end"} />
             </button>
-          ))}
-          <button type="button" className="route-pop-btn" onClick={() => addPanelStreet("new")}>
-            שלב חדש
-          </button>
+          </div>
+          <div className="route-inline" role="group" aria-label="כיוון ההתקדמות">
+            <span>כיוון</span>
+            <button
+              type="button"
+              className="route-icon-btn"
+              aria-pressed={!panel.reversed}
+              aria-label="כיוון הרחוב"
+              onClick={() =>
+                setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: false } : prev))
+              }
+            >
+              <DirMark />
+            </button>
+            <button
+              type="button"
+              className="route-icon-btn"
+              aria-pressed={panel.reversed}
+              aria-label="כיוון הפוך"
+              onClick={() =>
+                setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: true } : prev))
+              }
+            >
+              <DirMark flip />
+            </button>
+          </div>
+          <div className="route-inline route-stage-row">
+            {routeStages.length > 0 ? (
+              <button
+                type="button"
+                className="route-icon-btn route-stage-dot"
+                style={{ background: stageColor(routeStages.length === 1 ? routeStages[0]!.stage_no : 1) }}
+                aria-label={routeStages.length > 1 ? "בחירת שלב" : `שלב ${routeStages[0]!.stage_no}`}
+                aria-expanded={routeStages.length > 1 ? stageMenu : undefined}
+                onClick={() => {
+                  if (routeStages.length > 1) {
+                    setStageMenu((open) => !open);
+                    return;
+                  }
+                  addPanelStreet(routeStages[0]!.stage_no);
+                }}
+              />
+            ) : null}
+            {stageMenu && routeStages.length > 1 ? (
+              <div className="route-stage-menu" role="menu">
+                {routeStages.map((stage) => (
+                  <button
+                    key={stage.stage_no}
+                    type="button"
+                    role="menuitem"
+                    className="route-icon-btn route-stage-dot"
+                    style={{ background: stageColor(stage.stage_no) }}
+                    aria-label={`שלב ${stage.stage_no}`}
+                    onClick={() => {
+                      setStageMenu(false);
+                      addPanelStreet(stage.stage_no);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="route-icon-btn"
+              aria-label="שלב חדש"
+              onClick={() => addPanelStreet("new")}
+            >
+              +
+            </button>
+          </div>
         </>
       )}
     </aside>
@@ -1939,11 +2092,17 @@ export function StreetMap({
                 onFeatures={setRouteFeatures}
                 onStages={(stages) => {
                   setRouteStages(stages.map((stage) => ({ stage_no: stage.stage_no })));
-                  const dirs: Record<string, boolean> = {};
+                  const saved: Record<string, { reversed: boolean; from: number; to: number }> = {};
                   for (const stage of stages) {
-                    for (const street of stage.streets) dirs[street.street_id] = street.reversed;
+                    for (const street of stage.streets) {
+                      saved[street.street_id] = {
+                        reversed: street.reversed,
+                        from: street.from_ratio,
+                        to: street.to_ratio,
+                      };
+                    }
                   }
-                  routeDirRef.current = dirs;
+                  routeStreetRef.current = saved;
                 }}
                 bindRef={routeApiRef}
               />
