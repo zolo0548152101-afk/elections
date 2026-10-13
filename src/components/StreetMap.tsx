@@ -568,6 +568,8 @@ export function StreetMap({
     let startLong = false;
     let pressTimer: number | null = null;
     let pressAt: { x: number; y: number } | null = null;
+    let clickTimer: number | null = null;
+    let lastStreetTap: { id: string; time: number } | null = null;
 
     function clearPress() {
       if (pressTimer != null) window.clearTimeout(pressTimer);
@@ -580,8 +582,35 @@ export function StreetMap({
       const id = String(feature?.properties?.id ?? "");
       const name = String(feature?.properties?.name_he ?? "");
       if (!id) return;
+      openStreetById(id, name || id);
+    }
+
+    function openStreetById(id: string, name: string) {
       longFired = true;
-      openStreetPanelRef.current(id, name || id);
+      if (clickTimer != null) window.clearTimeout(clickTimer);
+      clickTimer = null;
+      clearPress();
+      openStreetPanelRef.current(id, name);
+      window.setTimeout(() => map.stop(), 0);
+    }
+
+    function streetUnder(point: { x: number; y: number }) {
+      if (!map.isStyleLoaded()) return null;
+      const layers = ["route-line", "streets-line"].filter((id) => map.getLayer(id));
+      if (layers.length === 0) return null;
+      const pad = 28;
+      const hits = map.queryRenderedFeatures(
+        [
+          [point.x - pad, point.y - pad],
+          [point.x + pad, point.y + pad],
+        ],
+        { layers },
+      );
+      const feature = hits.find((hit) => String(hit.properties?.id ?? "") !== "");
+      if (!feature) return null;
+      const id = String(feature.properties?.id ?? "");
+      const name = String(feature.properties?.name_he ?? "");
+      return id ? { id, name: name || id } : null;
     }
 
     function armPress(e: {
@@ -606,15 +635,12 @@ export function StreetMap({
     }
 
     map.on("mousedown", "streets-line", armPress);
-    map.on("touchstart", "streets-line", armPress);
     map.on("mousedown", "route-line", armPress);
-    map.on("touchstart", "route-line", armPress);
     map.on("contextmenu", "streets-line", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       clearPress();
       void openStagePopup(e);
     });
-    let clickTimer: number | null = null;
     map.on("dblclick", "streets-line", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       if (clickTimer != null) window.clearTimeout(clickTimer);
@@ -635,7 +661,7 @@ export function StreetMap({
     map.on("touchcancel", endPress);
     const movePress = (e: { point: { x: number; y: number } }) => {
       if (!pressAt || pressTimer == null) return;
-      if (Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 12) clearPress();
+      if (Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 40) clearPress();
     };
     map.on("mousemove", movePress);
     map.on("touchmove", movePress);
@@ -794,13 +820,61 @@ export function StreetMap({
     });
 
     function occupied(point: { x: number; y: number }) {
+      if (streetUnder(point)) return true;
       if (!map.isStyleLoaded()) return false;
-      const layers = ["streets-line", "route-line", "clusters-circle", "route-point"].filter(
-        (id) => map.getLayer(id),
-      );
+      const layers = ["clusters-circle", "route-point"].filter((id) => map.getLayer(id));
       if (layers.length === 0) return false;
-      return map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
+      const pad = 18;
+      return (
+        map.queryRenderedFeatures(
+          [
+            [point.x - pad, point.y - pad],
+            [point.x + pad, point.y + pad],
+          ],
+          { layers },
+        ).length > 0
+      );
     }
+    map.on("touchstart", (e) => {
+      const touches = (e.originalEvent as TouchEvent | undefined)?.touches?.length ?? 1;
+      if (touches > 1) return;
+      if (clickTimer != null) {
+        window.clearTimeout(clickTimer);
+        clickTimer = null;
+      }
+      const street = streetUnder(e.point);
+      if (!street) return;
+      clearStart();
+      clearPress();
+      longFired = false;
+      pressAt = { x: e.point.x, y: e.point.y };
+      const held = street;
+      pressTimer = window.setTimeout(() => {
+        pressTimer = null;
+        openStreetById(held.id, held.name);
+      }, 550);
+    });
+    map.on("touchend", (e) => {
+      if (longFired) {
+        lastStreetTap = null;
+        return;
+      }
+      const touches = (e.originalEvent as TouchEvent | undefined)?.touches?.length ?? 0;
+      if (touches > 0) return;
+      const street = streetUnder(e.point);
+      const now = Date.now();
+      if (
+        street &&
+        lastStreetTap &&
+        now - lastStreetTap.time < 400 &&
+        lastStreetTap.id === street.id
+      ) {
+        lastStreetTap = null;
+        openStreetById(street.id, street.name);
+        return;
+      }
+      lastStreetTap = street ? { id: street.id, time: now } : null;
+    });
     let startTimer: number | null = null;
     let startAt: { x: number; y: number } | null = null;
     function clearStart() {
