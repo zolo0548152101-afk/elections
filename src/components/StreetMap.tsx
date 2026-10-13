@@ -378,6 +378,10 @@ export function StreetMap({
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
           },
+          pin: {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          },
         },
         layers: [
           { id: "osm", type: "raster", source: "osm" },
@@ -481,6 +485,17 @@ export function StreetMap({
               "icon-color": "#111111",
               "icon-halo-color": "#ffffff",
               "icon-halo-width": 2,
+            },
+          },
+          {
+            id: "proposed-pin",
+            type: "circle",
+            source: "pin",
+            paint: {
+              "circle-radius": 11,
+              "circle-color": "#111111",
+              "circle-stroke-width": 3,
+              "circle-stroke-color": "#ffffff",
             },
           },
           {
@@ -1240,6 +1255,31 @@ export function StreetMap({
     };
   }, [routeFeatures, panel]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource("pin") as GeoJSONSource | undefined;
+      if (!src) return;
+      if (panel?.kind !== "start") {
+        src.setData({ type: "FeatureCollection", features: [] });
+        return;
+      }
+      src.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [panel.lng, panel.lat] },
+          },
+        ],
+      });
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [panel]);
+
   const isCoordinator = me?.role === "coordinator";
 
   useEffect(() => {
@@ -1929,11 +1969,11 @@ export function StreetMap({
             />
             <button
               type="button"
-              className="route-icon-btn"
+              className="route-icon-btn route-choice"
               aria-label="שלב חדש"
               onClick={() => addPanelStreet("new")}
             >
-              +
+              שלב חדש
             </button>
           </div>
         </>
@@ -2223,30 +2263,6 @@ export function StreetMap({
               {(doneOverride[picked.ashkol] ?? picked.done) && (
                 <p className="link-success-note">אשכול בוצע</p>
               )}
-              <RoutePlanner
-                ashkol={picked.ashkol}
-                mode={routeMode}
-                onMode={setRouteMode}
-                onFeatures={setRouteFeatures}
-                onActive={setActiveStage}
-                onStages={(stages) => {
-                  setRouteStages(
-                    stages.map((stage) => ({ stage_no: stage.stage_no, hasPoint: stage.hasPoint })),
-                  );
-                  const saved: Record<string, { reversed: boolean; from: number; to: number }> = {};
-                  for (const stage of stages) {
-                    for (const street of stage.streets) {
-                      saved[street.street_id] = {
-                        reversed: street.reversed,
-                        from: street.from_ratio,
-                        to: street.to_ratio,
-                      };
-                    }
-                  }
-                  routeStreetRef.current = saved;
-                }}
-                bindRef={routeApiRef}
-              />
             </>
           ) : (
             <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
@@ -2425,6 +2441,34 @@ export function StreetMap({
         </aside>
       </div>
       <div className="street-map-stage">
+        {picked ? (
+          <aside className="route-map-menu">
+            <RoutePlanner
+              ashkol={picked.ashkol}
+              mode={routeMode}
+              onMode={setRouteMode}
+              onFeatures={setRouteFeatures}
+              onActive={setActiveStage}
+              onStages={(stages) => {
+                setRouteStages(
+                  stages.map((stage) => ({ stage_no: stage.stage_no, hasPoint: stage.hasPoint })),
+                );
+                const saved: Record<string, { reversed: boolean; from: number; to: number }> = {};
+                for (const stage of stages) {
+                  for (const street of stage.streets) {
+                    saved[street.street_id] = {
+                      reversed: street.reversed,
+                      from: street.from_ratio,
+                      to: street.to_ratio,
+                    };
+                  }
+                }
+                routeStreetRef.current = saved;
+              }}
+              bindRef={routeApiRef}
+            />
+          </aside>
+        ) : null}
         {sidePanel}
         {mapFailed ? (
           <div className="street-map-canvas map-fallback" role="status">

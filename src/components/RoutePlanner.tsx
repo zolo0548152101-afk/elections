@@ -66,7 +66,7 @@ function toFeatures(stages: RouteStage[]): Feature[] {
         const line: Feature<LineString> = {
           type: "Feature",
           properties: {
-            color,
+            color: street.done ? "#16a34a" : color,
             stage: stage.stage_no,
             kind: "street",
             id: street.street_id,
@@ -264,7 +264,7 @@ export function RoutePlanner({
     }
     return baseStages.map((stage) => {
       const streets = stage.streets.filter((s) => s.street_id !== street.id);
-      if (stage.stage_no !== stageNo) return { ...stage, streets };
+      if (Number(stage.stage_no) !== Number(stageNo)) return { ...stage, streets };
       return {
         ...stage,
         streets: [
@@ -314,10 +314,11 @@ export function RoutePlanner({
     },
     addStreetToStage(street, stageNo) {
       const prev = stagesRef.current;
-      if (!prev.some((stage) => stage.stage_no === stageNo)) return;
-      activeRef.current = stageNo;
-      setActive(stageNo);
-      void persist(placeStreet(street, stageNo, prev));
+      const target = Number(stageNo);
+      if (!prev.some((stage) => Number(stage.stage_no) === target)) return;
+      activeRef.current = target;
+      setActive(target);
+      void persist(placeStreet(street, target, prev));
     },
     addStreetToNewStage(street) {
       const stripped = stagesRef.current.map((stage) => ({
@@ -593,7 +594,13 @@ export function RoutePlanner({
             className={`route-stage${active === stage.stage_no ? " is-current" : ""}`}
             key={stage.stage_no}
           >
-            <div className="route-stage-summary">
+            <div
+              className="route-stage-summary"
+              onClick={() => {
+                setActive(stage.stage_no);
+                activeRef.current = stage.stage_no;
+              }}
+            >
               <button
                 type="button"
                 className="route-icon-btn"
@@ -624,7 +631,10 @@ export function RoutePlanner({
                     key={street.street_id}
                     type="button"
                     className={street.done ? "route-name-done" : undefined}
-                    onClick={() => toggleStreetDone(stage.stage_no, street.street_id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleStreetDone(stage.stage_no, street.street_id);
+                    }}
                   >
                     {street.name_he}
                     {street.done ? " · בוצע" : ""}
