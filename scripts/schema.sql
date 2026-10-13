@@ -241,3 +241,6 @@ CREATE INDEX IF NOT EXISTS activists_institution_created_idx
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS streets_name_he_trgm_idx ON streets USING gin (name_he gin_trgm_ops);
+-- Search compares a cleaned name, so the plain name index is not used.
+CREATE INDEX IF NOT EXISTS streets_name_he_clean_trgm_idx
+  ON streets USING gin ((regexp_replace(name_he, '[''׳״"]+', '', 'g')) gin_trgm_ops);
