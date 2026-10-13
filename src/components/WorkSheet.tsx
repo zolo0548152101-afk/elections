@@ -53,10 +53,6 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
     [sheet],
   );
   const mapsReady = mapCount === 0 || readyMaps >= mapCount;
-  const today = useMemo(
-    () => new Date().toLocaleDateString("he-IL"),
-    [],
-  );
 
   if (error) {
     return (
@@ -75,14 +71,35 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
     );
   }
 
+  const people = new Map<number, WorkSheetData["sections"][number]["coordinators"][number]>();
+  for (const section of sheet.sections) {
+    for (const person of section.coordinators) people.set(person.id, person);
+  }
+  const coordinators = [...people.values()];
+
   return (
     <main className="sheet-doc">
       <header className="sheet-head">
         <div>
           <p className="eyebrow">דף עבודה</p>
           <h1>{sheet.title}</h1>
-          {sheet.subtitle ? <p className="lede">{sheet.subtitle}</p> : null}
-          <p className="lede">{today}</p>
+          <div className="sheet-people">
+            {coordinators.length === 0 ? (
+              <p className="sheet-person">לא קושר רכז</p>
+            ) : (
+              coordinators.map((c) => (
+                <p className="sheet-person" key={c.id}>
+                  <span>
+                    <span className="sheet-k">שם</span> {c.full_name}
+                  </span>
+                  <span>
+                    <span className="sheet-k">נייד</span>{" "}
+                    <bdi dir="ltr">{c.mobile?.trim() || "—"}</bdi>
+                  </span>
+                </p>
+              ))
+            )}
+          </div>
         </div>
         <div className="sheet-actions">
           <button
@@ -104,19 +121,12 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
           const hasMap = section.marker != null || paths.length > 0;
           return (
             <section className="sheet-section" key={section.cluster.ashkol}>
-              <h2>
-                {section.cluster.settlement_name} · אשכול{" "}
-                <bdi dir="ltr">{section.cluster.ashkol}</bdi>
-              </h2>
-              <p className="lede">
-                {section.institutions.length
-                  ? section.institutions
-                      .map((i) =>
-                        [i.name, i.kind, i.settlement_name].filter(Boolean).join(" · "),
-                      )
-                      .join(" | ")
-                  : "לא קושר מוסד"}
-              </p>
+              {sheet.sections.length > 1 ? (
+                <h2>
+                  {section.cluster.settlement_name} ·{" "}
+                  <bdi dir="ltr">{section.cluster.ashkol}</bdi>
+                </h2>
+              ) : null}
               <dl className="sheet-stats">
                 <div>
                   <dt>בז״ב</dt>
@@ -133,26 +143,6 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                 <div>
                   <dt>ימין</dt>
                   <dd><bdi dir="ltr">{fmtPct(section.cluster.right_pct)}</bdi></dd>
-                </div>
-                <div>
-                  <dt>רכז</dt>
-                  <dd>
-                    {section.coordinators.length === 0 ? (
-                      "לא קושר"
-                    ) : (
-                      section.coordinators.map((c) => (
-                        <span className="sheet-coord" key={c.id}>
-                          <span>
-                            <span className="sheet-k">שם</span> {c.full_name}
-                          </span>
-                          <span className="sheet-coord-phone">
-                            <span className="sheet-k">נייד</span>{" "}
-                            <bdi dir="ltr">{c.mobile?.trim() || "—"}</bdi>
-                          </span>
-                        </span>
-                      ))
-                    )}
-                  </dd>
                 </div>
                 <div>
                   <dt>קלפיות</dt>

@@ -1512,9 +1512,10 @@ tbody tr.cluster-row-selected:hover {
   background: #fff;
   color: var(--ink);
   border-radius: 16px;
-  padding: 1rem 1.15rem 1.4rem;
-  margin: 0.75rem auto 1.5rem;
-  max-width: 920px;
+  padding: 0.65rem 0.8rem 0.75rem;
+  margin: 0.5rem auto 1rem;
+  width: min(100%, 210mm);
+  max-width: 210mm;
   box-shadow: var(--shadow);
 }
 
@@ -1524,12 +1525,33 @@ tbody tr.cluster-row-selected:hover {
   color: var(--ink);
 }
 
+.sheet-doc h1 {
+  font-size: 1.35rem;
+}
+
 .sheet-head {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
-  align-items: end;
-  margin-bottom: 1rem;
+  gap: 0.6rem;
+  align-items: start;
+  margin-bottom: 0.35rem;
+}
+
+.sheet-people {
+  margin-top: 0.15rem;
+}
+
+.sheet-person {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sheet-person + .sheet-person {
+  margin-top: 0.15rem;
 }
 
 .sheet-actions {
@@ -1537,26 +1559,30 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .sheet-section {
-  margin-top: 1.1rem;
-  padding-top: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.sheet-section + .sheet-section {
+  margin-top: 0.7rem;
+  padding-top: 0.45rem;
   border-top: 1px solid var(--line);
 }
 
 .sheet-section h2 {
-  margin: 0;
-  font-size: 1.15rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
 }
 
 .sheet-section h3 {
-  margin: 0.85rem 0 0.4rem;
-  font-size: 1rem;
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.95rem;
 }
 
 .sheet-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem 0.75rem;
-  margin: 0.7rem 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.2rem 0.45rem;
+  margin: 0.3rem 0 0.35rem;
 }
 
 .sheet-stats div {
@@ -1573,21 +1599,6 @@ tbody tr.cluster-row-selected:hover {
   font-weight: 700;
 }
 
-.sheet-coord {
-  display: block;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.sheet-coord + .sheet-coord {
-  margin-top: 0.35rem;
-}
-
-.sheet-coord-phone {
-  display: block;
-  font-weight: 600;
-}
-
 .sheet-k {
   color: var(--muted);
   font-size: 0.72rem;
@@ -1595,8 +1606,8 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .sheet-map {
-  height: 320px;
-  border-radius: 14px;
+  height: 52mm;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--line);
 }
@@ -1604,14 +1615,19 @@ tbody tr.cluster-row-selected:hover {
 .sheet-streets {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
 }
 
 .sheet-streets th,
 .sheet-streets td {
   text-align: start;
-  padding: 0.35rem 0.4rem;
+  padding: 0.14rem 0.28rem;
   border-bottom: 1px solid var(--line);
+}
+
+@page {
+  size: A4 portrait;
+  margin: 8mm;
 }
 
 @media print {
@@ -1626,23 +1642,20 @@ tbody tr.cluster-row-selected:hover {
 
   .sheet-doc {
     margin: 0;
+    width: auto;
     max-width: none;
     box-shadow: none;
     border-radius: 0;
+    padding: 0;
   }
 
   .sheet-map {
-    height: 95mm;
+    height: 55mm;
     break-inside: avoid;
   }
 
-  .sheet-section {
+  .sheet-streets tr {
     break-inside: avoid;
-    page-break-after: always;
-  }
-
-  .sheet-section:last-child {
-    page-break-after: auto;
   }
 
   .leaflet-control-container {
