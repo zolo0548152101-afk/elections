@@ -1011,7 +1011,7 @@ export function StreetMap({
         return;
       }
       if (routeModeRef.current === "point") {
-        routeApiRef.current?.addPoint(e.lngLat.lat, e.lngLat.lng);
+        routeApiRef.current?.placeRoutePoint(e.lngLat.lat, e.lngLat.lng);
         return;
       }
       if (routeModeRef.current === "stretch") {
@@ -1208,18 +1208,8 @@ export function StreetMap({
       startTimer = null;
       startAt = null;
     }
-    function armStart(e: { point: { x: number; y: number }; lngLat: { lat: number; lng: number } }) {
-      if (routeModeRef.current === "stretch") return;
-      if (occupied(e.point)) return;
-      clearStart();
-      startLong = false;
-      startAt = { x: e.point.x, y: e.point.y };
-      const { lat, lng } = e.lngLat;
-      startTimer = window.setTimeout(() => {
-        startTimer = null;
-        startLong = true;
-        openStartRef.current(lat, lng);
-      }, 550);
+    function armStart() {
+      return;
     }
     map.on("mousedown", armStart);
     map.on("touchstart", armStart);
@@ -1236,11 +1226,6 @@ export function StreetMap({
     });
     map.on("dblclick", (e) => {
       if (finishByDoubleClick(e)) return;
-      if (occupied(e.point)) return;
-      e.preventDefault();
-      e.originalEvent.preventDefault();
-      window.setTimeout(() => map.stop(), 0);
-      openStartRef.current(e.lngLat.lat, e.lngLat.lng);
     });
 
     mapRef.current = map;
@@ -2000,8 +1985,8 @@ export function StreetMap({
     );
   }
 
-  openStartRef.current = (lat, lng) => {
-    setPanel({ kind: "start", lat, lng, mode: "choose" });
+  openStartRef.current = () => {
+    // The start/collection card is not used. The point icon places the point.
   };
   openDrawPanelRef.current = (next) => {
     setPanel({ kind: "draw", ...next });

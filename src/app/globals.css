@@ -1338,10 +1338,11 @@ tbody tr.cluster-row-selected:hover {
   align-items: flex-start;
 }
 
-.route-map-menu .route-stage-names {
-  flex-basis: 100%;
-  margin-inline-start: 0;
-  justify-content: flex-start;
+.route-icon-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 0.35rem;
 }
 
 .route-map-menu .route-choice {
@@ -1737,10 +1738,11 @@ tbody tr.cluster-row-selected:hover {
 
 .route-stage-names {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.45rem 0.85rem;
-  margin-inline-start: auto;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 0.15rem;
+  margin: 0.15rem 0 0;
 }
 
 .route-stage-names button {

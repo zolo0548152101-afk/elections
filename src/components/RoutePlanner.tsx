@@ -24,6 +24,25 @@ function FilterMark() {
   );
 }
 
+function RouteMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M5 17 C9 17 9 7 13 7 C17 7 17 14 19 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="5" cy="17" r="2" fill="currentColor" />
+      <circle cx="19" cy="14" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PointMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M12 3 C8 3 5.5 6 5.5 9.5 C5.5 14 12 21 12 21 C12 21 18.5 14 18.5 9.5 C18.5 6 16 3 12 3 Z" fill="currentColor" />
+      <circle cx="12" cy="9.5" r="2" fill="#fff" />
+    </svg>
+  );
+}
+
 function DirMark({ flip = false }: { flip?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className={flip ? "route-icon-flip" : undefined}>
@@ -72,6 +91,7 @@ export type RouteApi = {
   newStretchSegment: () => void;
   finishStretch: () => boolean;
   selectStretch: (stageNo: number, index: number) => void;
+  placeRoutePoint: (lat: number, lng: number) => void;
   splitStretch: (stageNo: number, drawIndex: number, vertex: number) => void;
   flipStageStretches: (stageNo: number) => void;
   setStretchDone: (stageNo: number, drawIndex: number, done: boolean) => void;
@@ -484,6 +504,38 @@ export function RoutePlanner({
       onMode("off");
       void persist(next);
     },
+    placeRoutePoint(lat, lng) {
+      const prev = stagesRef.current;
+      const first = prev.find((stage) => stage.stage_no === 1);
+      if (!first?.point) {
+        const base = prev.some((stage) => stage.stage_no === 1) ? prev : [blankStage(1), ...prev];
+        const withFirst = base.length === 0 ? [blankStage(1)] : base;
+        activeRef.current = 1;
+        setActive(1);
+        void persist(
+          withFirst.map((stage) =>
+            stage.stage_no === 1
+              ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
+              : stage,
+          ),
+        );
+        return;
+      }
+      const open = prev.find((stage) => stage.stage_no > 1 && !stage.point);
+      if (open) {
+        void persist(
+          prev.map((stage) =>
+            stage.stage_no === open.stage_no
+              ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
+              : stage,
+          ),
+        );
+        return;
+      }
+      const nextNo = prev.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
+      const stageNo = nextNo < 2 ? 2 : nextNo;
+      void persist([...prev, { ...blankStage(stageNo), point: { lat, lng, note: "" } }]);
+    },
     addCollectionPoint(lat, lng) {
       const prev = stagesRef.current;
       const open = prev.find((stage) => stage.stage_no > 1 && !stage.point);
@@ -787,40 +839,36 @@ export function RoutePlanner({
 
   return (
     <section className="route-panel">
-      <div className="route-stage-head">
-        <h3>מסלול</h3>
-        <span className="route-row-actions">
-          <button
-            type="button"
-            className="route-icon-btn"
-            aria-label={stageFilter === "all" ? "סינון שלבים: הכל" : `סינון שלבים: שלב ${stageFilter}`}
-            aria-expanded={filterOpen}
-            onClick={() => setFilterOpen((open) => !open)}
-          >
-            <FilterMark />
-          </button>
-          <button type="button" className="route-icon-btn" aria-label="שלב חדש" onClick={() => addStage()}>
-            +
-          </button>
-        </span>
-      </div>
-      <div className="route-inline route-stretch-bar">
+      <div className="route-icon-row" role="toolbar" aria-label="מסלול">
         <button
           type="button"
-          className="route-icon-btn route-choice"
+          className="route-icon-btn"
           aria-pressed={mode === "stretch"}
-          aria-label="מתיחה"
+          aria-label="מסלול"
           onClick={() => onMode(mode === "stretch" ? "off" : "stretch")}
         >
-          מתיחה
+          <RouteMark />
         </button>
         <button
           type="button"
-          className="route-icon-btn route-choice"
-          aria-label="שלב חדש"
-          onClick={() => addStage(true)}
+          className="route-icon-btn"
+          aria-pressed={mode === "point"}
+          aria-label="נקודת התחלה או איסוף"
+          onClick={() => onMode(mode === "point" ? "off" : "point")}
         >
-          שלב חדש
+          <PointMark />
+        </button>
+        <button
+          type="button"
+          className="route-icon-btn"
+          aria-label={stageFilter === "all" ? "סינון שלבים: הכל" : `סינון שלבים: שלב ${stageFilter}`}
+          aria-expanded={filterOpen}
+          onClick={() => setFilterOpen((open) => !open)}
+        >
+          <FilterMark />
+        </button>
+        <button type="button" className="route-icon-btn" aria-label="שלב חדש" onClick={() => addStage(true)}>
+          +
         </button>
       </div>
       {filterOpen ? (
@@ -860,7 +908,7 @@ export function RoutePlanner({
       {loading ? <p className="assign-empty">טוען מסלול…</p> : null}
       {!loading && stages.length === 0 ? (
         <p className="assign-empty">
-          לחיצה ארוכה על רחוב פותחת בחירת שלב. לחיצה כפולה מחוץ לרחוב פותחת נקודת התחלה או איסוף.
+          לחצו על אייקון המסלול וסמנו על המפה. אייקון הנקודה מוסיף התחלה, ואחר כך איסוף.
         </p>
       ) : null}
       {shownStages.map((stage) => {
@@ -902,7 +950,8 @@ export function RoutePlanner({
               >
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>
               </button>
-              <span className="route-stage-names">
+            </div>
+            <div className="route-stage-names">
                 {asDraws(stage.draws).map((draw, index) => (
                   <button
                     key={`draw-${index}`}
@@ -932,7 +981,6 @@ export function RoutePlanner({
                     {street.done ? " · בוצע" : ""}
                   </button>
                 ))}
-              </span>
             </div>
             {expanded ? (
               <div className="route-stage-more">
