@@ -240,6 +240,24 @@ h1 {
   max-height: none;
 }
 
+.cluster-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cluster-table table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.cluster-table th,
+.cluster-table td,
+.cluster-table .th-btn {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .show-more {
   display: inline;
   line-height: 1.45;

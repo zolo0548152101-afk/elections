@@ -61,7 +61,7 @@ export function ClusterTable({
   onSelect?: (cluster: ClusterView) => void;
 }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap cluster-table">
       <table>
         <thead>
           <tr>
