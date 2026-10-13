@@ -18,6 +18,8 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
+import { spanOf } from "@/lib/street-span";
+import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
 type SearchStreet = {
@@ -477,13 +479,22 @@ export function StreetMap({
       pressAt = null;
     }
 
-    function openStagePopup(e: MapLayerMouseEvent) {
+    async function openStagePopup(e: MapLayerMouseEvent) {
       const feature = e.features?.[0];
       const id = String(feature?.properties?.id ?? "");
       const name = String(feature?.properties?.name_he ?? "");
       if (!id) return;
       longFired = true;
-      const street = { id, name_he: name || id };
+      let geometry: RouteGeometry | null = null;
+      try {
+        const res = await fetch(`/api/streets/${encodeURIComponent(id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          geometry = (data.geometry ?? null) as RouteGeometry | null;
+        }
+      } catch {
+        geometry = null;
+      }
       const stages = routeStagesRef.current;
       const buttons = stages
         .map(
@@ -492,18 +503,55 @@ export function StreetMap({
         )
         .join("");
       streetPopupRef.current?.remove();
-      const popup = new Popup({ closeButton: true, closeOnClick: true, maxWidth: "280px" })
+      const popup = new Popup({ closeButton: true, closeOnClick: false, maxWidth: "300px" })
         .setLngLat(e.lngLat)
         .setHTML(
-          `<div dir="rtl" class="route-pop"><strong>${esc(street.name_he)}</strong><p>הוספה לשלב. נצבע רק הרחוב הזה.</p>${buttons}<button type="button" class="route-pop-btn" data-stage="new">שלב חדש</button></div>`,
+          `<div dir="rtl" class="route-pop"><strong>${esc(name || id)}</strong><p>כמה מהרחוב להוסיף</p><label class="route-span">התחלה <bdi dir="ltr" data-from-label>0%</bdi><input data-from type="range" min="0" max="100" value="0" /></label><label class="route-span">סוף <bdi dir="ltr" data-to-label>100%</bdi><input data-to type="range" min="0" max="100" value="100" /></label>${buttons}<button type="button" class="route-pop-btn" data-stage="new">שלב חדש</button></div>`,
         )
         .addTo(map);
       streetPopupRef.current = popup;
       const root = popup.getElement();
+      const fromInput = root?.querySelector<HTMLInputElement>("[data-from]");
+      const toInput = root?.querySelector<HTMLInputElement>("[data-to]");
+      const fromLabel = root?.querySelector("[data-from-label]");
+      const toLabel = root?.querySelector("[data-to-label]");
+      const preview = () => {
+        const from = Number(fromInput?.value ?? 0);
+        const to = Number(toInput?.value ?? 100);
+        if (fromLabel) fromLabel.textContent = `${from}%`;
+        if (toLabel) toLabel.textContent = `${to}%`;
+        const src = map.getSource("highlight") as GeoJSONSource | undefined;
+        const sliced = spanOf(geometry, from / 100, to / 100);
+        src?.setData({
+          type: "FeatureCollection",
+          features: sliced
+            ? [{
+                type: "Feature",
+                properties: {},
+                geometry: sliced,
+              }]
+            : [],
+        });
+      };
+      fromInput?.addEventListener("input", preview);
+      toInput?.addEventListener("input", preview);
+      preview();
+      popup.on("close", () => {
+        const src = map.getSource("highlight") as GeoJSONSource | undefined;
+        src?.setData({ type: "FeatureCollection", features: [] });
+      });
       root?.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((button) => {
         button.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          const from = Number(fromInput?.value ?? 0) / 100;
+          const to = Number(toInput?.value ?? 100) / 100;
+          const street = {
+            id,
+            name_he: name || id,
+            from_ratio: Math.min(from, to),
+            to_ratio: Math.max(from, to),
+          };
           const which = button.dataset.stage;
           if (which === "new") routeApiRef.current?.addStreetToNewStage(street);
           else if (which) routeApiRef.current?.addStreetToStage(street, Number(which));
@@ -535,10 +583,27 @@ export function StreetMap({
 
     map.on("mousedown", "streets-line", armPress);
     map.on("touchstart", "streets-line", armPress);
+    map.on("mousedown", "route-line", armPress);
+    map.on("touchstart", "route-line", armPress);
     map.on("contextmenu", "streets-line", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       clearPress();
-      openStagePopup(e);
+      void openStagePopup(e);
+    });
+    let clickTimer: number | null = null;
+    map.on("dblclick", "streets-line", (e: MapLayerMouseEvent) => {
+      e.preventDefault();
+      if (clickTimer != null) window.clearTimeout(clickTimer);
+      clickTimer = null;
+      clearPress();
+      void openStagePopup(e);
+    });
+    map.on("dblclick", "route-line", (e: MapLayerMouseEvent) => {
+      e.preventDefault();
+      if (clickTimer != null) window.clearTimeout(clickTimer);
+      clickTimer = null;
+      clearPress();
+      void openStagePopup(e);
     });
     const endPress = () => clearPress();
     map.on("mouseup", endPress);
@@ -569,6 +634,14 @@ export function StreetMap({
         }
         return;
       }
+      if (clickTimer != null) window.clearTimeout(clickTimer);
+      clickTimer = window.setTimeout(() => {
+        clickTimer = null;
+        void markStreetDone(e);
+      }, 280);
+    });
+
+    async function markStreetDone(e: MapLayerMouseEvent) {
       const f = e.features?.[0];
       if (!f) return;
       const id = String(f.properties?.id ?? "");
@@ -624,7 +697,7 @@ export function StreetMap({
       } else {
         setStatus("שגיאה בסימון");
       }
-    });
+    }
 
     map.on("click", (e) => {
       if (routeClickHandled) {

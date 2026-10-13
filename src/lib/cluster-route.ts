@@ -2,6 +2,7 @@ import type { getSql } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
 import { canAccessAshkol } from "@/lib/streets-access";
 import type { RouteGeometry, RoutePayload, RouteStage } from "@/lib/cluster-route-types";
+import { clampRatio, spanOf } from "@/lib/street-span";
 
 type Sql = ReturnType<typeof getSql>;
 
@@ -101,7 +102,8 @@ export async function readClusterRoute(
 
   const stageIds = stages.map((s) => s.id);
   const streets = (await sql`
-    SELECT r.stage_id, r.street_id, r.note, r.sort_order, s.name_he, s.geom_geojson
+    SELECT r.stage_id, r.street_id, r.note, r.sort_order, r.from_ratio, r.to_ratio,
+           s.name_he, s.geom_geojson
     FROM cluster_route_streets r
     JOIN streets s ON s.id = r.street_id
     WHERE r.stage_id = ANY(${stageIds})
@@ -111,6 +113,8 @@ export async function readClusterRoute(
     street_id: string;
     note: string;
     sort_order: number;
+    from_ratio: number;
+    to_ratio: number;
     name_he: string;
     geom_geojson: string;
   }[];
@@ -125,11 +129,15 @@ export async function readClusterRoute(
     byStage.set(stage.id, { stage_no: stage.stage_no, streets: [], point: null });
   }
   for (const street of streets) {
+    const fromRatio = clampRatio(street.from_ratio, 0);
+    const toRatio = clampRatio(street.to_ratio, 1);
     byStage.get(street.stage_id)?.streets.push({
       street_id: street.street_id,
       name_he: street.name_he,
       note: street.note ?? "",
-      geometry: geometryFromGeoJson(street.geom_geojson),
+      from_ratio: Math.min(fromRatio, toRatio),
+      to_ratio: Math.max(fromRatio, toRatio),
+      geometry: spanOf(geometryFromGeoJson(street.geom_geojson), fromRatio, toRatio),
     });
   }
   for (const point of points) {
@@ -146,7 +154,7 @@ export async function readClusterRoute(
 }
 
 type IncomingStage = {
-  streets?: { street_id?: unknown; note?: unknown }[];
+  streets?: { street_id?: unknown; note?: unknown; from_ratio?: unknown; to_ratio?: unknown }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
 };
 
@@ -206,9 +214,19 @@ export async function saveClusterRoute(
       const streetId = String(street.street_id ?? "").trim();
       if (!streetId || seen.has(streetId)) continue;
       seen.add(streetId);
+      const fromRatio = clampRatio(street.from_ratio, 0);
+      const toRatio = clampRatio(street.to_ratio, 1);
       await sql`
-        INSERT INTO cluster_route_streets (stage_id, street_id, note, sort_order)
-        VALUES (${stageId}, ${streetId}, ${clipNote(street.note)}, ${order})
+        INSERT INTO cluster_route_streets
+          (stage_id, street_id, note, sort_order, from_ratio, to_ratio)
+        VALUES (
+          ${stageId},
+          ${streetId},
+          ${clipNote(street.note)},
+          ${order},
+          ${Math.min(fromRatio, toRatio)},
+          ${Math.max(fromRatio, toRatio)}
+        )
       `;
       order += 1;
     }
