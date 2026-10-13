@@ -205,6 +205,8 @@ ALTER TABLE cluster_route_streets
   ADD COLUMN IF NOT EXISTS to_ratio double precision NOT NULL DEFAULT 1;
 ALTER TABLE cluster_route_streets
   ADD COLUMN IF NOT EXISTS reversed boolean NOT NULL DEFAULT false;
+ALTER TABLE cluster_route_streets
+  ADD COLUMN IF NOT EXISTS done boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS cluster_route_points (
   stage_id integer PRIMARY KEY REFERENCES cluster_route_stages(id) ON DELETE CASCADE,

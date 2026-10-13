@@ -9,6 +9,7 @@ export type RouteStreet = {
   from_ratio: number;
   to_ratio: number;
   reversed: boolean;
+  done: boolean;
   geometry: RouteGeometry | null;
 };
 
