@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
-  Popup,
   setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
@@ -18,7 +17,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { spanOf } from "@/lib/street-span";
+import { directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
@@ -78,14 +77,6 @@ function institutionOptionLabel(inst: Institution): string {
 
 type MapFocus = { lat: number; lng: number };
 
-function esc(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function fmtInt(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString("he-IL") : "—";
@@ -122,6 +113,7 @@ const COLOR_ASSIGNED = "#c45c26";
 const COLOR_DONE = "#16a34a";
 const COLOR_FILTERED = "#f5b942";
 const COLOR_SEARCH = "#22d3ee";
+const COLOR_SELECTED = "#dc2626";
 
 function streetStatusPaint() {
   return {
@@ -152,20 +144,6 @@ function streetStatusPaint() {
   };
 }
 
-function clusterPopupHtml(c: ClusterView) {
-  const row = (label: string, value: string) =>
-    `<div>${esc(label)}: <bdi dir="ltr">${esc(value)}</bdi></div>`;
-  return `<div dir="rtl" class="popup"><strong>${esc(c.settlement_name)}</strong>${row("אשכול", c.ashkol)}${row("בז״ב", fmtInt(c.bzb))}${row("מצביעים", fmtInt(c.voters))}${row("כשרים", fmtInt(c.valid))}${row("הצבעה", fmtPct(c.turnout_pct))}${row("קולות ימין", fmtInt(c.right_votes))}${row("ימין", fmtPct(c.right_pct))}${row("קולות מחל", fmtInt(c.likud_votes ?? 0))}${row("מחל", fmtPct(c.likud_pct ?? 0))}${row("קלפיות", fmtInt(c.ballot_count))}</div>`;
-}
-
-function streetPopupHtml(name: string, ashkol: string | null) {
-  const ashkolLine =
-    ashkol && ashkol.trim()
-      ? `<div>אשכול: <bdi dir="ltr">${esc(ashkol)}</bdi></div>`
-      : "";
-  return `<div dir="rtl" class="popup"><strong>${esc(name)}</strong>${ashkolLine}</div>`;
-}
-
 export function StreetMap({
   clusters,
   focus,
@@ -184,7 +162,10 @@ export function StreetMap({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const streetPopupRef = useRef<Popup | null>(null);
+  const openStreetPanelRef = useRef<(id: string, name: string) => void>(() => {});
+  const openStartRef = useRef<(lat: number, lng: number) => void>(() => {});
+  const openClusterPanelRef = useRef<(cluster: ClusterView) => void>(() => {});
+  const zoomClusterRef = useRef<(lng: number, lat: number, ashkol: string) => void>(() => {});
   const [q, setQ] = useState("");
   const [cityHits, setCityHits] = useState<SearchCity[]>([]);
   const [streetHits, setStreetHits] = useState<SearchStreet[]>([]);
@@ -219,10 +200,25 @@ export function StreetMap({
   const [mapFailed, setMapFailed] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
-  const routeStagesRef = useRef<{ stage_no: number }[]>([]);
+  const [routeStages, setRouteStages] = useState<{ stage_no: number }[]>([]);
+  const routeDirRef = useRef<Record<string, boolean>>({});
   const routeModeRef = useRef<RouteMode>("off");
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
+  const [panel, setPanel] = useState<
+    | {
+        kind: "street";
+        id: string;
+        name: string;
+        from: number;
+        to: number;
+        reversed: boolean;
+        geometry: RouteGeometry | null;
+      }
+    | { kind: "start"; lat: number; lng: number }
+    | { kind: "cluster"; cluster: ClusterView }
+    | null
+  >(null);
   const [searchPlace, setSearchPlace] = useState("");
   const [routeFeatures, setRouteFeatures] = useState<Feature[]>([]);
 
@@ -366,14 +362,11 @@ export function StreetMap({
             type: "circle",
             source: "clusters",
             paint: {
-              "circle-radius": [
-                "case",
-                ["==", ["get", "selected"], 1],
-                10,
-                7,
-              ],
+              "circle-radius": 8,
               "circle-color": [
                 "case",
+                ["==", ["get", "selected"], 1],
+                COLOR_SELECTED,
                 ["==", ["get", "done"], 1],
                 COLOR_DONE,
                 ["==", ["get", "searched"], 1],
@@ -400,6 +393,22 @@ export function StreetMap({
             },
           },
           {
+            id: "highlight-arrow",
+            type: "symbol",
+            source: "highlight",
+            filter: ["==", ["geometry-type"], "LineString"],
+            layout: {
+              "symbol-placement": "line",
+              "symbol-spacing": 70,
+              "icon-image": "route-dir",
+              "icon-size": 0.55,
+              "icon-allow-overlap": true,
+              "icon-rotation-alignment": "map",
+              "icon-keep-upright": false,
+            },
+            paint: { "icon-color": "#102033" },
+          },
+          {
             id: "route-line",
             type: "line",
             source: "route",
@@ -409,6 +418,22 @@ export function StreetMap({
               "line-width": 6,
               "line-opacity": 0.95,
             },
+          },
+          {
+            id: "route-arrow",
+            type: "symbol",
+            source: "route",
+            filter: ["==", ["geometry-type"], "LineString"],
+            layout: {
+              "symbol-placement": "line",
+              "symbol-spacing": 70,
+              "icon-image": "route-dir",
+              "icon-size": 0.55,
+              "icon-allow-overlap": true,
+              "icon-rotation-alignment": "map",
+              "icon-keep-upright": false,
+            },
+            paint: { "icon-color": ["get", "color"] },
           },
           {
             id: "route-point",
@@ -428,7 +453,7 @@ export function StreetMap({
             source: "route",
             filter: ["==", ["get", "kind"], "point"],
             layout: {
-              "text-field": ["to-string", ["get", "stage"]],
+              "text-field": ["coalesce", ["get", "label"], ["to-string", ["get", "stage"]]],
               "text-size": 12,
               "text-font": ["Noto Sans Regular"],
               "text-offset": [0, -1.3],
@@ -451,7 +476,28 @@ export function StreetMap({
     }
 
     map.addControl(new NavigationControl(), "top-left");
-    map.on("load", () => setStatus("לחצו על רחוב לסימון"));
+    map.on("load", () => {
+      if (!map.hasImage("route-dir")) {
+        const size = 32;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, size, size);
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.moveTo(16, 3);
+          ctx.lineTo(27, 26);
+          ctx.lineTo(16, 20);
+          ctx.lineTo(5, 26);
+          ctx.closePath();
+          ctx.fill();
+          map.addImage("route-dir", ctx.getImageData(0, 0, size, size), { sdf: true });
+        }
+      }
+      setStatus("לחצו על רחוב לסימון");
+    });
     map.on("error", (e) => {
       const msg = String(
         (e as { error?: { message?: string } }).error?.message ?? "",
@@ -470,6 +516,7 @@ export function StreetMap({
 
     let routeClickHandled = false;
     let longFired = false;
+    let startLong = false;
     let pressTimer: number | null = null;
     let pressAt: { x: number; y: number } | null = null;
 
@@ -479,85 +526,13 @@ export function StreetMap({
       pressAt = null;
     }
 
-    async function openStagePopup(e: MapLayerMouseEvent) {
+    function openStagePopup(e: MapLayerMouseEvent) {
       const feature = e.features?.[0];
       const id = String(feature?.properties?.id ?? "");
       const name = String(feature?.properties?.name_he ?? "");
       if (!id) return;
       longFired = true;
-      let geometry: RouteGeometry | null = null;
-      try {
-        const res = await fetch(`/api/streets/${encodeURIComponent(id)}`);
-        if (res.ok) {
-          const data = await res.json();
-          geometry = (data.geometry ?? null) as RouteGeometry | null;
-        }
-      } catch {
-        geometry = null;
-      }
-      const stages = routeStagesRef.current;
-      const buttons = stages
-        .map(
-          (stage) =>
-            `<button type="button" class="route-pop-btn" data-stage="${stage.stage_no}"><span class="route-pop-swatch" style="background:${stageColor(stage.stage_no)}"></span>שלב ${stage.stage_no}</button>`,
-        )
-        .join("");
-      streetPopupRef.current?.remove();
-      const popup = new Popup({ closeButton: true, closeOnClick: false, maxWidth: "300px" })
-        .setLngLat(e.lngLat)
-        .setHTML(
-          `<div dir="rtl" class="route-pop"><strong>${esc(name || id)}</strong><p>כמה מהרחוב להוסיף</p><label class="route-span">התחלה <bdi dir="ltr" data-from-label>0%</bdi><input data-from type="range" min="0" max="100" value="0" /></label><label class="route-span">סוף <bdi dir="ltr" data-to-label>100%</bdi><input data-to type="range" min="0" max="100" value="100" /></label>${buttons}<button type="button" class="route-pop-btn" data-stage="new">שלב חדש</button></div>`,
-        )
-        .addTo(map);
-      streetPopupRef.current = popup;
-      const root = popup.getElement();
-      const fromInput = root?.querySelector<HTMLInputElement>("[data-from]");
-      const toInput = root?.querySelector<HTMLInputElement>("[data-to]");
-      const fromLabel = root?.querySelector("[data-from-label]");
-      const toLabel = root?.querySelector("[data-to-label]");
-      const preview = () => {
-        const from = Number(fromInput?.value ?? 0);
-        const to = Number(toInput?.value ?? 100);
-        if (fromLabel) fromLabel.textContent = `${from}%`;
-        if (toLabel) toLabel.textContent = `${to}%`;
-        const src = map.getSource("highlight") as GeoJSONSource | undefined;
-        const sliced = spanOf(geometry, from / 100, to / 100);
-        src?.setData({
-          type: "FeatureCollection",
-          features: sliced
-            ? [{
-                type: "Feature",
-                properties: {},
-                geometry: sliced,
-              }]
-            : [],
-        });
-      };
-      fromInput?.addEventListener("input", preview);
-      toInput?.addEventListener("input", preview);
-      preview();
-      popup.on("close", () => {
-        const src = map.getSource("highlight") as GeoJSONSource | undefined;
-        src?.setData({ type: "FeatureCollection", features: [] });
-      });
-      root?.querySelectorAll<HTMLButtonElement>("[data-stage]").forEach((button) => {
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const from = Number(fromInput?.value ?? 0) / 100;
-          const to = Number(toInput?.value ?? 100) / 100;
-          const street = {
-            id,
-            name_he: name || id,
-            from_ratio: Math.min(from, to),
-            to_ratio: Math.max(from, to),
-          };
-          const which = button.dataset.stage;
-          if (which === "new") routeApiRef.current?.addStreetToNewStage(street);
-          else if (which) routeApiRef.current?.addStreetToStage(street, Number(which));
-          popup.remove();
-        });
-      });
+      openStreetPanelRef.current(id, name || id);
     }
 
     function armPress(e: {
@@ -654,16 +629,6 @@ export function StreetMap({
       const done = Number(f.properties?.done ?? 0) === 1;
       if (!id) return;
 
-      streetPopupRef.current?.remove();
-      streetPopupRef.current = new Popup({
-        closeButton: true,
-        closeOnClick: false,
-        maxWidth: "260px",
-      })
-        .setLngLat(e.lngLat)
-        .setHTML(streetPopupHtml(name, ashkol))
-        .addTo(map);
-
       const street: SearchStreet = {
         id,
         name_he: name,
@@ -700,6 +665,10 @@ export function StreetMap({
     }
 
     map.on("click", (e) => {
+      if (startLong) {
+        startLong = false;
+        return;
+      }
       if (routeClickHandled) {
         routeClickHandled = false;
         return;
@@ -709,17 +678,57 @@ export function StreetMap({
       }
     });
 
-    map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
-      if (routeModeRef.current !== "off") return;
+    let clusterClickTimer: number | null = null;
+    let clusterLong = false;
+    let clusterTimer: number | null = null;
+    function zoomCluster(e: MapLayerMouseEvent) {
       const raw = e.features?.[0]?.properties;
       if (!raw) return;
       const cluster = clusterFromProps(raw as Record<string, unknown>);
-      setPicked(cluster);
-      setSelectedAshkol(cluster.ashkol);
-      new Popup({ closeButton: true, closeOnClick: false, maxWidth: "280px" })
-        .setLngLat(e.lngLat)
-        .setHTML(clusterPopupHtml(cluster))
-        .addTo(map);
+      zoomClusterRef.current(e.lngLat.lng, e.lngLat.lat, cluster.ashkol);
+    }
+    const armClusterZoom = (e: {
+      lngLat: MapLayerMouseEvent["lngLat"];
+      features?: MapLayerMouseEvent["features"];
+    }) => {
+      clusterLong = false;
+      if (clusterTimer != null) window.clearTimeout(clusterTimer);
+      clusterTimer = window.setTimeout(() => {
+        clusterTimer = null;
+        clusterLong = true;
+        zoomCluster(e as MapLayerMouseEvent);
+      }, 550);
+    };
+    map.on("mousedown", "clusters-circle", armClusterZoom);
+    map.on("touchstart", "clusters-circle", armClusterZoom);
+    const clearClusterTimer = () => {
+      if (clusterTimer != null) window.clearTimeout(clusterTimer);
+      clusterTimer = null;
+    };
+    map.on("mouseup", clearClusterTimer);
+    map.on("touchend", clearClusterTimer);
+    map.on("dblclick", "clusters-circle", (e: MapLayerMouseEvent) => {
+      e.preventDefault();
+      e.originalEvent.preventDefault();
+      if (clusterClickTimer != null) window.clearTimeout(clusterClickTimer);
+      clusterClickTimer = null;
+      if (clusterTimer != null) window.clearTimeout(clusterTimer);
+      clusterTimer = null;
+      zoomCluster(e);
+    });
+    map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
+      if (routeModeRef.current !== "off") return;
+      if (clusterLong) {
+        clusterLong = false;
+        return;
+      }
+      if (clusterClickTimer != null) window.clearTimeout(clusterClickTimer);
+      clusterClickTimer = window.setTimeout(() => {
+        clusterClickTimer = null;
+        const raw = e.features?.[0]?.properties;
+        if (!raw) return;
+        openClusterPanelRef.current(clusterFromProps(raw as Record<string, unknown>));
+      }, 280);
     });
 
     map.on("mouseenter", "streets-line", () => {
@@ -735,9 +744,56 @@ export function StreetMap({
       map.getCanvas().style.cursor = "";
     });
 
+    function occupied(point: { x: number; y: number }) {
+      if (!map.isStyleLoaded()) return false;
+      const layers = ["streets-line", "route-line", "clusters-circle", "route-point"].filter(
+        (id) => map.getLayer(id),
+      );
+      if (layers.length === 0) return false;
+      return map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
+    }
+    let startTimer: number | null = null;
+    let startAt: { x: number; y: number } | null = null;
+    function clearStart() {
+      if (startTimer != null) window.clearTimeout(startTimer);
+      startTimer = null;
+      startAt = null;
+    }
+    function armStart(e: { point: { x: number; y: number }; lngLat: { lat: number; lng: number } }) {
+      if (occupied(e.point)) return;
+      clearStart();
+      startLong = false;
+      startAt = { x: e.point.x, y: e.point.y };
+      const { lat, lng } = e.lngLat;
+      startTimer = window.setTimeout(() => {
+        startTimer = null;
+        startLong = true;
+        openStartRef.current(lat, lng);
+      }, 550);
+    }
+    map.on("mousedown", armStart);
+    map.on("touchstart", armStart);
+    map.on("mouseup", clearStart);
+    map.on("touchend", clearStart);
+    map.on("touchcancel", clearStart);
+    map.on("mousemove", (e) => {
+      if (!startAt || startTimer == null) return;
+      if (Math.hypot(e.point.x - startAt.x, e.point.y - startAt.y) > 12) clearStart();
+    });
+    map.on("touchmove", (e) => {
+      if (!startAt || startTimer == null) return;
+      if (Math.hypot(e.point.x - startAt.x, e.point.y - startAt.y) > 12) clearStart();
+    });
+    map.on("dblclick", (e) => {
+      if (occupied(e.point)) return;
+      e.preventDefault();
+      e.originalEvent.preventDefault();
+      window.setTimeout(() => map.stop(), 0);
+      openStartRef.current(e.lngLat.lat, e.lngLat.lng);
+    });
+
     mapRef.current = map;
     return () => {
-      streetPopupRef.current?.remove();
       try {
         map.remove();
       } catch {
@@ -784,12 +840,19 @@ export function StreetMap({
           },
         };
       });
+    let cancelled = false;
     const apply = () => {
+      if (cancelled) return;
       const src = map.getSource("clusters") as GeoJSONSource | undefined;
-      src?.setData({ type: "FeatureCollection", features });
+      if (!src) return;
+      src.setData({ type: "FeatureCollection", features });
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    apply();
+    map.on("load", apply);
+    return () => {
+      cancelled = true;
+      map.off("load", apply);
+    };
   }, [clusters, selectedAshkol, linkedOverride, doneOverride, searchPlace]);
 
   useEffect(() => {
@@ -1044,6 +1107,14 @@ export function StreetMap({
     const map = mapRef.current;
     if (!map) return;
     setSearchPlace(city.name_he);
+    const match = clusters.find((c) => c.settlement_name === city.name_he);
+    if (match) {
+      setSelectedAshkol(match.ashkol);
+      setPicked(match);
+      setPanel({ kind: "cluster", cluster: match });
+    } else {
+      setPanel(null);
+    }
     map.flyTo({ center: [city.lng, city.lat], zoom: 13 });
     setQ(`${city.name_he} `);
     clearHits();
@@ -1054,7 +1125,14 @@ export function StreetMap({
   async function goToStreet(hit: SearchStreet) {
     const map = mapRef.current;
     if (!map) return;
-    if (hit.near_settlement) setSearchPlace(hit.near_settlement);
+    if (hit.near_settlement) {
+      setSearchPlace(hit.near_settlement);
+      const match = clusters.find((c) => c.settlement_name === hit.near_settlement);
+      if (match) {
+        setSelectedAshkol(match.ashkol);
+        setPicked(match);
+      }
+    }
     map.flyTo({ center: [hit.lng, hit.lat], zoom: 15 });
     setQ(
       hit.near_settlement
@@ -1064,16 +1142,7 @@ export function StreetMap({
     clearHits();
     setPickedStreet(hit);
     void loadStreetAssign(hit.id);
-
-    streetPopupRef.current?.remove();
-    streetPopupRef.current = new Popup({
-      closeButton: true,
-      closeOnClick: false,
-      maxWidth: "260px",
-    })
-      .setLngLat([hit.lng, hit.lat])
-      .setHTML(streetPopupHtml(hit.name_he, hit.ashkol))
-      .addTo(map);
+    setPanel(null);
 
     const pad = 0.01;
     const res = await fetch(
@@ -1371,12 +1440,215 @@ export function StreetMap({
     );
   }
 
+  openStartRef.current = (lat, lng) => {
+    setPanel({ kind: "start", lat, lng });
+  };
+  openStreetPanelRef.current = (id, name) => {
+    setPanel({
+      kind: "street",
+      id,
+      name,
+      from: 0,
+      to: 100,
+      reversed: Boolean(routeDirRef.current[id]),
+      geometry: null,
+    });
+    void fetch(`/api/streets/${encodeURIComponent(id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setPanel((prev) =>
+          prev?.kind === "street" && prev.id === id
+            ? { ...prev, geometry: (data.geometry ?? null) as RouteGeometry | null }
+            : prev,
+        );
+      })
+      .catch(() => {});
+  };
+  openClusterPanelRef.current = (cluster) => {
+    setSelectedAshkol(cluster.ashkol);
+    setPicked(cluster);
+    setPanel({ kind: "cluster", cluster });
+  };
+  zoomClusterRef.current = (lng, lat, ashkol) => {
+    const cluster = clusters.find((c) => c.ashkol === ashkol);
+    if (cluster) {
+      setSelectedAshkol(cluster.ashkol);
+      setPicked(cluster);
+    }
+    setPanel(null);
+    const map = mapRef.current;
+    if (!map) return;
+    window.setTimeout(() => {
+      map.stop();
+      map.flyTo({ center: [lng, lat], zoom: 16 });
+    }, 0);
+  };
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("highlight") as GeoJSONSource | undefined;
+    if (!src) return;
+    if (panel?.kind !== "street") {
+      src.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    const sliced = directedGeometry(
+      spanOf(panel.geometry, panel.from / 100, panel.to / 100),
+      panel.reversed,
+    );
+    src.setData({
+      type: "FeatureCollection",
+      features: sliced ? [{ type: "Feature", properties: {}, geometry: sliced }] : [],
+    });
+  }, [panel]);
+
+  function showAllClusters() {
+    const map = mapRef.current;
+    if (!map) return;
+    const pts = clusters.filter((c) => c.map_lat != null && c.map_lng != null);
+    if (pts.length === 0) return;
+    const lngs = pts.map((c) => c.map_lng!);
+    const lats = pts.map((c) => c.map_lat!);
+    map.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      { padding: 40, maxZoom: 11 },
+    );
+  }
+
+  function saveStartPoint() {
+    if (panel?.kind !== "start") return;
+    if (!routeApiRef.current) {
+      setStatus("בחרו אשכול כדי לשמור נקודת התחלה");
+      return;
+    }
+    routeApiRef.current.addStartPoint(panel.lat, panel.lng);
+    setPanel(null);
+    setStatus("נקודת התחלה נשמרה");
+  }
+
+  function addPanelStreet(stage: number | "new") {
+    if (panel?.kind !== "street") return;
+    const from = Math.min(panel.from, panel.to) / 100;
+    const to = Math.max(panel.from, panel.to) / 100;
+    const street = {
+      id: panel.id,
+      name_he: panel.name,
+      from_ratio: from,
+      to_ratio: to,
+      reversed: panel.reversed,
+    };
+    if (stage === "new") routeApiRef.current?.addStreetToNewStage(street);
+    else routeApiRef.current?.addStreetToStage(street, stage);
+    setPanel(null);
+  }
+
   const selectedDone = selectedAshkol
     ? Boolean(
         doneOverride[selectedAshkol] ??
           clusters.find((c) => c.ashkol === selectedAshkol)?.done,
       )
     : false;
+
+  const sidePanel = panel ? (
+    <aside className="map-side-panel" aria-live="polite">
+      <button type="button" className="map-side-close" onClick={() => setPanel(null)} aria-label="סגור">
+        ×
+      </button>
+      {panel.kind === "cluster" ? (
+        <>
+          <strong>{panel.cluster.settlement_name}</strong>
+          <p>אשכול <bdi dir="ltr">{panel.cluster.ashkol}</bdi></p>
+          <ul>
+            <li>בז״ב <bdi dir="ltr">{fmtInt(panel.cluster.bzb)}</bdi></li>
+            <li>מצביעים <bdi dir="ltr">{fmtInt(panel.cluster.voters)}</bdi></li>
+            <li>הצבעה <bdi dir="ltr">{fmtPct(panel.cluster.turnout_pct)}</bdi></li>
+            <li>ימין <bdi dir="ltr">{fmtPct(panel.cluster.right_pct)}</bdi></li>
+            <li>קלפיות <bdi dir="ltr">{fmtInt(panel.cluster.ballot_count)}</bdi></li>
+          </ul>
+        </>
+      ) : panel.kind === "start" ? (
+        <>
+          <strong>נקודת התחלה</strong>
+          <p>המקום שנלחץ על המפה, לשלב הראשון.</p>
+          <button type="button" className="route-pop-btn" onClick={saveStartPoint} disabled={!picked}>
+            שמור נקודת התחלה
+          </button>
+          {!picked ? <p>בחרו אשכול כדי לשמור.</p> : null}
+        </>
+      ) : (
+        <>
+          <strong>{panel.name}</strong>
+          <label className="route-span">
+            התחלה <bdi dir="ltr">{panel.from}%</bdi>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={panel.from}
+              onChange={(event) => {
+                const from = Number(event.target.value);
+                setPanel((prev) => (prev?.kind === "street" ? { ...prev, from } : prev));
+              }}
+            />
+          </label>
+          <label className="route-span">
+            סוף <bdi dir="ltr">{panel.to}%</bdi>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={panel.to}
+              onChange={(event) => {
+                const to = Number(event.target.value);
+                setPanel((prev) => (prev?.kind === "street" ? { ...prev, to } : prev));
+              }}
+            />
+              </label>
+              <div className="route-dir" role="group" aria-label="כיוון ההתקדמות">
+                <button
+                  type="button"
+                  className="route-pop-btn"
+                  aria-pressed={!panel.reversed}
+                  onClick={() =>
+                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: false } : prev))
+                  }
+                >
+                  ▲ כיוון הרחוב
+                </button>
+                <button
+                  type="button"
+                  className="route-pop-btn"
+                  aria-pressed={panel.reversed}
+                  onClick={() =>
+                    setPanel((prev) => (prev?.kind === "street" ? { ...prev, reversed: true } : prev))
+                  }
+                >
+                  ▼ כיוון הפוך
+                </button>
+              </div>
+              {routeStages.map((stage) => (
+            <button
+              key={stage.stage_no}
+              type="button"
+              className="route-pop-btn"
+              onClick={() => addPanelStreet(stage.stage_no)}
+            >
+              <span className="route-pop-swatch" style={{ background: stageColor(stage.stage_no) }} />
+              שלב {stage.stage_no}
+            </button>
+          ))}
+          <button type="button" className="route-pop-btn" onClick={() => addPanelStreet("new")}>
+            שלב חדש
+          </button>
+        </>
+      )}
+    </aside>
+  ) : null;
 
   return (
     <div className="street-map-wrap">
@@ -1465,6 +1737,7 @@ export function StreetMap({
               setSelectedAshkol(ashkol);
               const cluster = clusters.find((c) => c.ashkol === ashkol) ?? null;
               setPicked(cluster);
+              setPanel(cluster ? { kind: "cluster", cluster } : null);
               if (cluster?.map_lng != null && cluster.map_lat != null) {
                 mapRef.current?.flyTo({
                   center: [cluster.map_lng, cluster.map_lat],
@@ -1499,6 +1772,9 @@ export function StreetMap({
           onClick={() => markClusterStreets(false)}
         >
           נקה אשכול
+        </button>
+        <button type="button" className="reset" onClick={showAllClusters}>
+          הצג הכל
         </button>
         <p
           className={`map-status${status.includes("סומן כבוצע") ? " link-success-note" : ""}`}
@@ -1662,7 +1938,12 @@ export function StreetMap({
                 onMode={setRouteMode}
                 onFeatures={setRouteFeatures}
                 onStages={(stages) => {
-                  routeStagesRef.current = stages;
+                  setRouteStages(stages.map((stage) => ({ stage_no: stage.stage_no })));
+                  const dirs: Record<string, boolean> = {};
+                  for (const stage of stages) {
+                    for (const street of stage.streets) dirs[street.street_id] = street.reversed;
+                  }
+                  routeDirRef.current = dirs;
                 }}
                 bindRef={routeApiRef}
               />
@@ -1843,16 +2124,19 @@ export function StreetMap({
           )}
         </aside>
       </div>
-      {mapFailed ? (
-        <div className="street-map-canvas map-fallback" role="status">
-          <p>
-            לא ניתן להציג את המפה בסביבה זו (WebGL לא זמין). אפשר להמשיך עם
-            הטבלה, החיפוש, הפילטרים ובחירת אשכולות.
-          </p>
-        </div>
-      ) : (
-        <div ref={containerRef} className="street-map-canvas" />
-      )}
+      <div className="street-map-stage">
+        {sidePanel}
+        {mapFailed ? (
+          <div className="street-map-canvas map-fallback" role="status">
+            <p>
+              לא ניתן להציג את המפה בסביבה זו (WebGL לא זמין). אפשר להמשיך עם
+              הטבלה, החיפוש, הפילטרים ובחירת אשכולות.
+            </p>
+          </div>
+        ) : (
+          <div ref={containerRef} className="street-map-canvas" />
+        )}
+      </div>
       <p className="map-credit">
         © OpenStreetMap contributors · data available under ODbL · Hebrew names from OSM
       </p>

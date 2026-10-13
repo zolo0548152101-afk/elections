@@ -72,3 +72,20 @@ export function spanOf(
   }
   return out.length >= 2 ? { type: "LineString", coordinates: out } : null;
 }
+
+/** Walk the same portion from the other end. */
+export function directedGeometry(
+  geometry: RouteGeometry | null,
+  reversed: boolean,
+): RouteGeometry | null {
+  if (!geometry || !reversed) return geometry;
+  if (geometry.type === "LineString") {
+    return { type: "LineString", coordinates: [...geometry.coordinates].reverse() };
+  }
+  return {
+    type: "MultiLineString",
+    coordinates: [...geometry.coordinates]
+      .reverse()
+      .map((line) => [...line].reverse()),
+  };
+}

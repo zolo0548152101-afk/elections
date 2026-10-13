@@ -1273,6 +1273,88 @@ tbody tr.cluster-row-selected:hover {
   gap: 0.75rem;
 }
 
+.street-map-stage {
+  position: relative;
+}
+
+.map-side-panel {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 12px;
+  width: min(220px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 0.65rem 0.7rem 0.7rem;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.86rem;
+}
+
+.map-side-panel strong {
+  display: block;
+  padding-left: 1.5rem;
+  line-height: 1.3;
+}
+
+.map-side-panel p,
+.map-side-panel ul {
+  margin: 0;
+}
+
+.map-side-panel ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.map-side-close {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-side-panel .route-span input[type="range"] {
+  min-height: 28px;
+  height: 28px;
+}
+
+.map-side-panel .route-pop-btn {
+  min-height: 36px;
+}
+
+.route-dir {
+  display: grid;
+  gap: 6px;
+}
+
+.map-side-panel .route-pop-btn[aria-pressed="true"],
+.route-row-actions .route-btn[aria-pressed="true"] {
+  background: #f5f3ff;
+  border-color: #6d28d9;
+  color: var(--ink);
+}
+
+.map-side-panel .route-pop-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .street-map-toolbar {
   display: grid;
   grid-template-columns: 1.4fr 1fr auto auto;

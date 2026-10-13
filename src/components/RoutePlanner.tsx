@@ -3,8 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
 import type { RouteStage } from "@/lib/cluster-route-types";
+import { directedGeometry } from "@/lib/street-span";
 
-const STAGE_COLORS = ["#c45c26", "#2f6fed", "#0f766e", "#7c3aed", "#be123c", "#a16207"];
+/** Stage colors stay off the map's blue, green, gold, cyan, orange, and red. */
+const STAGE_COLORS = ["#6d28d9", "#db2777", "#a21caf", "#713f12", "#9d174d", "#e879f9"];
+
+function pointName(stageNo: number) {
+  return stageNo === 1 ? "נקודת התחלה" : "נקודת איסוף";
+}
 
 export function stageColor(stageNo: number) {
   return STAGE_COLORS[(Math.max(stageNo, 1) - 1) % STAGE_COLORS.length]!;
@@ -17,6 +23,7 @@ type StreetPick = {
   name_he: string;
   from_ratio?: number;
   to_ratio?: number;
+  reversed?: boolean;
 };
 
 export type RouteApi = {
@@ -24,6 +31,7 @@ export type RouteApi = {
   addStreetToStage: (street: StreetPick, stageNo: number) => void;
   addStreetToNewStage: (street: StreetPick) => void;
   addPoint: (lat: number, lng: number) => void;
+  addStartPoint: (lat: number, lng: number) => void;
 };
 
 function toFeatures(stages: RouteStage[]): Feature[] {
@@ -31,11 +39,10 @@ function toFeatures(stages: RouteStage[]): Feature[] {
   for (const stage of stages) {
     const color = stageColor(stage.stage_no);
     for (const street of stage.streets) {
-      if (!street.geometry) continue;
+      const geometry = directedGeometry(street.geometry, street.reversed);
+      if (!geometry) continue;
       const lines =
-        street.geometry.type === "LineString"
-          ? [street.geometry.coordinates]
-          : street.geometry.coordinates;
+        geometry.type === "LineString" ? [geometry.coordinates] : geometry.coordinates;
       for (const coordinates of lines) {
         if (coordinates.length < 2) continue;
         const line: Feature<LineString> = {
@@ -55,7 +62,12 @@ function toFeatures(stages: RouteStage[]): Feature[] {
     if (stage.point) {
       features.push({
         type: "Feature",
-        properties: { color, stage: stage.stage_no, kind: "point" },
+        properties: {
+          color,
+          stage: stage.stage_no,
+          kind: "point",
+          label: stage.stage_no === 1 ? "התחלה" : String(stage.stage_no),
+        },
         geometry: {
           type: "Point",
           coordinates: [stage.point.lng, stage.point.lat],
@@ -74,6 +86,7 @@ function payload(stages: RouteStage[]) {
         note: s.note,
         from_ratio: s.from_ratio ?? 0,
         to_ratio: s.to_ratio ?? 1,
+        reversed: Boolean(s.reversed),
       })),
       point: stage.point
         ? { lat: stage.point.lat, lng: stage.point.lng, note: stage.point.note }
@@ -94,7 +107,9 @@ export function RoutePlanner({
   mode: RouteMode;
   onMode: (mode: RouteMode) => void;
   onFeatures: (features: Feature[]) => void;
-  onStages: (stages: { stage_no: number }[]) => void;
+  onStages: (
+    stages: { stage_no: number; streets: { street_id: string; reversed: boolean }[] }[],
+  ) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
   const [stages, setStages] = useState<RouteStage[]>([]);
@@ -120,7 +135,15 @@ export function RoutePlanner({
 
   useEffect(() => {
     onFeaturesRef.current(toFeatures(stages));
-    onStagesRef.current(stages.map((stage) => ({ stage_no: stage.stage_no })));
+    onStagesRef.current(
+      stages.map((stage) => ({
+        stage_no: stage.stage_no,
+        streets: stage.streets.map((street) => ({
+          street_id: street.street_id,
+          reversed: Boolean(street.reversed),
+        })),
+      })),
+    );
   }, [stages]);
 
   useEffect(() => {
@@ -187,11 +210,13 @@ export function RoutePlanner({
 
   function placeStreet(street: StreetPick, stageNo: number, baseStages: RouteStage[]) {
     let note = "";
+    let reversed = false;
     let geometry: RouteStage["streets"][number]["geometry"] = null;
     for (const stage of baseStages) {
       const found = stage.streets.find((s) => s.street_id === street.id);
       if (!found) continue;
       note = found.note;
+      reversed = found.reversed;
       geometry = found.geometry;
     }
     return baseStages.map((stage) => {
@@ -207,6 +232,7 @@ export function RoutePlanner({
             note,
             from_ratio: street.from_ratio ?? 0,
             to_ratio: street.to_ratio ?? 1,
+            reversed: street.reversed ?? reversed,
             geometry,
           },
         ],
@@ -232,6 +258,7 @@ export function RoutePlanner({
               note: "",
               from_ratio: street.from_ratio ?? 0,
               to_ratio: street.to_ratio ?? 1,
+              reversed: Boolean(street.reversed),
               geometry: null,
             },
           ],
@@ -265,6 +292,7 @@ export function RoutePlanner({
             note: "",
             from_ratio: street.from_ratio ?? 0,
             to_ratio: street.to_ratio ?? 1,
+            reversed: Boolean(street.reversed),
             geometry: null,
           }],
           point: null,
@@ -281,6 +309,20 @@ export function RoutePlanner({
               ...stage,
               point: { lat, lng, note: stage.point?.note ?? "" },
             }
+          : stage,
+      );
+      onMode("off");
+      void persist(next);
+    },
+    addStartPoint(lat, lng) {
+      const prev = stagesRef.current;
+      const base =
+        prev.length === 0 ? [{ stage_no: 1, streets: [], point: null }] : prev;
+      activeRef.current = 1;
+      setActive(1);
+      const next = base.map((stage) =>
+        stage.stage_no === 1
+          ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
           : stage,
       );
       onMode("off");
@@ -358,6 +400,20 @@ export function RoutePlanner({
     setNoteEdit(null);
   }
 
+  function setReversed(stageNo: number, streetId: string, reversed: boolean) {
+    const next = stagesRef.current.map((stage) =>
+      stage.stage_no === stageNo
+        ? {
+            ...stage,
+            streets: stage.streets.map((street) =>
+              street.street_id === streetId ? { ...street, reversed } : street,
+            ),
+          }
+        : stage,
+    );
+    void persist(next);
+  }
+
   function clearPoint(stageNo: number) {
     const next = stagesRef.current.map((stage) =>
       stage.stage_no === stageNo ? { ...stage, point: null } : stage,
@@ -381,11 +437,11 @@ export function RoutePlanner({
       {loading ? <p className="assign-empty">טוען מסלול…</p> : null}
       {!loading && stages.length === 0 ? (
         <p className="assign-empty">
-          לחיצה ארוכה על רחוב פותחת בחירת שלב. נצבעים רק הרחובות ששויכו לשלב.
+          לחיצה ארוכה על רחוב פותחת בחירת שלב. לחיצה ארוכה או דאבל קליק מחוץ לרחוב פותחת את נקודת ההתחלה.
         </p>
       ) : (
         <p className="assign-empty">
-          לחיצה ארוכה על רחוב כדי לשייך אותו לשלב. כל שלב בצבע משלו.
+          לחיצה ארוכה על רחוב משייכת אותו לשלב. לחיצה ארוכה או דאבל קליק מחוץ לרחוב פותחת את נקודת ההתחלה.
         </p>
       )}
       {stages.map((stage) => {
@@ -434,7 +490,7 @@ export function RoutePlanner({
                   }
                 }}
               >
-                {pickingPoint ? "מסיים נקודת איסוף" : "נקודת איסוף"}
+                {pickingPoint ? `מסיים ${pointName(stage.stage_no)}` : pointName(stage.stage_no)}
               </button>
             </div>
             {stage.streets.length === 0 ? (
@@ -450,6 +506,24 @@ export function RoutePlanner({
                         : ""}
                     </span>
                     <span className="route-row-actions">
+                      <button
+                        type="button"
+                        className="route-btn"
+                        aria-pressed={!street.reversed}
+                        aria-label="כיוון הרחוב"
+                        onClick={() => setReversed(stage.stage_no, street.street_id, false)}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        className="route-btn"
+                        aria-pressed={street.reversed}
+                        aria-label="כיוון הפוך"
+                        onClick={() => setReversed(stage.stage_no, street.street_id, true)}
+                      >
+                        ▼
+                      </button>
                       <button
                         type="button"
                         className="route-btn"
@@ -479,7 +553,7 @@ export function RoutePlanner({
             {stage.point ? (
               <div className="route-street">
                 <div className="route-stage-head">
-                  <span>נקודת איסוף</span>
+                  <span>{pointName(stage.stage_no)}</span>
                   <span className="route-row-actions">
                     <button
                       type="button"
@@ -488,7 +562,7 @@ export function RoutePlanner({
                         setNoteEdit({
                           kind: "point",
                           stageNo: stage.stage_no,
-                          title: "נקודת איסוף",
+                          title: pointName(stage.stage_no),
                         })
                       }
                     >
@@ -505,7 +579,7 @@ export function RoutePlanner({
                 </div>
               </div>
             ) : (
-              <p className="assign-empty">אין נקודת איסוף בשלב זה.</p>
+              <p className="assign-empty">אין {pointName(stage.stage_no)} בשלב זה.</p>
             )}
           </article>
         );
