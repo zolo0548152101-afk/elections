@@ -102,7 +102,7 @@ export async function readClusterRoute(
 
   const stageIds = stages.map((s) => s.id);
   const streets = (await sql`
-    SELECT r.stage_id, r.street_id, r.note, r.sort_order, r.from_ratio, r.to_ratio, r.reversed,
+    SELECT r.stage_id, r.street_id, r.note, r.sort_order, r.from_ratio, r.to_ratio, r.reversed, r.done,
            s.name_he, s.geom_geojson
     FROM cluster_route_streets r
     JOIN streets s ON s.id = r.street_id
@@ -116,6 +116,7 @@ export async function readClusterRoute(
     from_ratio: number;
     to_ratio: number;
     reversed: boolean;
+    done: boolean;
     name_he: string;
     geom_geojson: string;
   }[];
@@ -139,6 +140,7 @@ export async function readClusterRoute(
       from_ratio: Math.min(fromRatio, toRatio),
       to_ratio: Math.max(fromRatio, toRatio),
       reversed: Boolean(street.reversed),
+      done: Boolean(street.done),
       geometry: spanOf(geometryFromGeoJson(street.geom_geojson), fromRatio, toRatio),
     });
   }
@@ -162,6 +164,7 @@ type IncomingStage = {
     from_ratio?: unknown;
     to_ratio?: unknown;
     reversed?: unknown;
+    done?: unknown;
   }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
 };
@@ -226,7 +229,7 @@ export async function saveClusterRoute(
       const toRatio = clampRatio(street.to_ratio, 1);
       await sql`
         INSERT INTO cluster_route_streets
-          (stage_id, street_id, note, sort_order, from_ratio, to_ratio, reversed)
+          (stage_id, street_id, note, sort_order, from_ratio, to_ratio, reversed, done)
         VALUES (
           ${stageId},
           ${streetId},
@@ -234,7 +237,8 @@ export async function saveClusterRoute(
           ${order},
           ${Math.min(fromRatio, toRatio)},
           ${Math.max(fromRatio, toRatio)},
-          ${street.reversed === true || street.reversed === 1 || street.reversed === "true"}
+          ${street.reversed === true || street.reversed === 1 || street.reversed === "true"},
+          ${street.done === true || street.done === 1 || street.done === "true"}
         )
       `;
       order += 1;

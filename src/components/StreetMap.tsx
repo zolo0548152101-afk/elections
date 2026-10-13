@@ -238,7 +238,7 @@ export function StreetMap({
   const [mapFailed, setMapFailed] = useState(false);
   const searchBoxRef = useRef<HTMLLabelElement | null>(null);
   const instComboRef = useRef<HTMLDivElement | null>(null);
-  const [routeStages, setRouteStages] = useState<{ stage_no: number }[]>([]);
+  const [routeStages, setRouteStages] = useState<{ stage_no: number; hasPoint: boolean }[]>([]);
   const routeStreetRef = useRef<
     Record<string, { reversed: boolean; from: number; to: number }>
   >({});
@@ -260,7 +260,7 @@ export function StreetMap({
         reversed: boolean;
         geometry: RouteGeometry | null;
       }
-    | { kind: "start"; lat: number; lng: number }
+    | { kind: "start"; lat: number; lng: number; mode: "choose" | "collect" }
     | { kind: "cluster"; cluster: ClusterView }
     | null
   >(null);
@@ -442,14 +442,25 @@ export function StreetMap({
             },
           },
           {
+            id: "route-casing",
+            type: "line",
+            source: "route",
+            filter: ["==", ["geometry-type"], "LineString"],
+            paint: {
+              "line-color": "#ffffff",
+              "line-width": 14,
+              "line-opacity": 0.95,
+            },
+          },
+          {
             id: "route-line",
             type: "line",
             source: "route",
             filter: ["==", ["geometry-type"], "LineString"],
             paint: {
               "line-color": ["get", "color"],
-              "line-width": 6,
-              "line-opacity": 0.95,
+              "line-width": 9,
+              "line-opacity": 1,
             },
           },
           {
@@ -458,9 +469,10 @@ export function StreetMap({
             source: "arrows",
             layout: {
               "icon-image": "route-dir",
-              "icon-size": 0.7,
+              "icon-size": 1.15,
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
+              "icon-keep-upright": false,
               "icon-rotate": ["get", "bearing"],
               "icon-rotation-alignment": "map",
               "icon-pitch-alignment": "viewport",
@@ -468,7 +480,7 @@ export function StreetMap({
             paint: {
               "icon-color": "#111111",
               "icon-halo-color": "#ffffff",
-              "icon-halo-width": 1.4,
+              "icon-halo-width": 2,
             },
           },
           {
@@ -477,7 +489,7 @@ export function StreetMap({
             source: "route",
             filter: ["==", ["geometry-type"], "Point"],
             paint: {
-              "circle-radius": 8,
+              "circle-radius": 11,
               "circle-color": ["get", "color"],
               "circle-stroke-width": 2,
               "circle-stroke-color": "#ffffff",
@@ -1076,44 +1088,61 @@ export function StreetMap({
     const map = mapRef.current;
     if (!map) return;
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let phase = 0;
     let frame = 0;
     let alive = true;
 
     const lines = () => {
-      const out: number[][][] = [];
-      for (const feature of routeFeatures) {
-        if (feature.geometry.type === "LineString") {
-          out.push(feature.geometry.coordinates as number[][]);
-        }
-      }
+      const out: { key: string; coords: number[][]; step: number }[] = [];
+      routeFeatures.forEach((feature, index) => {
+        if (feature.geometry.type !== "LineString") return;
+        const span = Math.max(0.05, Number(feature.properties?.span ?? 1));
+        out.push({
+          key: `route-${index}`,
+          coords: feature.geometry.coordinates as number[][],
+          step: (0.004 * 0.3) / span,
+        });
+      });
       if (panel?.kind === "street") {
         const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
         const sliced = directedGeometry(
           spanOf(panel.geometry, ratios.from, ratios.to),
           panel.reversed,
         );
-        if (sliced?.type === "LineString") out.push(sliced.coordinates);
+        if (sliced?.type === "LineString") {
+          const span = Math.max(0.05, ratios.to - ratios.from);
+          out.push({
+            key: `preview-${panel.id}`,
+            coords: sliced.coordinates,
+            step: (0.004 * 0.3) / span,
+          });
+        }
       }
       return out;
     };
 
+    const phases = new Map<string, number>();
     const draw = () => {
       const src = map.getSource("arrows") as GeoJSONSource | undefined;
       if (!src) return;
-      const features = lines().flatMap((coords) =>
-        arrowMarks(coords, phase).map((mark) => ({
+      const features = lines().flatMap((line) => {
+        const current = phases.get(line.key) ?? 0;
+        return arrowMarks(line.coords, current).map((mark) => ({
           type: "Feature" as const,
           properties: { bearing: mark.bearing, kind: "arrow" },
           geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
-        })),
-      );
+        }));
+      });
       src.setData({ type: "FeatureCollection", features });
     };
 
     const tick = () => {
       if (!alive) return;
-      if (!media.matches) phase = (phase + 0.004) % 1;
+      if (!media.matches) {
+        for (const line of lines()) {
+          const current = phases.get(line.key) ?? 0;
+          phases.set(line.key, (current + line.step) % 1);
+        }
+      }
       draw();
       frame = window.requestAnimationFrame(tick);
     };
@@ -1122,7 +1151,6 @@ export function StreetMap({
       if (!alive) return;
       window.cancelAnimationFrame(frame);
       if (media.matches) {
-        phase = 0;
         draw();
         return;
       }
@@ -1547,7 +1575,7 @@ export function StreetMap({
   }
 
   openStartRef.current = (lat, lng) => {
-    setPanel({ kind: "start", lat, lng });
+    setPanel({ kind: "start", lat, lng, mode: "choose" });
   };
   openStreetPanelRef.current = (id, name) => {
     setStageMenu(false);
@@ -1634,12 +1662,24 @@ export function StreetMap({
   function saveStartPoint() {
     if (panel?.kind !== "start") return;
     if (!routeApiRef.current) {
-      setStatus("בחרו אשכול כדי לשמור נקודת התחלה");
+      setStatus("בחרו אשכול כדי לשמור נקודה");
       return;
     }
     routeApiRef.current.addStartPoint(panel.lat, panel.lng);
     setPanel(null);
     setStatus("נקודת התחלה נשמרה");
+  }
+
+  function saveCollectionPoint(stageNo: number | "new") {
+    if (panel?.kind !== "start") return;
+    if (!routeApiRef.current) {
+      setStatus("בחרו אשכול כדי לשמור נקודה");
+      return;
+    }
+    if (stageNo === "new") routeApiRef.current.addCollectionPoint(panel.lat, panel.lng);
+    else routeApiRef.current.setStagePoint(stageNo, panel.lat, panel.lng);
+    setPanel(null);
+    setStatus("נקודת איסוף נשמרה");
   }
 
   function addPanelStreet(stage: number | "new") {
@@ -1683,11 +1723,55 @@ export function StreetMap({
         </>
       ) : panel.kind === "start" ? (
         <>
-          <strong>נקודת התחלה</strong>
-          <p>המקום שנלחץ על המפה, לשלב הראשון.</p>
-          <button type="button" className="route-pop-btn" onClick={saveStartPoint} disabled={!picked}>
-            שמור נקודת התחלה
-          </button>
+          {panel.mode === "collect" ? (
+            <>
+              <strong>נקודת איסוף</strong>
+              <div className="route-inline">
+                {routeStages
+                  .filter((stage) => stage.stage_no > 1 && stage.hasPoint)
+                  .map((stage, index) => (
+                    <button
+                      key={stage.stage_no}
+                      type="button"
+                      className="route-icon-btn"
+                      aria-label={`איסוף ${index + 1}`}
+                      onClick={() => saveCollectionPoint(stage.stage_no)}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                <button
+                  type="button"
+                  className="route-icon-btn"
+                  aria-label="נקודת איסוף חדשה"
+                  onClick={() => saveCollectionPoint("new")}
+                >
+                  +
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="route-inline">
+              <button type="button" className="route-icon-btn route-choice" aria-label="נקודת התחלה" onClick={saveStartPoint}>
+                התחלה
+              </button>
+              <button
+                type="button"
+                className="route-icon-btn route-choice"
+                aria-label="נקודת איסוף"
+                onClick={() => {
+                  const existing = routeStages.filter((stage) => stage.stage_no > 1 && stage.hasPoint);
+                  if (existing.length === 0) {
+                    saveCollectionPoint("new");
+                    return;
+                  }
+                  setPanel((prev) => (prev?.kind === "start" ? { ...prev, mode: "collect" } : prev));
+                }}
+              >
+                איסוף
+              </button>
+            </div>
+          )}
           {!picked ? <p>בחרו אשכול כדי לשמור.</p> : null}
         </>
       ) : (
@@ -2091,7 +2175,9 @@ export function StreetMap({
                 onMode={setRouteMode}
                 onFeatures={setRouteFeatures}
                 onStages={(stages) => {
-                  setRouteStages(stages.map((stage) => ({ stage_no: stage.stage_no })));
+                  setRouteStages(
+                    stages.map((stage) => ({ stage_no: stage.stage_no, hasPoint: stage.hasPoint })),
+                  );
                   const saved: Record<string, { reversed: boolean; from: number; to: number }> = {};
                   for (const stage of stages) {
                     for (const street of stage.streets) {
