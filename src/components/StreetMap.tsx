@@ -1217,6 +1217,18 @@ export function StreetMap({
                 <strong><bdi dir="ltr">{fmtPct(picked.likud_pct ?? 0)}</bdi></strong>
               </div>
               {canLinkCluster && (
+                <div className="cluster-link-row">
+                  <a
+                    className="export"
+                    href={`/team/clusters/${encodeURIComponent(picked.ashkol)}/sheet`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    דף PDF
+                  </a>
+                </div>
+              )}
+              {canLinkCluster && (
                 <div className="cluster-link-block">
                   <div className="cluster-link-row cluster-link-combo" ref={instComboRef}>
                     <label className="inst-combo">
