@@ -8,6 +8,22 @@ function dist(a: number[], b: number[]) {
   return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
 }
 
+function metersBetween(a: number[], b: number[]) {
+  const lat = (((a[1]! + b[1]!) / 2) * Math.PI) / 180;
+  const east = (b[0]! - a[0]!) * 111320 * Math.cos(lat);
+  const north = (b[1]! - a[1]!) * 110540;
+  return Math.hypot(east, north);
+}
+
+/** Length of a street line in meters. */
+export function lineLengthMeters(coordinates: number[][]) {
+  let total = 0;
+  for (let i = 1; i < coordinates.length; i++) {
+    total += metersBetween(coordinates[i - 1]!, coordinates[i]!);
+  }
+  return total;
+}
+
 export function clampRatio(value: unknown, fallback: number) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;

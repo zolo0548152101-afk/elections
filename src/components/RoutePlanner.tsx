@@ -71,7 +71,6 @@ function toFeatures(stages: RouteStage[]): Feature[] {
             kind: "street",
             id: street.street_id,
             name_he: street.name_he,
-            span: Math.max(0.05, (street.to_ratio ?? 1) - (street.from_ratio ?? 0)),
           },
           geometry: { type: "LineString", coordinates },
         };

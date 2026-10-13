@@ -17,7 +17,7 @@ import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
-import { arrowMarks, directedGeometry, spanOf } from "@/lib/street-span";
+import { arrowMarks, directedGeometry, lineLengthMeters, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 
@@ -1092,15 +1092,15 @@ export function StreetMap({
     let alive = true;
 
     const lines = () => {
-      const out: { key: string; coords: number[][]; step: number }[] = [];
+      const out: { key: string; coords: number[][]; meters: number }[] = [];
+      const push = (key: string, coords: number[][]) => {
+        const meters = lineLengthMeters(coords);
+        if (meters < 1) return;
+        out.push({ key, coords, meters });
+      };
       routeFeatures.forEach((feature, index) => {
         if (feature.geometry.type !== "LineString") return;
-        const span = Math.max(0.05, Number(feature.properties?.span ?? 1));
-        out.push({
-          key: `route-${index}`,
-          coords: feature.geometry.coordinates as number[][],
-          step: (0.004 * 0.3) / span,
-        });
+        push(`route-${index}`, feature.geometry.coordinates as number[][]);
       });
       if (panel?.kind === "street") {
         const ratios = panel.frozen ?? keptRatios(panel.keep, panel.anchor);
@@ -1108,19 +1108,13 @@ export function StreetMap({
           spanOf(panel.geometry, ratios.from, ratios.to),
           panel.reversed,
         );
-        if (sliced?.type === "LineString") {
-          const span = Math.max(0.05, ratios.to - ratios.from);
-          out.push({
-            key: `preview-${panel.id}`,
-            coords: sliced.coordinates,
-            step: (0.004 * 0.3) / span,
-          });
-        }
+        if (sliced?.type === "LineString") push(`preview-${panel.id}`, sliced.coordinates);
       }
       return out;
     };
 
     const phases = new Map<string, number>();
+    let last = performance.now();
     const draw = () => {
       const src = map.getSource("arrows") as GeoJSONSource | undefined;
       if (!src) return;
@@ -1135,12 +1129,14 @@ export function StreetMap({
       src.setData({ type: "FeatureCollection", features });
     };
 
-    const tick = () => {
+    const tick = (now: number) => {
       if (!alive) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
       if (!media.matches) {
         for (const line of lines()) {
           const current = phases.get(line.key) ?? 0;
-          phases.set(line.key, (current + line.step) % 1);
+          phases.set(line.key, (current + (4 * dt) / line.meters) % 1);
         }
       }
       draw();
@@ -1150,6 +1146,7 @@ export function StreetMap({
     const start = () => {
       if (!alive) return;
       window.cancelAnimationFrame(frame);
+      last = performance.now();
       if (media.matches) {
         draw();
         return;
