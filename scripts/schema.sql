@@ -194,8 +194,15 @@ CREATE TABLE IF NOT EXISTS cluster_route_streets (
   stage_id integer NOT NULL REFERENCES cluster_route_stages(id) ON DELETE CASCADE,
   street_id text NOT NULL REFERENCES streets(id) ON DELETE CASCADE,
   note text NOT NULL DEFAULT '',
-  sort_order integer NOT NULL DEFAULT 0
+  sort_order integer NOT NULL DEFAULT 0,
+  from_ratio double precision NOT NULL DEFAULT 0,
+  to_ratio double precision NOT NULL DEFAULT 1
 );
+
+ALTER TABLE cluster_route_streets
+  ADD COLUMN IF NOT EXISTS from_ratio double precision NOT NULL DEFAULT 0;
+ALTER TABLE cluster_route_streets
+  ADD COLUMN IF NOT EXISTS to_ratio double precision NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS cluster_route_points (
   stage_id integer PRIMARY KEY REFERENCES cluster_route_stages(id) ON DELETE CASCADE,

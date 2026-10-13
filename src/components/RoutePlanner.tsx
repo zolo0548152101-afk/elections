@@ -12,7 +12,12 @@ export function stageColor(stageNo: number) {
 
 export type RouteMode = "off" | "street" | "point";
 
-type StreetPick = { id: string; name_he: string };
+type StreetPick = {
+  id: string;
+  name_he: string;
+  from_ratio?: number;
+  to_ratio?: number;
+};
 
 export type RouteApi = {
   addStreet: (street: StreetPick) => void;
@@ -35,7 +40,13 @@ function toFeatures(stages: RouteStage[]): Feature[] {
         if (coordinates.length < 2) continue;
         const line: Feature<LineString> = {
           type: "Feature",
-          properties: { color, stage: stage.stage_no, kind: "street" },
+          properties: {
+            color,
+            stage: stage.stage_no,
+            kind: "street",
+            id: street.street_id,
+            name_he: street.name_he,
+          },
           geometry: { type: "LineString", coordinates },
         };
         features.push(line);
@@ -58,7 +69,12 @@ function toFeatures(stages: RouteStage[]): Feature[] {
 function payload(stages: RouteStage[]) {
   return {
     stages: stages.map((stage) => ({
-      streets: stage.streets.map((s) => ({ street_id: s.street_id, note: s.note })),
+      streets: stage.streets.map((s) => ({
+        street_id: s.street_id,
+        note: s.note,
+        from_ratio: s.from_ratio ?? 0,
+        to_ratio: s.to_ratio ?? 1,
+      })),
       point: stage.point
         ? { lat: stage.point.lat, lng: stage.point.lng, note: stage.point.note }
         : null,
@@ -85,6 +101,11 @@ export function RoutePlanner({
   const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [noteEdit, setNoteEdit] = useState<
+    | { kind: "street"; stageNo: number; streetId: string; title: string }
+    | { kind: "point"; stageNo: number; title: string }
+    | null
+  >(null);
   const stagesRef = useRef(stages);
   const activeRef = useRef(active);
   const ashkolRef = useRef(ashkol);
@@ -180,7 +201,14 @@ export function RoutePlanner({
         ...stage,
         streets: [
           ...streets,
-          { street_id: street.id, name_he: street.name_he, note, geometry },
+          {
+            street_id: street.id,
+            name_he: street.name_he,
+            note,
+            from_ratio: street.from_ratio ?? 0,
+            to_ratio: street.to_ratio ?? 1,
+            geometry,
+          },
         ],
       };
     });
@@ -202,6 +230,8 @@ export function RoutePlanner({
               street_id: street.id,
               name_he: street.name_he,
               note: "",
+              from_ratio: street.from_ratio ?? 0,
+              to_ratio: street.to_ratio ?? 1,
               geometry: null,
             },
           ],
@@ -213,9 +243,6 @@ export function RoutePlanner({
     addStreetToStage(street, stageNo) {
       const prev = stagesRef.current;
       if (!prev.some((stage) => stage.stage_no === stageNo)) return;
-      if (prev.some((stage) => stage.stage_no === stageNo && stage.streets.some((s) => s.street_id === street.id))) {
-        return;
-      }
       activeRef.current = stageNo;
       setActive(stageNo);
       void persist(placeStreet(street, stageNo, prev));
@@ -232,7 +259,14 @@ export function RoutePlanner({
         ...stripped,
         {
           stage_no: stageNo,
-          streets: [{ street_id: street.id, name_he: street.name_he, note: "", geometry: null }],
+          streets: [{
+            street_id: street.id,
+            name_he: street.name_he,
+            note: "",
+            from_ratio: street.from_ratio ?? 0,
+            to_ratio: street.to_ratio ?? 1,
+            geometry: null,
+          }],
           point: null,
         },
       ]);
@@ -308,6 +342,20 @@ export function RoutePlanner({
     );
     stagesRef.current = next;
     setStages(next);
+  }
+
+  function noteValue(
+    edit: NonNullable<typeof noteEdit>,
+  ) {
+    const stage = stagesRef.current.find((item) => item.stage_no === edit.stageNo);
+    if (!stage) return "";
+    if (edit.kind === "point") return stage.point?.note ?? "";
+    return stage.streets.find((street) => street.street_id === edit.streetId)?.note ?? "";
+  }
+
+  function closeNote() {
+    void persist(stagesRef.current);
+    setNoteEdit(null);
   }
 
   function clearPoint(stageNo: number) {
@@ -395,24 +443,36 @@ export function RoutePlanner({
               stage.streets.map((street) => (
                 <div className="route-street" key={street.street_id}>
                   <div className="route-stage-head">
-                    <span>{street.name_he}</span>
-                    <button
-                      type="button"
-                      className="route-btn"
-                      onClick={() => removeStreet(stage.stage_no, street.street_id)}
-                    >
-                      הסר
-                    </button>
+                    <span>
+                      {street.name_he}
+                      {(street.from_ratio ?? 0) > 0.01 || (street.to_ratio ?? 1) < 0.99
+                        ? ` · ${Math.round((street.from_ratio ?? 0) * 100)}%–${Math.round((street.to_ratio ?? 1) * 100)}%`
+                        : ""}
+                    </span>
+                    <span className="route-row-actions">
+                      <button
+                        type="button"
+                        className="route-btn"
+                        onClick={() =>
+                          setNoteEdit({
+                            kind: "street",
+                            stageNo: stage.stage_no,
+                            streetId: street.street_id,
+                            title: street.name_he,
+                          })
+                        }
+                      >
+                        {street.note.trim() ? "הערות ·" : "הערות"}
+                      </button>
+                      <button
+                        type="button"
+                        className="route-btn"
+                        onClick={() => removeStreet(stage.stage_no, street.street_id)}
+                      >
+                        הסר
+                      </button>
+                    </span>
                   </div>
-                  <textarea
-                    value={street.note}
-                    maxLength={500}
-                    placeholder="מלל על הרחוב"
-                    onChange={(e) =>
-                      updateStreetNote(stage.stage_no, street.street_id, e.target.value)
-                    }
-                    onBlur={() => void persist(stagesRef.current)}
-                  />
                 </div>
               ))
             )}
@@ -420,21 +480,29 @@ export function RoutePlanner({
               <div className="route-street">
                 <div className="route-stage-head">
                   <span>נקודת איסוף</span>
-                  <button
-                    type="button"
-                    className="route-btn"
-                    onClick={() => clearPoint(stage.stage_no)}
-                  >
-                    הסר
-                  </button>
+                  <span className="route-row-actions">
+                    <button
+                      type="button"
+                      className="route-btn"
+                      onClick={() =>
+                        setNoteEdit({
+                          kind: "point",
+                          stageNo: stage.stage_no,
+                          title: "נקודת איסוף",
+                        })
+                      }
+                    >
+                      {stage.point.note.trim() ? "הערות ·" : "הערות"}
+                    </button>
+                    <button
+                      type="button"
+                      className="route-btn"
+                      onClick={() => clearPoint(stage.stage_no)}
+                    >
+                      הסר
+                    </button>
+                  </span>
                 </div>
-                <textarea
-                  value={stage.point.note}
-                  maxLength={500}
-                  placeholder="מלל על נקודת האיסוף"
-                  onChange={(e) => updatePointNote(stage.stage_no, e.target.value)}
-                  onBlur={() => void persist(stagesRef.current)}
-                />
               </div>
             ) : (
               <p className="assign-empty">אין נקודת איסוף בשלב זה.</p>
@@ -442,6 +510,36 @@ export function RoutePlanner({
           </article>
         );
       })}
+      {noteEdit ? (
+        <div className="note-float-back" onClick={closeNote}>
+          <div
+            className="note-float"
+            role="dialog"
+            aria-label={noteEdit.title}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="route-stage-head">
+              <strong>הערות · {noteEdit.title}</strong>
+              <button type="button" className="route-btn" onClick={closeNote}>
+                סגור
+              </button>
+            </div>
+            <textarea
+              autoFocus
+              maxLength={500}
+              placeholder="כתבו הערה"
+              value={noteValue(noteEdit)}
+              onChange={(event) => {
+                if (noteEdit.kind === "street") {
+                  updateStreetNote(noteEdit.stageNo, noteEdit.streetId, event.target.value);
+                } else {
+                  updatePointNote(noteEdit.stageNo, event.target.value);
+                }
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

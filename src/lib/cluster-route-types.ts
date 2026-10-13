@@ -6,6 +6,8 @@ export type RouteStreet = {
   street_id: string;
   name_he: string;
   note: string;
+  from_ratio: number;
+  to_ratio: number;
   geometry: RouteGeometry | null;
 };
 

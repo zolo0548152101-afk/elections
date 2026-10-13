@@ -1568,6 +1568,56 @@ tbody tr.cluster-row-selected:hover {
   flex: 0 0 auto;
 }
 
+.route-span {
+  display: grid;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.route-span input[type="range"] {
+  width: 100%;
+  min-height: 44px;
+}
+
+.route-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.note-float-back {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 28, 46, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.note-float {
+  width: min(420px, 100%);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.note-float textarea {
+  width: 100%;
+  min-height: 140px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+}
+
 .route-btn[aria-pressed="true"] {
   background: var(--accent-2);
   border-color: var(--accent-2);
