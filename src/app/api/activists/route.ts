@@ -25,8 +25,16 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  const scope =
+    user.role === "coordinator"
+      ? "coordinator"
+      : user.role === "area_manager"
+        ? "manager"
+        : "admin";
+
+  const hasInstitutions = institutionIds === null || institutionIds.length > 0;
   if (institutionIds && institutionIds.length === 0) {
-    return NextResponse.json({ activists: [], institutions: [] });
+    return NextResponse.json({ activists: [], institutions: [], scope, hasInstitutions: false });
   }
 
   const activists = (institutionIds
@@ -58,10 +66,13 @@ export async function GET() {
 
   const institutions = (institutionIds
     ? await sql`
-        SELECT id, name, settlement_name
-        FROM institutions
-        WHERE id = ANY(${institutionIds})
-        ORDER BY name
+        SELECT i.id, i.name, i.settlement_name
+        FROM institutions i
+        WHERE i.id = ANY(${institutionIds})
+          AND EXISTS (
+            SELECT 1 FROM activists a WHERE a.institution_id = i.id
+          )
+        ORDER BY i.name
       `
     : await sql`
         SELECT DISTINCT i.id, i.name, i.settlement_name
@@ -70,5 +81,5 @@ export async function GET() {
         ORDER BY i.name
       `) as { id: number; name: string; settlement_name: string | null }[];
 
-  return NextResponse.json({ activists, institutions });
+  return NextResponse.json({ activists, institutions, scope, hasInstitutions });
 }

@@ -32,6 +32,8 @@ export default function ActivistsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [scope, setScope] = useState<"coordinator" | "manager" | "admin">("coordinator");
+  const [hasInstitutions, setHasInstitutions] = useState(true);
 
   useEffect(() => {
     fetch("/api/activists")
@@ -40,6 +42,8 @@ export default function ActivistsPage() {
         if (!res.ok) throw new Error(data.error || "שגיאה");
         setActivists(data.activists ?? []);
         setInstitutions(data.institutions ?? []);
+        setScope(data.scope ?? "coordinator");
+        setHasInstitutions(data.hasInstitutions !== false);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "שגיאה"))
       .finally(() => setLoading(false));
@@ -69,18 +73,24 @@ export default function ActivistsPage() {
           <div>
             <p className="eyebrow">רישום פעילים</p>
             <h1>פעילים</h1>
-            <p className="lede">פעילים שנרשמו למוסדות המקושרים אליכם.</p>
+            <p className="lede">
+              {scope === "admin"
+                ? "כל הפעילים שנרשמו. הסינון מציג רק מוסדות שכבר נרשמו אליהם."
+                : scope === "manager"
+                  ? "פעילים שנרשמו למוסדות של הרכזים שלכם."
+                  : "פעילים שנרשמו למוסדות המקושרים אליכם."}
+            </p>
           </div>
         </header>
         {loading ? <p className="lede">טוען…</p> : null}
         {error ? <p className="form-msg form-msg-err">{error}</p> : null}
-        {!loading && !error && institutions.length === 0 ? (
+        {!loading && !error && !hasInstitutions ? (
           <p className="lede">לא שויך מוסד למשתמש זה — פנו למנהל.</p>
         ) : null}
-        {!loading && !error && institutions.length > 0 ? (
+        {!loading && !error && hasInstitutions ? (
           <>
             <div className="activists-bar">
-              {institutions.length > 1 ? (
+              {(scope === "admin" && institutions.length > 0) || institutions.length > 1 ? (
                 <label>
                   מוסד
                   <select
