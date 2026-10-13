@@ -98,6 +98,95 @@ function bearingOf(a: number[], b: number[]) {
   return (deg + 360) % 360;
 }
 
+/** Meters under 1 km, then kilometers, for the on-map length pill. */
+export function formatLengthPill(meters: number) {
+  if (!Number.isFinite(meters) || meters <= 0) return "0 מ׳";
+  if (meters < 1000) return `${Math.round(meters).toLocaleString("he-IL")} מ׳`;
+  return `${(meters / 1000).toFixed(2)} ק״מ`;
+}
+
+/** Exact meters for the route menu. */
+export function formatMeters(meters: number) {
+  const n = Number.isFinite(meters) && meters > 0 ? Math.round(meters) : 0;
+  return `${n.toLocaleString("he-IL")} מ׳`;
+}
+
+/**
+ * Fixed arrows along a stretched line, about every `spacingMeters`.
+ * Bearing follows the line order and does not wrap back to the start.
+ */
+export function arrowMarksEvery(
+  coordinates: number[][],
+  spacingMeters = 40,
+): ArrowMark[] {
+  if (coordinates.length < 2) return [];
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < coordinates.length; i++) {
+    const length = metersBetween(coordinates[i - 1]!, coordinates[i]!);
+    lengths.push(length);
+    total += length;
+  }
+  if (total < 8) return [];
+  const spacing = spacingMeters > 1 ? spacingMeters : 40;
+  const targets: number[] = [];
+  if (total < spacing) targets.push(total / 2);
+  else {
+    for (let walked = spacing; walked < total - 4; walked += spacing) targets.push(walked);
+  }
+  if (targets.length === 0) targets.push(total / 2);
+  const marks: ArrowMark[] = [];
+  for (const distAlong of targets) {
+    let walked = 0;
+    for (let i = 1; i < coordinates.length; i++) {
+      const seg = lengths[i - 1]!;
+      const next = walked + seg;
+      if (next + 1e-6 < distAlong && i < coordinates.length - 1) {
+        walked = next;
+        continue;
+      }
+      const t = seg === 0 ? 0 : Math.min(1, Math.max(0, (distAlong - walked) / seg));
+      const a = coordinates[i - 1]!;
+      const b = coordinates[i]!;
+      const point = lerp(a, b, t);
+      marks.push({ lng: point[0]!, lat: point[1]!, bearing: bearingOf(a, b) });
+      break;
+    }
+  }
+  return marks;
+}
+
+/** Where a dragged leg should gain a handle. `index` is the vertex before the insert. */
+export function closestInsert(coordinates: number[][], lng: number, lat: number) {
+  if (coordinates.length < 2) return null;
+  let best = Infinity;
+  let bestIndex = 0;
+  let bestT = 0;
+  let bestLng = coordinates[0]![0]!;
+  let bestLat = coordinates[0]![1]!;
+  for (let i = 1; i < coordinates.length; i++) {
+    const a = coordinates[i - 1]!;
+    const b = coordinates[i]!;
+    const midLat = ((a[1]! + b[1]!) / 2) * (Math.PI / 180);
+    const scale = 111320 * Math.cos(midLat);
+    const abE = (b[0]! - a[0]!) * scale;
+    const abN = (b[1]! - a[1]!) * 110540;
+    const apE = (lng - a[0]!) * scale;
+    const apN = (lat - a[1]!) * 110540;
+    const len2 = abE * abE + abN * abN;
+    const t = len2 === 0 ? 0 : Math.min(1, Math.max(0, (apE * abE + apN * abN) / len2));
+    const dist = Math.hypot(apE - abE * t, apN - abN * t);
+    if (dist < best) {
+      best = dist;
+      bestIndex = i - 1;
+      bestT = t;
+      bestLng = a[0]! + (b[0]! - a[0]!) * t;
+      bestLat = a[1]! + (b[1]! - a[1]!) * t;
+    }
+  }
+  return { index: bestIndex, t: bestT, lng: bestLng, lat: bestLat };
+}
+
 /**
  * A few arrow positions along a directed line.
  * `phase` is 0–1 and slides them forward. Bearing 0 is north.

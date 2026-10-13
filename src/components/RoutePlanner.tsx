@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
-import type { RouteStage } from "@/lib/cluster-route-types";
-import { directedGeometry } from "@/lib/street-span";
+import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
+import { directedGeometry, formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
 
 /** Stage colors stay off blue, green, gold, cyan, orange, red, and near-black. */
 const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
@@ -32,7 +32,22 @@ function DirMark({ flip = false }: { flip?: boolean }) {
   );
 }
 
-export type RouteMode = "off" | "street" | "point";
+export type RouteMode = "off" | "street" | "point" | "stretch";
+
+const VERTEX_MAX = 60;
+const DRAW_MAX = 30;
+
+function blankStage(stageNo: number, point: RouteStage["point"] = null): RouteStage {
+  return { stage_no: stageNo, streets: [], draws: [], point };
+}
+
+function asDraws(draws: RouteDraw[] | undefined) {
+  return Array.isArray(draws) ? draws : [];
+}
+
+function validPoint(lng: number, lat: number) {
+  return Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90;
+}
 
 type StreetPick = {
   id: string;
@@ -50,6 +65,15 @@ export type RouteApi = {
   addStartPoint: (lat: number, lng: number) => void;
   setStagePoint: (stageNo: number, lat: number, lng: number) => void;
   addCollectionPoint: (lat: number, lng: number) => void;
+  stretchPoint: (lng: number, lat: number) => void;
+  moveStretchVertex: (stageNo: number, drawIndex: number, vertex: number, lng: number, lat: number, save: boolean) => void;
+  insertStretchVertex: (stageNo: number, drawIndex: number, after: number, lng: number, lat: number) => number;
+  commitStretch: () => void;
+  newStretchSegment: () => void;
+  splitStretch: (stageNo: number, drawIndex: number, vertex: number) => void;
+  flipStageStretches: (stageNo: number) => void;
+  setStretchDone: (stageNo: number, drawIndex: number, done: boolean) => void;
+  removeStretch: (stageNo: number, drawIndex: number) => void;
 };
 
 function toFeatures(stages: RouteStage[]): Feature[] {
@@ -76,6 +100,49 @@ function toFeatures(stages: RouteStage[]): Feature[] {
         };
         features.push(line);
       }
+    }
+    for (const [index, draw] of asDraws(stage.draws).entries()) {
+      const coordinates = draw.coordinates ?? [];
+      const color = draw.done ? "#16a34a" : stageColor(stage.stage_no);
+      if (coordinates.length >= 2) {
+        features.push({
+          type: "Feature",
+          properties: {
+            color,
+            stage: stage.stage_no,
+            kind: "draw",
+            draw: index,
+            done: draw.done ? 1 : 0,
+            id: "",
+            name_he: "",
+          },
+          geometry: { type: "LineString", coordinates },
+        });
+        const last = coordinates[coordinates.length - 1]!;
+        features.push({
+          type: "Feature",
+          properties: {
+            kind: "meter",
+            label: formatLengthPill(lineLengthMeters(coordinates)),
+            stage: stage.stage_no,
+          },
+          geometry: { type: "Point", coordinates: last },
+        });
+      }
+      coordinates.forEach((coord, vertex) => {
+        features.push({
+          type: "Feature",
+          properties: {
+            kind: "handle",
+            color,
+            stage: stage.stage_no,
+            draw: index,
+            vertex,
+            count: coordinates.length,
+          },
+          geometry: { type: "Point", coordinates: coord },
+        });
+      });
     }
     if (stage.point) {
       const collectNo = stages.filter((item) => item.stage_no > 1 && item.stage_no <= stage.stage_no && item.point).length;
@@ -109,6 +176,10 @@ function payload(stages: RouteStage[]) {
         reversed: Boolean(s.reversed),
         done: Boolean(s.done),
       })),
+      draws: asDraws(stage.draws).map((draw) => ({
+        coordinates: draw.coordinates,
+        done: Boolean(draw.done),
+      })),
       point: stage.point
         ? { lat: stage.point.lat, lng: stage.point.lng, note: stage.point.note }
         : null,
@@ -118,11 +189,12 @@ function payload(stages: RouteStage[]) {
 
 export function RoutePlanner({
   ashkol,
-  mode: _mode,
+  mode,
   onMode,
   onFeatures,
   onStages,
   onActive,
+  onDrawDone,
   bindRef,
 }: {
   ashkol: string;
@@ -137,6 +209,7 @@ export function RoutePlanner({
     }[],
   ) => void;
   onActive: (stageNo: number | null) => void;
+  onDrawDone?: (draw: { stageNo: number; index: number; coordinates: number[][]; done: boolean }) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
   const [stages, setStages] = useState<RouteStage[]>([]);
@@ -153,6 +226,10 @@ export function RoutePlanner({
   >(null);
   const stagesRef = useRef(stages);
   const activeRef = useRef(active);
+  const chainRef = useRef<{ stageNo: number; index: number } | null>(null);
+  const saveTail = useRef<Promise<void>>(Promise.resolve());
+  const onDrawDoneRef = useRef(onDrawDone);
+  onDrawDoneRef.current = onDrawDone;
   const ashkolRef = useRef(ashkol);
   const ticket = useRef(0);
   const onFeaturesRef = useRef(onFeatures);
@@ -200,9 +277,11 @@ export function RoutePlanner({
       })
       .then((next) => {
         if (cancelled || my !== ticket.current) return;
-        stagesRef.current = next;
-        setStages(next);
-        setActive(next[0]?.stage_no ?? null);
+        const normalized = next.map((stage) => ({ ...stage, draws: asDraws(stage.draws) }));
+        chainRef.current = null;
+        stagesRef.current = normalized;
+        setStages(normalized);
+        setActive(normalized[0]?.stage_no ?? null);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "שגיאה");
@@ -216,32 +295,48 @@ export function RoutePlanner({
     };
   }, [ashkol]);
 
-  async function persist(next: RouteStage[]) {
+  function preview(next: RouteStage[]) {
+    ticket.current += 1;
+    stagesRef.current = next;
+    setStages(next);
+  }
+
+  function persist(next: RouteStage[]) {
     const savedFor = ashkol;
     const my = ++ticket.current;
     stagesRef.current = next;
     setStages(next);
-    const res = await fetch(`/api/clusters/${encodeURIComponent(savedFor)}/route`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload(next)),
+    const job = saveTail.current.then(async () => {
+      if (my !== ticket.current || savedFor !== ashkolRef.current) return;
+      const res = await fetch(`/api/clusters/${encodeURIComponent(savedFor)}/route`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload(stagesRef.current)),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (my !== ticket.current || savedFor !== ashkolRef.current) return;
+      if (!res.ok) {
+        setError(data.error || "שגיאה בשמירת המסלול");
+        return;
+      }
+      setError(null);
+      const saved = ((data.stages ?? []) as RouteStage[]).map((stage) => ({
+        ...stage,
+        draws: asDraws(stage.draws),
+      }));
+      stagesRef.current = saved;
+      setStages(saved);
     });
-    const data = await res.json().catch(() => ({}));
-    if (my !== ticket.current || savedFor !== ashkolRef.current) return;
-    if (!res.ok) {
-      setError(data.error || "שגיאה בשמירת המסלול");
-      return;
-    }
-    setError(null);
-    const saved = (data.stages ?? []) as RouteStage[];
-    stagesRef.current = saved;
-    setStages(saved);
+    saveTail.current = job.then(
+      () => undefined,
+      () => undefined,
+    );
   }
 
   function withStage(stageNo: number | null) {
     const prev = stagesRef.current;
     if (prev.length === 0) {
-      return { stages: [{ stage_no: 1, streets: [], point: null }], stageNo: 1 };
+      return { stages: [blankStage(1)], stageNo: 1 };
     }
     const no = stageNo && prev.some((s) => s.stage_no === stageNo)
       ? stageNo
@@ -342,6 +437,7 @@ export function RoutePlanner({
             done: false,
             geometry: null,
           }],
+          draws: [],
           point: null,
         },
       ]);
@@ -364,7 +460,7 @@ export function RoutePlanner({
     addStartPoint(lat, lng) {
       const prev = stagesRef.current;
       const base =
-        prev.length === 0 ? [{ stage_no: 1, streets: [], point: null }] : prev;
+        prev.length === 0 ? [blankStage(1)] : prev;
       activeRef.current = 1;
       setActive(1);
       const next = base.map((stage) =>
@@ -399,17 +495,146 @@ export function RoutePlanner({
         void persist(next);
         return;
       }
-      const base = prev.length === 0 ? [{ stage_no: 1, streets: [], point: null }] : prev;
+      const base = prev.length === 0 ? [blankStage(1)] : prev;
       const nextNo = base.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
       const stageNo = nextNo < 2 ? 2 : nextNo;
       const withFirst =
         base.some((stage) => stage.stage_no === 1)
           ? base
-          : [{ stage_no: 1, streets: [], point: null }, ...base];
+          : [blankStage(1), ...base];
       void persist([
         ...withFirst,
-        { stage_no: stageNo, streets: [], point: { lat, lng, note: "" } },
+        { ...blankStage(stageNo), point: { lat, lng, note: "" } },
       ]);
+    },
+    stretchPoint(lng, lat) {
+      if (!validPoint(lng, lat)) return;
+      const { stages: base, stageNo } = withStage(activeRef.current);
+      activeRef.current = stageNo;
+      setActive(stageNo);
+      const chain = chainRef.current;
+      const next = base.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        const draws = asDraws(stage.draws);
+        if (chain && chain.stageNo === stageNo && draws[chain.index]) {
+          const coordinates = [...draws[chain.index]!.coordinates, [lng, lat]].slice(0, VERTEX_MAX);
+          return {
+            ...stage,
+            draws: draws.map((draw, index) => (index === chain.index ? { ...draw, coordinates } : draw)),
+          };
+        }
+        if (draws.length >= DRAW_MAX) return stage;
+        const added = [...draws, { coordinates: [[lng, lat]], done: false }];
+        chainRef.current = { stageNo, index: added.length - 1 };
+        return { ...stage, draws: added };
+      });
+      void persist(next);
+    },
+    moveStretchVertex(stageNo, drawIndex, vertex, lng, lat, save) {
+      if (!validPoint(lng, lat)) return;
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        return {
+          ...stage,
+          draws: asDraws(stage.draws).map((draw, index) => {
+            if (index !== drawIndex) return draw;
+            if (vertex < 0 || vertex >= draw.coordinates.length) return draw;
+            const coordinates = draw.coordinates.map((point, pointIndex) =>
+              pointIndex === vertex ? [lng, lat] : point,
+            );
+            return { ...draw, coordinates };
+          }),
+        };
+      });
+      if (save) void persist(next);
+      else preview(next);
+    },
+    insertStretchVertex(stageNo, drawIndex, after, lng, lat) {
+      if (!validPoint(lng, lat)) return after;
+      let inserted = after;
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        return {
+          ...stage,
+          draws: asDraws(stage.draws).map((draw, index) => {
+            if (index !== drawIndex) return draw;
+            if (draw.coordinates.length >= VERTEX_MAX) return draw;
+            const coordinates = draw.coordinates.slice();
+            inserted = Math.min(coordinates.length, Math.max(0, after + 1));
+            coordinates.splice(inserted, 0, [lng, lat]);
+            return { ...draw, coordinates };
+          }),
+        };
+      });
+      preview(next);
+      return inserted;
+    },
+    commitStretch() {
+      void persist(stagesRef.current);
+    },
+    newStretchSegment() {
+      chainRef.current = null;
+    },
+    splitStretch(stageNo, drawIndex, vertex) {
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        const draws = asDraws(stage.draws);
+        const draw = draws[drawIndex];
+        if (!draw || vertex <= 0 || vertex >= draw.coordinates.length - 1) return stage;
+        if (draws.length >= DRAW_MAX) return stage;
+        const left = { ...draw, coordinates: draw.coordinates.slice(0, vertex + 1) };
+        const right = { ...draw, coordinates: draw.coordinates.slice(vertex), done: false };
+        const replaced = draws.slice();
+        replaced.splice(drawIndex, 1, left, right);
+        return { ...stage, draws: replaced };
+      });
+      chainRef.current = null;
+      void persist(next);
+    },
+    flipStageStretches(stageNo) {
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        return {
+          ...stage,
+          draws: asDraws(stage.draws).map((draw) => ({
+            ...draw,
+            coordinates: [...draw.coordinates].reverse(),
+          })),
+        };
+      });
+      chainRef.current = null;
+      void persist(next);
+    },
+    setStretchDone(stageNo, drawIndex, done) {
+      let changed: RouteDraw | null = null;
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        return {
+          ...stage,
+          draws: asDraws(stage.draws).map((draw, index) => {
+            if (index !== drawIndex) return draw;
+            changed = { ...draw, done };
+            return changed;
+          }),
+        };
+      });
+      void persist(next);
+      if (changed) {
+        onDrawDoneRef.current?.({
+          stageNo,
+          index: drawIndex,
+          coordinates: (changed as RouteDraw).coordinates,
+          done,
+        });
+      }
+    },
+    removeStretch(stageNo, drawIndex) {
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== Number(stageNo)) return stage;
+        return { ...stage, draws: asDraws(stage.draws).filter((_, index) => index !== drawIndex) };
+      });
+      if (chainRef.current?.stageNo === stageNo) chainRef.current = null;
+      void persist(next);
     },
   };
 
@@ -421,7 +646,7 @@ export function RoutePlanner({
     const nextNo = nextStageNo();
     const next = [
       ...stagesRef.current,
-      { stage_no: nextNo, streets: [], point: null },
+      blankStage(nextNo),
     ];
     setActive(nextNo);
     onMode("off");
@@ -547,6 +772,36 @@ export function RoutePlanner({
           </button>
         </span>
       </div>
+      <div className="route-inline route-stretch-bar">
+        <button
+          type="button"
+          className="route-icon-btn route-choice"
+          aria-pressed={mode === "stretch"}
+          aria-label="מתיחה"
+          onClick={() => onMode(mode === "stretch" ? "off" : "stretch")}
+        >
+          מתיחה
+        </button>
+        <button
+          type="button"
+          className="route-icon-btn route-choice"
+          aria-label="מקטע חדש"
+          onClick={() => bindRef.current?.newStretchSegment()}
+        >
+          מקטע חדש
+        </button>
+        <button
+          type="button"
+          className="route-icon-btn route-choice"
+          aria-label="הפוך כיוון"
+          disabled={active == null}
+          onClick={() => {
+            if (active != null) bindRef.current?.flipStageStretches(active);
+          }}
+        >
+          הפוך כיוון
+        </button>
+      </div>
       {filterOpen ? (
         <div className="route-filter-menu" role="menu">
           <button
@@ -597,6 +852,7 @@ export function RoutePlanner({
             <div
               className="route-stage-summary"
               onClick={() => {
+                if (active !== stage.stage_no) chainRef.current = null;
                 setActive(stage.stage_no);
                 activeRef.current = stage.stage_no;
               }}
@@ -626,6 +882,20 @@ export function RoutePlanner({
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>
               </button>
               <span className="route-stage-names">
+                {asDraws(stage.draws).map((draw, index) => (
+                  <button
+                    key={`draw-${index}`}
+                    type="button"
+                    className={draw.done ? "route-name-done" : undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      bindRef.current?.setStretchDone(stage.stage_no, index, !draw.done);
+                    }}
+                  >
+                    מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
+                    {draw.done ? " · בוצע" : ""}
+                  </button>
+                ))}
                 {stage.streets.map((street) => (
                   <button
                     key={street.street_id}
@@ -683,6 +953,25 @@ export function RoutePlanner({
                       type="button"
                       className="route-btn"
                       onClick={() => removeStreet(stage.stage_no, street.street_id)}
+                    >
+                      הסר
+                    </button>
+                  </div>
+                ))}
+                {asDraws(stage.draws).length > 0 ? (
+                  <p className="route-meters">
+                    סה״כ {formatMeters(asDraws(stage.draws).reduce((sum, draw) => sum + lineLengthMeters(draw.coordinates), 0))}
+                  </p>
+                ) : null}
+                {asDraws(stage.draws).map((draw, index) => (
+                  <div className="route-inline" key={`draw-row-${index}`}>
+                    <span className="route-more-name">
+                      מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
+                    </span>
+                    <button
+                      type="button"
+                      className="route-btn"
+                      onClick={() => bindRef.current?.removeStretch(stage.stage_no, index)}
                     >
                       הסר
                     </button>

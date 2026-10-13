@@ -1734,6 +1734,21 @@ tbody tr.cluster-row-selected:hover {
   font-size: 0.78rem;
 }
 
+.route-stretch-bar {
+  flex-wrap: wrap;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.route-meters {
+  margin: 0.15rem 0;
+  font-weight: 700;
+}
+
+.route-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .route-stage-head {
   display: flex;
   justify-content: space-between;

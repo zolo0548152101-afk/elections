@@ -9,6 +9,8 @@ type Sql = ReturnType<typeof getSql>;
 const NOTE_MAX = 500;
 const STAGE_MAX = 20;
 const STREET_MAX = 40;
+const DRAW_MAX = 30;
+const VERTEX_MAX = 60;
 
 function clipNote(value: unknown): string {
   return String(value ?? "").trim().slice(0, NOTE_MAX);
@@ -81,6 +83,27 @@ export function geometryFromGeoJson(raw: unknown): RouteGeometry | null {
   return null;
 }
 
+function drawCoordinates(value: unknown): number[][] {
+  if (!Array.isArray(value)) return [];
+  const points: number[][] = [];
+  for (const point of value) {
+    if (!Array.isArray(point) || point.length < 2) continue;
+    const lng = Number(point[0]);
+    const lat = Number(point[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    if (Math.abs(lng) > 180 || Math.abs(lat) > 90) continue;
+    const prev = points[points.length - 1];
+    if (prev && prev[0] === lng && prev[1] === lat) continue;
+    points.push([lng, lat]);
+    if (points.length >= VERTEX_MAX) break;
+  }
+  return points;
+}
+
+function truthy(value: unknown) {
+  return value === true || value === 1 || value === "true";
+}
+
 export async function readClusterRoute(
   sql: Sql,
   user: SessionUser,
@@ -125,10 +148,16 @@ export async function readClusterRoute(
     FROM cluster_route_points
     WHERE stage_id = ANY(${stageIds})
   `) as { stage_id: number; lat: number; lng: number; note: string }[];
+  const draws = (await sql`
+    SELECT stage_id, sort_order, path_geojson, done
+    FROM cluster_route_draws
+    WHERE stage_id = ANY(${stageIds})
+    ORDER BY sort_order, id
+  `) as { stage_id: number; path_geojson: string; done: boolean }[];
 
   const byStage = new Map<number, RouteStage>();
   for (const stage of stages) {
-    byStage.set(stage.id, { stage_no: stage.stage_no, streets: [], point: null });
+    byStage.set(stage.id, { stage_no: stage.stage_no, streets: [], draws: [], point: null });
   }
   for (const street of streets) {
     const fromRatio = clampRatio(street.from_ratio, 0);
@@ -143,6 +172,21 @@ export async function readClusterRoute(
       done: Boolean(street.done),
       geometry: spanOf(geometryFromGeoJson(street.geom_geojson), fromRatio, toRatio),
     });
+  }
+  for (const draw of draws) {
+    const stage = byStage.get(draw.stage_id);
+    if (!stage || stage.draws.length >= DRAW_MAX) continue;
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(draw.path_geojson);
+    } catch {
+      parsed = null;
+    }
+    const coordinates = drawCoordinates(
+      parsed && typeof parsed === "object" ? (parsed as { coordinates?: unknown }).coordinates : null,
+    );
+    if (coordinates.length === 0) continue;
+    stage.draws.push({ coordinates, done: Boolean(draw.done) });
   }
   for (const point of points) {
     const stage = byStage.get(point.stage_id);
@@ -167,6 +211,7 @@ type IncomingStage = {
     done?: unknown;
   }[];
   point?: { lat?: unknown; lng?: unknown; note?: unknown } | null;
+  draws?: { coordinates?: unknown; done?: unknown }[];
   stage_no?: unknown;
 };
 
@@ -241,10 +286,26 @@ export async function saveClusterRoute(
           ${Math.min(fromRatio, toRatio)},
           ${Math.max(fromRatio, toRatio)},
           ${street.reversed === true || street.reversed === 1 || street.reversed === "true"},
-          ${street.done === true || street.done === 1 || street.done === "true"}
+          ${truthy(street.done)}
         )
       `;
       order += 1;
+    }
+    const draws = (Array.isArray(stage.draws) ? stage.draws : []).slice(0, DRAW_MAX);
+    let drawOrder = 0;
+    for (const draw of draws) {
+      const coordinates = drawCoordinates(draw.coordinates);
+      if (coordinates.length === 0) continue;
+      await sql`
+        INSERT INTO cluster_route_draws (stage_id, sort_order, path_geojson, done)
+        VALUES (
+          ${stageId},
+          ${drawOrder},
+          ${JSON.stringify({ type: "LineString", coordinates })},
+          ${truthy(draw.done)}
+        )
+      `;
+      drawOrder += 1;
     }
     const point = stage.point;
     if (point && point.lat != null && point.lng != null) {
