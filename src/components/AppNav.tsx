@@ -84,7 +84,7 @@ export function AppNav({
       <div className="app-nav-user">
         {pct != null && (
           <span className="progress-pill">
-            התקדמות {progress!.done}/{progress!.total} ({pct}%)
+            התקדמות {progress!.done}/{progress!.total} אשכולות ({pct}%)
           </span>
         )}
         <span className="app-nav-who">

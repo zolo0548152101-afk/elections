@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
+import {
+  ashkolStreetStats,
+  clusterIsDone,
+  opsDoneAshkols,
+} from "@/lib/cluster-status";
 import { getSql } from "@/lib/db";
-import { coordinatorInstitutionCities } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
-const CITY_PAD = 0.08;
-
 /**
  * רכז על / מנהל: coordinators under the viewer (or all for admin),
- * with street progress and fully-done ashkols.
+ * with cluster progress (ops בוצע, or every street done).
  */
 export async function GET() {
   const user = await getSessionUser();
@@ -64,24 +66,6 @@ export async function GET() {
       ORDER BY i.name
     `) as { id: number; name: string; settlement_name: string | null }[];
 
-    const cityList = await coordinatorInstitutionCities(sql, c.id);
-    let progress = { done: 0, total: 0 };
-    if (cityList.length > 0) {
-      const [row] = (await sql`
-        SELECT
-          count(DISTINCT s.id)::int AS total,
-          count(DISTINCT m.street_id) FILTER (WHERE m.done)::int AS done
-        FROM settlements st
-        JOIN streets s
-          ON s.lat BETWEEN st.lat - ${CITY_PAD} AND st.lat + ${CITY_PAD}
-         AND s.lng BETWEEN st.lng - ${CITY_PAD} AND st.lng + ${CITY_PAD}
-        LEFT JOIN street_marks m
-          ON m.street_id = s.id AND m.user_id = ${c.id} AND m.done
-        WHERE st.name_he = ANY(${cityList})
-      `) as { total: number; done: number }[];
-      progress = row ?? progress;
-    }
-
     const clusters = (await sql`
       SELECT cl.ashkol, cl.settlement_name, ic.institution_id, i.name AS institution_name
       FROM institution_coordinators link
@@ -97,40 +81,38 @@ export async function GET() {
       institution_name: string;
     }[];
 
-    // Ashkols linked to their institutions where every street is marked done by them.
-    const doneClusters = (await sql`
-      SELECT cl.ashkol, cl.settlement_name,
-             count(s.id)::int AS street_total,
-             count(m.street_id) FILTER (WHERE m.done)::int AS street_done
-      FROM institution_coordinators link
-      JOIN institution_clusters ic ON ic.institution_id = link.institution_id
-      JOIN clusters cl ON cl.ashkol = ic.ashkol
-      JOIN streets s ON s.ashkol = cl.ashkol
-      LEFT JOIN street_marks m
-        ON m.street_id = s.id AND m.user_id = ${c.id} AND m.done
-      WHERE link.user_id = ${c.id}
-      GROUP BY cl.ashkol, cl.settlement_name
-      HAVING count(s.id) > 0
-         AND count(s.id) = count(m.street_id) FILTER (WHERE m.done)
-      ORDER BY cl.settlement_name, cl.ashkol
-    `) as {
-      ashkol: string;
-      settlement_name: string;
-      street_total: number;
-      street_done: number;
-    }[];
-
-    const pct =
-      progress.total > 0
-        ? Math.round((100 * progress.done) / progress.total)
-        : 0;
+    const ashkols = [...new Set(clusters.map((row) => row.ashkol))];
+    const stats = await ashkolStreetStats(sql, ashkols);
+    const opsDone = await opsDoneAshkols(sql, ashkols);
+    const doneClusters = ashkols
+      .filter((ashkol) =>
+        clusterIsDone(stats.get(ashkol)?.done ?? false, opsDone, ashkol),
+      )
+      .map((ashkol) => {
+        const row = clusters.find((item) => item.ashkol === ashkol);
+        const st = stats.get(ashkol);
+        return {
+          ashkol,
+          settlement_name: row?.settlement_name ?? "",
+          street_total: st?.street_total ?? 0,
+          street_done: st?.street_done ?? 0,
+        };
+      });
+    const progress = {
+      done: doneClusters.length,
+      total: ashkols.length,
+      pct:
+        ashkols.length > 0
+          ? Math.round((100 * doneClusters.length) / ashkols.length)
+          : 0,
+    };
 
     out.push({
       ...c,
       institutions,
       clusters,
       cluster_count: clusters.length,
-      progress: { ...progress, pct },
+      progress,
       done_clusters: doneClusters,
     });
   }

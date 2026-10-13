@@ -151,7 +151,7 @@ export default function TeamCoordinatorsPage() {
                             <ShowMore text={ashkolText} />
                           )}
                         </td>
-                        <td>
+                        <td title="אשכולות שסומנו בוצע מתוך האשכולות המקושרים">
                           {c.progress.done}/{c.progress.total} ({c.progress.pct}%)
                         </td>
                         <td>{count}</td>

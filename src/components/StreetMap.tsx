@@ -901,26 +901,50 @@ export function StreetMap({
 
   async function markClusterStreets(done: boolean) {
     if (!selectedAshkol) return;
-    setStatus("מעדכן רחובות האשכול…");
-    const res = await fetch(`/api/clusters/${encodeURIComponent(selectedAshkol)}/mark-streets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done }),
-    });
-    const data = await res.json();
-    setStatus(
-      data.updated
-        ? `${done ? "סומנו" : "הוסרו"} ${data.updated} רחובות באשכול ${selectedAshkol}`
-        : data.message || "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)",
-    );
-    if (data.updated) {
-      setDoneOverride((prev) => ({ ...prev, [selectedAshkol]: done }));
-      if (picked?.ashkol === selectedAshkol) {
+    const ashkol = selectedAshkol;
+    setStatus(done ? "מסמן את האשכול כבוצע…" : "מסיר את סימון האשכול…");
+    const admin = me?.role === "super_admin" || me?.role === "area_manager";
+    const res = admin
+      ? await fetch("/api/team/clusters/mark", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ashkol, done }),
+        })
+      : await fetch(`/api/clusters/${encodeURIComponent(ashkol)}/mark-streets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ done }),
+        });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(data.error || "שגיאה בעדכון האשכול");
+      return;
+    }
+    const saved = admin || Boolean(data.updated);
+    if (saved) {
+      setDoneOverride((prev) => ({ ...prev, [ashkol]: done }));
+      if (picked?.ashkol === ashkol) {
         setPicked({ ...picked, done });
       }
     }
+    if (admin) {
+      const streets = Number(data.streetsUpdated ?? 0);
+      setStatus(
+        done
+          ? streets > 0
+            ? `אשכול ${ashkol} סומן כבוצע, כולל ${streets} רחובות`
+            : `אשכול ${ashkol} סומן כבוצע`
+          : `אשכול ${ashkol} סומן כלא בוצע`,
+      );
+    } else if (data.updated) {
+      setStatus(
+        `${done ? "סומנו" : "הוסרו"} ${data.updated} רחובות באשכול ${ashkol}`,
+      );
+    } else {
+      setStatus(data.message || "אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור)");
+    }
     refreshStreetTiles();
-    if (selectedAshkol) void loadClusterStreets(selectedAshkol);
+    if (ashkol) void loadClusterStreets(ashkol);
   }
 
   type HitItem =
@@ -1053,6 +1077,13 @@ export function StreetMap({
     );
   }
 
+  const selectedDone = selectedAshkol
+    ? Boolean(
+        doneOverride[selectedAshkol] ??
+          clusters.find((c) => c.ashkol === selectedAshkol)?.done,
+      )
+    : false;
+
   return (
     <div className="street-map-wrap">
       <div className="street-map-toolbar">
@@ -1150,6 +1181,7 @@ export function StreetMap({
             {clusters.map((c) => (
               <option key={c.ashkol} value={c.ashkol}>
                 {c.settlement_name} · {c.ashkol}
+                {(doneOverride[c.ashkol] ?? c.done) ? " · בוצע" : ""}
               </option>
             ))}
           </select>
@@ -1157,7 +1189,7 @@ export function StreetMap({
         <button
           type="button"
           className="export"
-          disabled={!selectedAshkol}
+          disabled={!selectedAshkol || selectedDone}
           onClick={() => markClusterStreets(true)}
         >
           סמן אשכול כבוצע
@@ -1165,12 +1197,17 @@ export function StreetMap({
         <button
           type="button"
           className="reset"
-          disabled={!selectedAshkol}
+          disabled={!selectedAshkol || !selectedDone}
           onClick={() => markClusterStreets(false)}
         >
           נקה אשכול
         </button>
-        <p className="map-status">{status}</p>
+        <p
+          className={`map-status${status.includes("סומן כבוצע") ? " link-success-note" : ""}`}
+          role="status"
+        >
+          {status}
+        </p>
       </div>
       <div className="map-side-cards">
         <aside className="cluster-card" aria-live="polite">
@@ -1281,7 +1318,6 @@ export function StreetMap({
                   {linkedInstIdForPicked
                     ? ` «${institutions.find((i) => i.id === linkedInstIdForPicked)?.name ?? ""}»`
                     : ""}
-                  {(doneOverride[picked.ashkol] ?? picked.done) ? " · בוצע" : ""}
                 </p>
               )}
               {showCoordLink && (
@@ -1307,10 +1343,9 @@ export function StreetMap({
                   </button>
                 </div>
               )}
-              {(doneOverride[picked.ashkol] ?? picked.done) &&
-                !(picked.linked || linkedOverride.has(picked.ashkol)) && (
-                  <p className="link-success-note">אשכול בוצע</p>
-                )}
+              {(doneOverride[picked.ashkol] ?? picked.done) && (
+                <p className="link-success-note">אשכול בוצע</p>
+              )}
             </>
           ) : (
             <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>

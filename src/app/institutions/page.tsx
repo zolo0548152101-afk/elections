@@ -20,6 +20,7 @@ type LinkedCluster = {
   right_pct: number;
   turnout_pct: number;
   bzb: number;
+  done?: boolean;
 };
 
 type Coord = {
@@ -416,7 +417,10 @@ export default function InstitutionsPage() {
                     </ul>
                   </div>
                 )}
-                <strong>אשכולות מקושרים ({clusters.length})</strong>
+                <strong>
+                  אשכולות מקושרים (
+                  {clusters.filter((c) => c.done).length}/{clusters.length} בוצעו)
+                </strong>
                 {clusters.length === 0 ? (
                   <p className="lede" style={{ marginTop: "0.35rem" }}>
                     עדיין אין אשכולות — במפה לחצו על אשכול ואז «קשר למוסד».
@@ -431,6 +435,7 @@ export default function InstitutionsPage() {
                           <th>% ימין</th>
                           <th>הצבעה</th>
                           <th>בז״ב</th>
+                          <th>סטטוס</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -443,6 +448,7 @@ export default function InstitutionsPage() {
                             <td>{Number(c.right_pct).toFixed(1)}</td>
                             <td>{Number(c.turnout_pct).toFixed(1)}</td>
                             <td>{c.bzb}</td>
+                            <td>{c.done ? "בוצע" : "לא בוצע"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -505,11 +511,19 @@ export default function InstitutionsPage() {
                           }
                         />
                       </td>
-                      <td>
+                      <td
+                        title={
+                          open
+                            ? undefined
+                            : "אשכולות שסומנו בוצע מתוך האשכולות המקושרים"
+                        }
+                      >
                         {open ? (
                           <span className="muted-cell">נערך בשורה למטה</span>
+                        ) : clusters.length ? (
+                          `${clusters.filter((c) => c.done).length}/${clusters.length}`
                         ) : (
-                          clusters.length
+                          "0"
                         )}
                       </td>
                       <td>
@@ -634,7 +648,9 @@ function InstitutionLinks({
         title="אשכולות"
         chips={clusters.map((c) => ({
           id: c.ashkol,
-          label: formatAshkolLabel(c.ashkol, c.settlement_name),
+          label: `${formatAshkolLabel(c.ashkol, c.settlement_name)}${
+            c.done ? " · בוצע" : ""
+          }`,
         }))}
         busy={busy}
         onRemove={(id) => onUnlinkCluster(id)}

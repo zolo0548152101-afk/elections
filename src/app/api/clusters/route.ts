@@ -5,7 +5,9 @@ import { offsetWithinSettlement } from "@/lib/geo";
 import { visibleClusterAshkols } from "@/lib/streets-access";
 import {
   ashkolStreetStatsForUser,
+  clusterIsDone,
   linkedAshkolSet,
+  opsDoneAshkols,
 } from "@/lib/cluster-status";
 
 export const runtime = "nodejs";
@@ -106,17 +108,15 @@ export async function GET(req: NextRequest) {
   });
 
   const linked = await linkedAshkolSet(sql);
-  const doneStats = await ashkolStreetStatsForUser(
-    sql,
-    sorted.map((c) => c.ashkol),
-    user.id,
-  );
+  const ashkolList = sorted.map((c) => c.ashkol);
+  const doneStats = await ashkolStreetStatsForUser(sql, ashkolList, user.id);
+  const opsDone = await opsDoneAshkols(sql, ashkolList);
 
   const withMap = sorted.map((c) => {
     const st = doneStats.get(c.ashkol);
     const status = {
       linked: linked.has(c.ashkol),
-      done: st?.done ?? false,
+      done: clusterIsDone(st?.done ?? false, opsDone, c.ashkol),
       street_total: st?.street_total ?? 0,
       street_done: st?.street_done ?? 0,
     };

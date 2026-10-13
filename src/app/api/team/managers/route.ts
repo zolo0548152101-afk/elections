@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
+import { clusterProgress } from "@/lib/cluster-status";
 import { getSql } from "@/lib/db";
-import { coordinatorInstitutionCities } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
-
-const CITY_PAD = 0.08;
 
 /** מנהל only: list רכזי על with their coordinators and progress. */
 export async function GET() {
@@ -108,29 +106,8 @@ export async function GET() {
         institution_name: string;
       }[];
 
-      const cityList = await coordinatorInstitutionCities(sql, c.id);
-      let progress = { done: 0, total: 0, pct: 0 };
-      if (cityList.length > 0) {
-        const [row] = (await sql`
-          SELECT
-            count(DISTINCT s.id)::int AS total,
-            count(DISTINCT mk.street_id) FILTER (WHERE mk.done)::int AS done
-          FROM settlements st
-          JOIN streets s
-            ON s.lat BETWEEN st.lat - ${CITY_PAD} AND st.lat + ${CITY_PAD}
-           AND s.lng BETWEEN st.lng - ${CITY_PAD} AND st.lng + ${CITY_PAD}
-          LEFT JOIN street_marks mk
-            ON mk.street_id = s.id AND mk.user_id = ${c.id} AND mk.done
-          WHERE st.name_he = ANY(${cityList})
-        `) as { total: number; done: number }[];
-        const total = row?.total ?? 0;
-        const done = row?.done ?? 0;
-        progress = {
-          done,
-          total,
-          pct: total > 0 ? Math.round((100 * done) / total) : 0,
-        };
-      }
+      const ashkols = [...new Set(clusters.map((row) => row.ashkol))];
+      const progress = await clusterProgress(sql, ashkols);
       withProgress.push({ ...c, institutions, clusters, progress });
     }
 

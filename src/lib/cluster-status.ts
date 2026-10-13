@@ -75,3 +75,101 @@ export async function linkedAshkolSet(sql: Sql): Promise<Set<string>> {
   `) as { ashkol: string }[];
   return new Set(rows.map((r) => r.ashkol));
 }
+
+/** Ashkols an admin marked בוצע, including clusters that have no streets yet. */
+export async function opsDoneAshkols(
+  sql: Sql,
+  ashkols: string[],
+): Promise<Set<string>> {
+  if (ashkols.length === 0) return new Set();
+  const rows = (await sql`
+    SELECT ashkol FROM ashkol_ops_status
+    WHERE done = true AND ashkol = ANY(${ashkols})
+  `) as { ashkol: string }[];
+  return new Set(rows.map((r) => r.ashkol));
+}
+
+export function clusterIsDone(
+  streetDone: boolean,
+  opsDone: ReadonlySet<string>,
+  ashkol: string,
+): boolean {
+  return streetDone || opsDone.has(ashkol);
+}
+
+export type ClusterProgress = { done: number; total: number; pct: number };
+
+/**
+ * Done clusters / clusters in scope.
+ * `ashkols === null` counts every cluster. A cluster counts as done when
+ * ashkol_ops_status says so, or every linked street is marked done.
+ */
+export async function clusterProgress(
+  sql: Sql,
+  ashkols: string[] | null,
+): Promise<ClusterProgress> {
+  if (ashkols && ashkols.length === 0) {
+    return { done: 0, total: 0, pct: 0 };
+  }
+
+  const [row] =
+    ashkols === null
+      ? ((await sql`
+          WITH street AS (
+            SELECT s.ashkol,
+                   count(*)::int AS total,
+                   count(*) FILTER (
+                     WHERE EXISTS (
+                       SELECT 1 FROM street_marks m
+                       WHERE m.street_id = s.id AND m.done
+                     )
+                   )::int AS done
+            FROM streets s
+            WHERE s.ashkol IS NOT NULL
+            GROUP BY s.ashkol
+          )
+          SELECT
+            count(*)::int AS total,
+            count(*) FILTER (
+              WHERE ops.done = true
+                 OR (coalesce(st.total, 0) > 0 AND st.total = st.done)
+            )::int AS done
+          FROM clusters cl
+          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
+          LEFT JOIN street st ON st.ashkol = cl.ashkol
+        `) as { total: number; done: number }[])
+      : ((await sql`
+          WITH scope AS (
+            SELECT DISTINCT cl.ashkol
+            FROM clusters cl
+            WHERE cl.ashkol = ANY(${ashkols})
+          ),
+          street AS (
+            SELECT s.ashkol,
+                   count(*)::int AS total,
+                   count(*) FILTER (
+                     WHERE EXISTS (
+                       SELECT 1 FROM street_marks m
+                       WHERE m.street_id = s.id AND m.done
+                     )
+                   )::int AS done
+            FROM streets s
+            WHERE s.ashkol IN (SELECT ashkol FROM scope)
+            GROUP BY s.ashkol
+          )
+          SELECT
+            (SELECT count(*)::int FROM scope) AS total,
+            count(*) FILTER (
+              WHERE ops.done = true
+                 OR (coalesce(st.total, 0) > 0 AND st.total = st.done)
+            )::int AS done
+          FROM scope sc
+          LEFT JOIN ashkol_ops_status ops ON ops.ashkol = sc.ashkol
+          LEFT JOIN street st ON st.ashkol = sc.ashkol
+        `) as { total: number; done: number }[]);
+
+  const done = row?.done ?? 0;
+  const total = row?.total ?? 0;
+  const pct = total > 0 ? Math.round((100 * done) / total) : 0;
+  return { done, total, pct };
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
+import { ashkolStreetStats } from "@/lib/cluster-status";
 import { getSql } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -32,7 +33,7 @@ function parseCoords(value: Row["coordinators"]): Coord[] {
  * Admin / רכז על.
  * scope=linked (default): ashkols already linked to an institution.
  * scope=all: every cluster, including ones with no institution yet.
- * done comes from ashkol_ops_status (סמן בוצע / לא בוצע).
+ * done is ashkol_ops_status, or every linked street marked done.
  */
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
       ? await allClusters(sql, user!.role, user!.id)
       : await linkedClusters(sql, user!.role, user!.id);
 
+  const stats = await ashkolStreetStats(sql, [...new Set(rows.map((r) => r.ashkol))]);
   const clusters = rows.map((r) => ({
     ashkol: r.ashkol,
     settlement_name: r.settlement_name,
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
     institution_name: r.institution_name ?? "",
     coordinator_names: r.coordinator_names ?? "",
     coordinators: parseCoords(r.coordinators),
-    done: r.ops_done === true,
+    done: r.ops_done === true || (stats.get(r.ashkol)?.done ?? false),
   }));
 
   return NextResponse.json({ clusters, scope });
