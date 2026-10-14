@@ -277,6 +277,7 @@ function addMapOverlays(map: MapLibreMap) {
     source: "streets",
     "source-layer": "streets",
     filter: hidden as never,
+    layout: { visibility: "none" },
     paint: streetLinePaint([]) as never,
   });
   map.addLayer({
@@ -286,6 +287,7 @@ function addMapOverlays(map: MapLibreMap) {
     "source-layer": "streets",
     filter: hidden as never,
     layout: {
+      visibility: "none",
       "symbol-placement": "line",
       "text-field": ["get", "name_he"],
       "text-size": 12,
@@ -760,7 +762,7 @@ export function StreetMap({
         overlayBound = true;
         bindOverlayInteractions();
       }
-      setStatus("לחצו על רחוב לסימון");
+      setStatus("לחצו על אשכול");
     });
     map.on("error", (e) => {
       const msg = String(
