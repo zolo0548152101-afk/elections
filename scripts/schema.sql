@@ -301,3 +301,10 @@ CREATE TABLE IF NOT EXISTS eshkol_osm_streets (
 
 CREATE INDEX IF NOT EXISTS eshkol_osm_streets_ashkol_idx
   ON eshkol_osm_streets (ashkol);
+
+-- Municipal outline used to decide which city an OSM street line belongs to.
+CREATE TABLE IF NOT EXISTS city_boundaries (
+  settlement_name text PRIMARY KEY,
+  osm_name text NOT NULL,
+  geom_geojson text NOT NULL
+);

@@ -1,6 +1,7 @@
 /**
- * Match eshkol_streets (loaded from check.csv) to OSM ways in that town
- * and store the links in eshkol_osm_streets. Does not set streets.ashkol.
+ * Match eshkol_streets (loaded from check.csv) to OSM ways inside that
+ * city's municipal outline and store the links in eshkol_osm_streets.
+ * Does not set streets.ashkol.
  *
  * A street listed by several eshkols is linked to each of them.
  */
@@ -85,32 +86,53 @@ function isSwap(base, key) {
   return false;
 }
 
-function havKm(a, b) {
-  const r = 6371;
-  const p1 = (a[0] * Math.PI) / 180;
-  const p2 = (b[0] * Math.PI) / 180;
-  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
-  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLng / 2) ** 2;
-  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+function ringContains(ring, lng, lat) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const crosses = (yi > lat) !== (yj > lat)
+      && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
-/** Streets are kept near this eshkol's own houses, not the whole country. */
-function areaFor(points, fallback) {
-  const src = points.length > 0 ? points : fallback ? [fallback] : [];
-  if (src.length === 0) return null;
-  let lat = 0;
-  let lng = 0;
-  for (const point of src) {
-    lat += Number(point.lat);
-    lng += Number(point.lng);
+function polygonContains(polygon, lng, lat) {
+  if (!ringContains(polygon[0], lng, lat)) return false;
+  for (let hole = 1; hole < polygon.length; hole++) {
+    if (ringContains(polygon[hole], lng, lat)) return false;
   }
-  lat /= src.length;
-  lng /= src.length;
-  if (points.length === 0) return { lat, lng, radius: 4 };
-  const distances = points.map((point) => havKm([lat, lng], [Number(point.lat), Number(point.lng)])).sort((a, b) => a - b);
-  const typical = distances[Math.min(distances.length - 1, Math.floor(distances.length * 0.9))];
-  return { lat, lng, radius: Math.min(7, Math.max(3.5, typical + 2)) };
+  return true;
+}
+
+function geomContains(geom, lng, lat) {
+  if (geom.type === "Polygon") return polygonContains(geom.coordinates, lng, lat);
+  if (geom.type === "MultiPolygon") {
+    return geom.coordinates.some((polygon) => polygonContains(polygon, lng, lat));
+  }
+  return false;
+}
+
+function boundsOf(geom) {
+  let minLng = 180;
+  let maxLng = -180;
+  let minLat = 90;
+  let maxLat = -90;
+  const walk = (node) => {
+    if (typeof node[0] === "number") {
+      minLng = Math.min(minLng, node[0]);
+      maxLng = Math.max(maxLng, node[0]);
+      minLat = Math.min(minLat, node[1]);
+      maxLat = Math.max(maxLat, node[1]);
+      return;
+    }
+    for (const child of node) walk(child);
+  };
+  walk(geom.coordinates);
+  return { minLng, maxLng, minLat, maxLat, area: (maxLng - minLng) * (maxLat - minLat) };
 }
 
 function matchName(csvName, localNames) {
@@ -147,19 +169,33 @@ const listed = await sql`
   SELECT ashkol, settlement_name, street_name
   FROM eshkol_streets
 `;
-const settlements = await sql`SELECT name_he, lat, lng FROM settlements`;
-const bySettlement = new Map(settlements.map((row) => [row.name_he, row]));
-const houseRows = await sql`SELECT ashkol, lat, lng FROM eshkol_houses`;
-const housesByAshkol = new Map();
-for (const house of houseRows) {
-  if (!housesByAshkol.has(house.ashkol)) housesByAshkol.set(house.ashkol, []);
-  housesByAshkol.get(house.ashkol).push(house);
-}
+const boundaryRows = await sql`SELECT settlement_name, geom_geojson FROM city_boundaries`;
+const boundaries = boundaryRows.map((row) => {
+  const geom = JSON.parse(row.geom_geojson);
+  return { settlement_name: row.settlement_name, geom, ...boundsOf(geom) };
+});
 const osm = await sql`
   SELECT id, name_he, lat, lng
   FROM streets
   WHERE name_he <> ''
 `;
+const streetsByCity = new Map();
+for (const street of osm) {
+  const hits = boundaries.filter((boundary) => (
+    street.lng >= boundary.minLng && street.lng <= boundary.maxLng
+    && street.lat >= boundary.minLat && street.lat <= boundary.maxLat
+    && geomContains(boundary.geom, street.lng, street.lat)
+  ));
+  if (hits.length === 0) continue;
+  hits.sort((a, b) => a.area - b.area);
+  const city = hits[0].settlement_name;
+  if (!streetsByCity.has(city)) streetsByCity.set(city, new Map());
+  const named = streetsByCity.get(city);
+  const name = normStreet(street.name_he);
+  if (!name) continue;
+  if (!named.has(name)) named.set(name, []);
+  named.get(name).push(street.id);
+}
 
 const links = [];
 let matchedRows = 0;
@@ -172,20 +208,11 @@ for (const row of listed) {
   byAshkol.get(row.ashkol).push(row);
 }
 
-for (const [ashkol, rows] of byAshkol) {
-  const place = bySettlement.get(rows[0].settlement_name);
-  const area = areaFor(housesByAshkol.get(ashkol) ?? [], place);
-  if (!area) {
+for (const [, rows] of byAshkol) {
+  const local = streetsByCity.get(rows[0].settlement_name);
+  if (!local) {
     missedRows += rows.length;
     continue;
-  }
-  const local = new Map();
-  for (const street of osm) {
-    if (havKm([area.lat, area.lng], [street.lat, street.lng]) > area.radius) continue;
-    const name = normStreet(street.name_he);
-    if (!name) continue;
-    if (!local.has(name)) local.set(name, []);
-    local.get(name).push(street.id);
   }
   const names = new Set(local.keys());
   for (const row of rows) {
