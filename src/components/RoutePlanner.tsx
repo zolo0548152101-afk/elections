@@ -9,7 +9,7 @@ import { formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-s
 const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
 
 function pointName(stageNo: number) {
-  return stageNo === 1 ? "נקודת התחלה" : "נקודת איסוף";
+  return stageNo === 1 ? "נקודת התחלה" : "נקודת קיבוץ";
 }
 
 export function stageColor(stageNo: number) {
@@ -172,7 +172,7 @@ function toFeatures(
           color,
           stage: stage.stage_no,
           kind: "point",
-          label: stage.stage_no === 1 ? "התחלה" : `איסוף ${collectNo}`,
+          label: stage.stage_no === 1 ? "התחלה" : `נקודת קיבוץ ${collectNo}`,
         },
         geometry: {
           type: "Point",
@@ -643,6 +643,7 @@ export function RoutePlanner({
       setPickedDraw({ stage: stageNo, index });
       activeRef.current = stageNo;
       setActive(stageNo);
+      setOpenStage(stageNo);
       onMode("off");
     },
     splitStretch(stageNo, drawIndex, vertex) {
@@ -907,7 +908,7 @@ export function RoutePlanner({
       {loading ? <p className="assign-empty">טוען מסלול…</p> : null}
       {!loading && stages.length === 0 ? (
         <p className="assign-empty">
-          לחצו על אייקון המסלול וסמנו על המפה. אייקון הנקודה מוסיף התחלה, ואחר כך איסוף.
+          לחצו על אייקון המסלול וסמנו על המפה. אייקון הנקודה מסמן התחלה או נקודת קיבוץ.
         </p>
       ) : null}
       {shownStages.map((stage) => {
@@ -964,7 +965,7 @@ export function RoutePlanner({
                       bindRef.current?.selectStretch(stage.stage_no, index);
                     }}
                   >
-                    מתיחה {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
+                    מסלול {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
                     {draw.done ? " · בוצע" : ""}
                   </button>
                 ))}

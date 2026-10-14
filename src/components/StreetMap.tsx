@@ -342,13 +342,14 @@ function addMapOverlays(map: MapLibreMap) {
   });
   map.addLayer({
     id: "proposed-pin",
-    type: "circle",
+    type: "symbol",
     source: "pin",
-    paint: {
-      "circle-radius": 11,
-      "circle-color": "#111111",
-      "circle-stroke-width": 3,
-      "circle-stroke-color": "#ffffff",
+    layout: {
+      "icon-image": "place-pin",
+      "icon-size": 1,
+      "icon-anchor": "bottom",
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
     },
   });
   map.addLayer({
@@ -650,6 +651,29 @@ export function StreetMap({
         overlayBound = true;
         bindOverlayInteractions();
       }
+      if (!map.hasImage("place-pin")) {
+        const w = 48;
+        const h = 64;
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const pin = canvas.getContext("2d");
+        if (pin) {
+          pin.clearRect(0, 0, w, h);
+          pin.fillStyle = "#ea4335";
+          pin.beginPath();
+          pin.arc(24, 22, 16, Math.PI, 0);
+          pin.quadraticCurveTo(40, 36, 24, 60);
+          pin.quadraticCurveTo(8, 36, 8, 22);
+          pin.closePath();
+          pin.fill();
+          pin.fillStyle = "#ffffff";
+          pin.beginPath();
+          pin.arc(24, 22, 7, 0, Math.PI * 2);
+          pin.fill();
+          map.addImage("place-pin", pin.getImageData(0, 0, w, h));
+        }
+      }
       if (!map.hasImage("route-dir")) {
         const size = 32;
         const canvas = document.createElement("canvas");
@@ -891,6 +915,7 @@ export function StreetMap({
       const feature = e.features?.[0];
       if (String(feature?.properties?.kind) !== "draw") return;
       routeClickHandled = true;
+      setMenuOpen(true);
       routeApiRef.current?.selectStretch(
         Number(feature?.properties?.stage),
         Number(feature?.properties?.draw),
@@ -1565,6 +1590,7 @@ export function StreetMap({
         }));
       });
       src.setData({ type: "FeatureCollection", features });
+      map.triggerRepaint();
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
@@ -2085,7 +2111,7 @@ export function StreetMap({
     if (stageNo === "new") routeApiRef.current.addCollectionPoint(panel.lat, panel.lng);
     else routeApiRef.current.setStagePoint(stageNo, panel.lat, panel.lng);
     setPanel(null);
-    setStatus("נקודת איסוף נשמרה");
+    setStatus("נקודת קיבוץ נשמרה");
   }
 
   function addPanelStreet(stage: number | "new") {
@@ -2149,7 +2175,7 @@ export function StreetMap({
         <>
           {panel.mode === "collect" ? (
             <>
-              <strong>נקודת איסוף</strong>
+              <strong>נקודת קיבוץ</strong>
               <div className="route-inline">
                 {routeStages
                   .filter((stage) => stage.stage_no > 1 && stage.hasPoint)
@@ -2158,7 +2184,7 @@ export function StreetMap({
                       key={stage.stage_no}
                       type="button"
                       className="route-icon-btn"
-                      aria-label={`איסוף ${index + 1}`}
+                      aria-label={`קיבוץ ${index + 1}`}
                       onClick={() => saveCollectionPoint(stage.stage_no)}
                     >
                       {index + 1}
@@ -2167,7 +2193,7 @@ export function StreetMap({
                 <button
                   type="button"
                   className="route-icon-btn"
-                  aria-label="נקודת איסוף חדשה"
+                  aria-label="נקודת קיבוץ חדשה"
                   onClick={() => saveCollectionPoint("new")}
                 >
                   +
@@ -2182,7 +2208,7 @@ export function StreetMap({
               <button
                 type="button"
                 className="route-icon-btn route-choice"
-                aria-label="נקודת איסוף"
+                aria-label="נקודת קיבוץ"
                 onClick={() => {
                   const existing = routeStages.filter((stage) => stage.stage_no > 1 && stage.hasPoint);
                   if (existing.length === 0) {
@@ -2192,7 +2218,7 @@ export function StreetMap({
                   setPanel((prev) => (prev?.kind === "start" ? { ...prev, mode: "collect" } : prev));
                 }}
               >
-                איסוף
+                קיבוץ
               </button>
             </div>
           )}

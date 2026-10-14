@@ -130,11 +130,11 @@ export function arrowMarksEvery(
   if (total < 8) return [];
   const spacing = spacingMeters > 1 ? spacingMeters : 40;
   const targets: number[] = [];
-  if (total < spacing) targets.push(total / 2);
-  else {
+  // The first arrow sits near the start so a new route shows its direction at once.
+  targets.push(Math.min(15, total / 2));
+  if (total >= spacing) {
     for (let walked = spacing; walked < total - 4; walked += spacing) targets.push(walked);
   }
-  if (targets.length === 0) targets.push(total / 2);
   const marks: ArrowMark[] = [];
   for (const distAlong of targets) {
     let walked = 0;
