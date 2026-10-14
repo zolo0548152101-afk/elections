@@ -1855,6 +1855,22 @@ tbody tr.cluster-row-selected:hover {
   font-size: 0.82rem;
 }
 
+button.route-more-name {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: start;
+  cursor: pointer;
+  padding: 0;
+}
+
+button.route-more-name[aria-pressed="true"] {
+  color: #6d28d9;
+  font-weight: 700;
+}
+
 .route-filter-menu {
   display: flex;
   flex-wrap: wrap;

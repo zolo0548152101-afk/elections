@@ -91,6 +91,7 @@ export type RouteApi = {
   newStretchSegment: () => void;
   finishStretch: () => boolean;
   selectStretch: (stageNo: number, index: number) => void;
+  editStretch: (stageNo: number, index: number, frame?: boolean) => void;
   placeRoutePoint: (lat: number, lng: number) => void;
   splitStretch: (stageNo: number, drawIndex: number, vertex: number) => void;
   flipStageStretches: (stageNo: number) => void;
@@ -138,6 +139,7 @@ function toFeatures(
             kind: "meter",
             label: `${index + 1} · ${formatLengthPill(lineLengthMeters(coordinates))}`,
             stage: stage.stage_no,
+            draw: index,
           },
           geometry: { type: "Point", coordinates: last },
         });
@@ -671,6 +673,29 @@ export function RoutePlanner({
       onMode("off");
       revealStage(stageNo);
     },
+    editStretch(stageNo, index, frame = true) {
+      const stageNumber = Number(stageNo);
+      const drawIndex = Number(index);
+      if (!Number.isFinite(stageNumber) || !Number.isFinite(drawIndex)) return;
+      chainRef.current = { stageNo: stageNumber, index: drawIndex };
+      activeRef.current = stageNumber;
+      setActive(stageNumber);
+      setOpenStage(stageNumber);
+      setPickedDraw({ stage: stageNumber, index: drawIndex });
+      onMode("stretch");
+      const next = stagesRef.current.map((stage) => {
+        if (Number(stage.stage_no) !== stageNumber) return stage;
+        return {
+          ...stage,
+          draws: asDraws(stage.draws).map((draw, i) =>
+            i === drawIndex ? { ...draw, finished: false } : draw,
+          ),
+        };
+      });
+      if (frame) persist(next);
+      else preview(next);
+      if (frame) revealStage(stageNumber);
+    },
     splitStretch(stageNo, drawIndex, vertex) {
       const next = stagesRef.current.map((stage) => {
         if (Number(stage.stage_no) !== Number(stageNo)) return stage;
@@ -980,38 +1005,6 @@ export function RoutePlanner({
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>
               </button>
             </div>
-            <div className="route-stage-names">
-                {asDraws(stage.draws).map((draw, index) => (
-                  <button
-                    key={`draw-${index}`}
-                    type="button"
-                    className={draw.done ? "route-name-done" : undefined}
-                    aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      bindRef.current?.selectStretch(stage.stage_no, index);
-                      revealStage(stage.stage_no);
-                    }}
-                  >
-                    מסלול {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
-                    {draw.done ? " · בוצע" : ""}
-                  </button>
-                ))}
-                {stage.streets.map((street) => (
-                  <button
-                    key={street.street_id}
-                    type="button"
-                    className={street.done ? "route-name-done" : undefined}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleStreetDone(stage.stage_no, street.street_id);
-                    }}
-                  >
-                    {street.name_he}
-                    {street.done ? " · בוצע" : ""}
-                  </button>
-                ))}
-            </div>
             {expanded ? (
               <div className="route-stage-more">
                 {stage.streets.map((street) => (
@@ -1058,16 +1051,16 @@ export function RoutePlanner({
                     </button>
                   </div>
                 ))}
-                {asDraws(stage.draws).length > 0 ? (
-                  <p className="route-meters">
-                    סה״כ {formatMeters(asDraws(stage.draws).reduce((sum, draw) => sum + lineLengthMeters(draw.coordinates), 0))}
-                  </p>
-                ) : null}
                 {asDraws(stage.draws).map((draw, index) => (
                   <div className="route-inline" key={`draw-row-${index}`}>
-                    <span className="route-more-name">
+                    <button
+                      type="button"
+                      className="route-more-name route-resume"
+                      aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
+                      onClick={() => bindRef.current?.editStretch(stage.stage_no, index)}
+                    >
                       מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
-                    </span>
+                    </button>
                     <button
                       type="button"
                       className="route-btn"

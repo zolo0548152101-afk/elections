@@ -833,15 +833,26 @@ export function StreetMap({
     let stretchDrag: { stage: number; draw: number; vertex: number; moved: boolean } | null = null;
     let stretchMoved = false;
 
+    function resumeDrawnRoute(feature: NonNullable<MapLayerMouseEvent["features"]>[number] | undefined, frame: boolean) {
+      const kind = String(feature?.properties?.kind ?? "");
+      if (kind !== "draw" && kind !== "handle" && kind !== "stretch-no" && kind !== "meter") return false;
+      const stage = Number(feature?.properties?.stage);
+      const draw = Number(feature?.properties?.draw);
+      if (!Number.isFinite(stage) || !Number.isFinite(draw)) return false;
+      routeModeRef.current = "stretch";
+      map.doubleClickZoom.disable();
+      routeApiRef.current?.editStretch(stage, draw, frame);
+      return true;
+    }
+
     function beginHandleDrag(e: {
       point: { x: number; y: number };
       preventDefault: () => void;
       features?: MapLayerMouseEvent["features"];
     }) {
-      if (routeModeRef.current !== "stretch") return;
-      e.preventDefault();
       const feature = e.features?.[0];
-      if (!feature) return;
+      if (!feature || !resumeDrawnRoute(feature, false)) return;
+      e.preventDefault();
       const stage = Number(feature.properties?.stage);
       const draw = Number(feature.properties?.draw);
       const vertex = Number(feature.properties?.vertex);
@@ -878,25 +889,27 @@ export function StreetMap({
     }) {
       const feature = e.features?.[0];
       const kind = String(feature?.properties?.kind ?? "");
-      if (
-        routeModeRef.current === "stretch" &&
-        kind === "draw" &&
-        feature?.geometry.type === "LineString"
-      ) {
-        e.preventDefault();
-        pendingLeg = {
-          stage: Number(feature.properties?.stage),
-          draw: Number(feature.properties?.draw),
-          coordinates: feature.geometry.coordinates as number[][],
-          x: e.point.x,
-          y: e.point.y,
-        };
-        map.dragPan.disable();
+      const onHandle =
+        map.getLayer("draw-handle") != null &&
+        map.queryRenderedFeatures([e.point.x, e.point.y], { layers: ["draw-handle"] }).length > 0;
+      if (onHandle) return;
+      if (kind === "draw" && feature?.geometry.type === "LineString" && resumeDrawnRoute(feature, false)) {
+          e.preventDefault();
+          pendingLeg = {
+            stage: Number(feature.properties?.stage),
+            draw: Number(feature.properties?.draw),
+            coordinates: feature.geometry.coordinates as number[][],
+            x: e.point.x,
+            y: e.point.y,
+          };
+          map.dragPan.disable();
       }
       armPress(e);
     }
     map.on("mousedown", "route-line", beginLine);
     map.on("touchstart", "route-line", beginLine);
+    map.on("mousedown", "route-casing", beginLine);
+    map.on("touchstart", "route-casing", beginLine);
     map.on("contextmenu", "streets-line", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       clearPress();
@@ -910,24 +923,29 @@ export function StreetMap({
       clearPress();
       void openStagePopup(e);
     });
-    map.on("click", "route-line", (e: MapLayerMouseEvent) => {
+    function editDrawnRoute(e: MapLayerMouseEvent) {
       const feature = e.features?.[0];
-      if (String(feature?.properties?.kind) !== "draw") return;
+      if (!feature) return;
+      if (!stretchMoved && !resumeDrawnRoute(feature, true)) return;
       routeClickHandled = true;
       setMenuOpen(true);
-      routeApiRef.current?.selectStretch(
-        Number(feature?.properties?.stage),
-        Number(feature?.properties?.draw),
-      );
-    });
-    map.on("dblclick", "route-line", (e: MapLayerMouseEvent) => {
+    }
+    map.on("click", "route-line", editDrawnRoute);
+    map.on("click", "route-casing", editDrawnRoute);
+    map.on("click", "draw-handle", editDrawnRoute);
+    map.on("click", "draw-end-label", editDrawnRoute);
+    map.on("click", "draw-number", editDrawnRoute);
+    map.on("click", "draw-meter", editDrawnRoute);
+    function finishLineDoubleClick(e: MapLayerMouseEvent) {
       if (finishByDoubleClick(e)) return;
       e.preventDefault();
       if (clickTimer != null) window.clearTimeout(clickTimer);
       clickTimer = null;
       clearPress();
       void openStagePopup(e);
-    });
+    }
+    map.on("dblclick", "route-line", finishLineDoubleClick);
+    map.on("dblclick", "route-casing", finishLineDoubleClick);
     function endStretchDrag() {
       pendingLeg = null;
       if (stretchDrag?.moved) {
@@ -1578,6 +1596,7 @@ export function StreetMap({
       if (!(target instanceof Element)) return;
       if (target.closest(".street-map-canvas")) return;
       if (target.closest(".route-icon-row")) return;
+      if (target.closest(".route-resume")) return;
       setRouteMode("off");
     }
     document.addEventListener("pointerdown", leaveMarking);
