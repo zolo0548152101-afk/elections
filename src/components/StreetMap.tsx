@@ -302,13 +302,7 @@ function addMapOverlays(map: MapLibreMap) {
     id: "eshkol-houses",
     type: "circle",
     source: "eshkol-houses",
-    paint: {
-      "circle-radius": ["case", ["==", ["get", "selected"], 1], 6.5, 4],
-      "circle-color": ["get", "color"],
-      "circle-opacity": ["case", ["==", ["get", "dim"], 1], 0.35, 0.92],
-      "circle-stroke-width": 1,
-      "circle-stroke-color": "#ffffff",
-    },
+    paint: houseCirclePaint("") as never,
   });
   map.addLayer({
     id: "clusters-circle",
@@ -478,6 +472,19 @@ function addMapOverlays(map: MapLibreMap) {
   });
 }
 
+function houseCirclePaint(selectedAshkol: string) {
+  const chosen: Expr = selectedAshkol
+    ? ["==", ["get", "ashkol"], selectedAshkol]
+    : ["literal", false];
+  return {
+    "circle-radius": ["case", chosen, 7, 4.5],
+    "circle-color": ["get", "color"],
+    "circle-opacity": ["case", chosen, 0.95, selectedAshkol ? 0.32 : 0.9],
+    "circle-stroke-width": ["case", chosen, 2.5, 1],
+    "circle-stroke-color": "#ffffff",
+  };
+}
+
 function fitHousePoints(map: MapLibreMap, points: { lat: number; lng: number }[]) {
   if (points.length === 0) return false;
   if (points.length === 1) {
@@ -551,6 +558,7 @@ export function StreetMap({
   const [housesLoading, setHousesLoading] = useState(false);
   const housePopupRef = useRef<Popup | null>(null);
   const pendingHouseFit = useRef("");
+  const selectEshkolRef = useRef<(ashkol: string) => void>(() => {});
   const [picked, setPicked] = useState<ClusterView | null>(null);
   const [pickedStreet, setPickedStreet] = useState<SearchStreet | null>(null);
   const [assigned, setAssigned] = useState<AssignUser[]>([]);
@@ -1118,12 +1126,13 @@ export function StreetMap({
       if (!props) return;
       const street = escapeHtml(String(props.street ?? ""));
       const house = escapeHtml(String(props.house ?? ""));
-      const ashkol = escapeHtml(String(props.ashkol ?? ""));
+      const ashkol = String(props.ashkol ?? "");
+      if (ashkol) selectEshkolRef.current(ashkol);
       housePopupRef.current?.remove();
       housePopupRef.current = new Popup({ closeButton: true, maxWidth: "240px" })
         .setLngLat(e.lngLat)
         .setHTML(
-          `<div dir="rtl" class="house-popup"><strong>${street} ${house}</strong><div>אשכול <bdi dir="ltr">${ashkol}</bdi></div></div>`,
+          `<div dir="rtl" class="house-popup"><strong>${street} ${house}</strong><div>אשכול <bdi dir="ltr">${escapeHtml(ashkol)}</bdi></div></div>`,
         )
         .addTo(map);
     });
@@ -1683,6 +1692,15 @@ export function StreetMap({
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   };
+  selectEshkolRef.current = (ashkol: string) => {
+    const cluster = clustersRef.current.find((c) => c.ashkol === ashkol) ?? null;
+    setSelectedAshkol(ashkol);
+    if (cluster) {
+      setPicked(cluster);
+      setPanel({ kind: "cluster", cluster });
+    }
+    fitAshkolHousesRef.current(ashkol);
+  };
 
   useEffect(() => {
     if (!houseQuery) {
@@ -1720,7 +1738,6 @@ export function StreetMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const emphasize = selectedAshkol !== "" && houseColors.has(selectedAshkol);
     const features = visibleHouses.map((house) => ({
       type: "Feature" as const,
       properties: {
@@ -1728,8 +1745,6 @@ export function StreetMap({
         street: house.street,
         house: house.house,
         color: houseColors.get(house.ashkol) ?? "#64748b",
-        selected: emphasize && house.ashkol === selectedAshkol ? 1 : 0,
-        dim: emphasize && house.ashkol !== selectedAshkol ? 1 : 0,
       },
       geometry: { type: "Point" as const, coordinates: [house.lng, house.lat] },
     }));
@@ -1739,7 +1754,23 @@ export function StreetMap({
     };
     if (map.isStyleLoaded() && map.getSource("eshkol-houses")) apply();
     else map.once("load", apply);
-  }, [visibleHouses, houseColors, selectedAshkol]);
+  }, [visibleHouses, houseColors]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const paint = houseCirclePaint(selectedAshkol);
+    const apply = () => {
+      if (!map.getLayer("eshkol-houses")) return;
+      map.setPaintProperty("eshkol-houses", "circle-radius", paint["circle-radius"] as never);
+      map.setPaintProperty("eshkol-houses", "circle-color", paint["circle-color"] as never);
+      map.setPaintProperty("eshkol-houses", "circle-opacity", paint["circle-opacity"] as never);
+      map.setPaintProperty("eshkol-houses", "circle-stroke-width", paint["circle-stroke-width"] as never);
+      map.setPaintProperty("eshkol-houses", "circle-stroke-color", paint["circle-stroke-color"] as never);
+    };
+    apply();
+    if (!map.getLayer("eshkol-houses")) map.once("idle", apply);
+  }, [selectedAshkol]);
 
   useEffect(() => {
     if (!pendingHouseFit.current) return;
@@ -2634,11 +2665,12 @@ export function StreetMap({
             value={selectedAshkol}
             onChange={(e) => {
               const ashkol = e.target.value;
-              setSelectedAshkol(ashkol);
-              const cluster = clusters.find((c) => c.ashkol === ashkol) ?? null;
-              setPicked(cluster);
-              setPanel(cluster ? { kind: "cluster", cluster } : null);
-              if (ashkol) fitAshkolHousesRef.current(ashkol);
+              if (ashkol) selectEshkolRef.current(ashkol);
+              else {
+                setSelectedAshkol("");
+                setPicked(null);
+                setPanel(null);
+              }
             }}
           >
             {me?.role === "coordinator" ? null : (
@@ -3072,15 +3104,7 @@ export function StreetMap({
                 key={item.ashkol}
                 type="button"
                 aria-pressed={selectedAshkol === item.ashkol}
-                onClick={() => {
-                  const cluster = clusters.find((c) => c.ashkol === item.ashkol) ?? null;
-                  setSelectedAshkol(item.ashkol);
-                  if (cluster) {
-                    setPicked(cluster);
-                    setPanel({ kind: "cluster", cluster });
-                  }
-                  fitAshkolHousesRef.current(item.ashkol);
-                }}
+                onClick={() => selectEshkolRef.current(item.ashkol)}
               >
                 <span className="eshkol-swatch" style={{ background: item.color }} />
                 אשכול <bdi dir="ltr">{item.ashkol}</bdi>
