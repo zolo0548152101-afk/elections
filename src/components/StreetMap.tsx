@@ -1769,20 +1769,38 @@ export function StreetMap({
       },
       geometry: line.geometry as Geometry,
     }));
+    let cancelled = false;
+    let tries = 0;
     const apply = () => {
+      if (cancelled) return;
       const src = map.getSource("eshkol-streets") as GeoJSONSource | undefined;
-      src?.setData({ type: "FeatureCollection", features });
+      if (!src) {
+        if (tries++ >= 30) return;
+        map.once("idle", apply);
+        return;
+      }
+      src.setData({ type: "FeatureCollection", features });
     };
-    if (map.isStyleLoaded() && map.getSource("eshkol-streets")) apply();
-    else map.once("load", apply);
+    apply();
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
   }, [visibleHouses, houseColors]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const paint = eshkolStreetPaint(selectedAshkol);
+    let cancelled = false;
+    let tries = 0;
     const apply = () => {
-      if (!map.getLayer("eshkol-streets")) return;
+      if (cancelled) return;
+      if (!map.getLayer("eshkol-streets")) {
+        if (tries++ >= 30) return;
+        map.once("idle", apply);
+        return;
+      }
       map.setPaintProperty("eshkol-streets", "line-color", paint["line-color"] as never);
       map.setPaintProperty("eshkol-streets", "line-width", paint["line-width"] as never);
       map.setPaintProperty("eshkol-streets", "line-opacity", paint["line-opacity"] as never);
@@ -1793,7 +1811,10 @@ export function StreetMap({
       );
     };
     apply();
-    if (!map.getLayer("eshkol-streets")) map.once("idle", apply);
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
   }, [selectedAshkol]);
 
   useEffect(() => {
