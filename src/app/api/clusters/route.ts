@@ -67,10 +67,7 @@ export async function GET(req: NextRequest) {
             AND c.turnout_pct <= ${maxTurnout}
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
-            AND (
-              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
-              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
-            )
+            AND EXISTS (SELECT 1 FROM eshkol_osm_streets o WHERE o.ashkol = c.ashkol)
         `
       : ashkols.length === 0
         ? []
@@ -101,10 +98,7 @@ export async function GET(req: NextRequest) {
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
             AND c.ashkol = ANY(${ashkols})
-            AND (
-              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
-              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
-            )
+            AND EXISTS (SELECT 1 FROM eshkol_osm_streets o WHERE o.ashkol = c.ashkol)
         `
   ) as ClusterRow[];
 

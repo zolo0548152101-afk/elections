@@ -4,8 +4,6 @@
  *
  * A street listed by several eshkols is linked to each of them.
  */
-import { createReadStream } from "fs";
-import { createInterface } from "readline";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { neon } from "@neondatabase/serverless";
@@ -19,8 +17,6 @@ if (!url) {
   console.error("DATABASE_URL missing");
   process.exit(1);
 }
-
-const ADDR_PATH = process.env.ADDR_LL || "/tmp/eshkol-check/addr_ll.jsonl";
 
 function normStreet(s) {
   let out = String(s || "").trim();
@@ -89,38 +85,32 @@ function isSwap(base, key) {
   return false;
 }
 
-function pad(b, km) {
-  const dLat = km / 111.32;
-  const mid = ((b.minLat + b.maxLat) / 2) * Math.PI / 180;
-  const dLng = km / (111.32 * Math.cos(mid));
-  return {
-    minLat: b.minLat - dLat,
-    maxLat: b.maxLat + dLat,
-    minLng: b.minLng - dLng,
-    maxLng: b.maxLng + dLng,
-  };
+function havKm(a, b) {
+  const r = 6371;
+  const p1 = (a[0] * Math.PI) / 180;
+  const p2 = (b[0] * Math.PI) / 180;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function loadAddrBounds() {
-  return new Promise((resolveBounds, reject) => {
-    const bounds = new Map();
-    const rl = createInterface({ input: createReadStream(ADDR_PATH) });
-    rl.on("line", (line) => {
-      if (!line) return;
-      const o = JSON.parse(line);
-      let b = bounds.get(o.city);
-      if (!b) {
-        b = { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 };
-        bounds.set(o.city, b);
-      }
-      b.minLat = Math.min(b.minLat, o.lat);
-      b.maxLat = Math.max(b.maxLat, o.lat);
-      b.minLng = Math.min(b.minLng, o.lng);
-      b.maxLng = Math.max(b.maxLng, o.lng);
-    });
-    rl.on("close", () => resolveBounds(bounds));
-    rl.on("error", reject);
-  });
+/** Streets are kept near this eshkol's own houses, not the whole country. */
+function areaFor(points, fallback) {
+  const src = points.length > 0 ? points : fallback ? [fallback] : [];
+  if (src.length === 0) return null;
+  let lat = 0;
+  let lng = 0;
+  for (const point of src) {
+    lat += Number(point.lat);
+    lng += Number(point.lng);
+  }
+  lat /= src.length;
+  lng /= src.length;
+  if (points.length === 0) return { lat, lng, radius: 4 };
+  const distances = points.map((point) => havKm([lat, lng], [Number(point.lat), Number(point.lng)])).sort((a, b) => a - b);
+  const typical = distances[Math.min(distances.length - 1, Math.floor(distances.length * 0.9))];
+  return { lat, lng, radius: Math.min(7, Math.max(3.5, typical + 2)) };
 }
 
 function matchName(csvName, localNames) {
@@ -135,12 +125,15 @@ function matchName(csvName, localNames) {
   const compact = base.replace(/\s+/g, "");
   const spaced = [...localNames].filter((name) => name.replace(/\s+/g, "") === compact);
   if (spaced.length === 1) return spaced;
+  if (base.includes(" ") || base.length >= 6) {
+    const endings = [...new Set([...localNames].filter((name) => name.endsWith(` ${base}`)))];
+    if (endings.length === 1) return endings;
+  }
   return [];
 }
 
 const sql = neon(url);
 
-const bounds = await loadAddrBounds();
 await sql`
   CREATE TABLE IF NOT EXISTS eshkol_osm_streets (
     ashkol text NOT NULL REFERENCES clusters(ashkol) ON DELETE CASCADE,
@@ -156,6 +149,12 @@ const listed = await sql`
 `;
 const settlements = await sql`SELECT name_he, lat, lng FROM settlements`;
 const bySettlement = new Map(settlements.map((row) => [row.name_he, row]));
+const houseRows = await sql`SELECT ashkol, lat, lng FROM eshkol_houses`;
+const housesByAshkol = new Map();
+for (const house of houseRows) {
+  if (!housesByAshkol.has(house.ashkol)) housesByAshkol.set(house.ashkol, []);
+  housesByAshkol.get(house.ashkol).push(house);
+}
 const osm = await sql`
   SELECT id, name_he, lat, lng
   FROM streets
@@ -167,34 +166,22 @@ let matchedRows = 0;
 let missedRows = 0;
 const seen = new Set();
 
-const towns = new Map();
+const byAshkol = new Map();
 for (const row of listed) {
-  if (!towns.has(row.settlement_name)) towns.set(row.settlement_name, []);
-  towns.get(row.settlement_name).push(row);
+  if (!byAshkol.has(row.ashkol)) byAshkol.set(row.ashkol, []);
+  byAshkol.get(row.ashkol).push(row);
 }
 
-for (const [settlement, rows] of towns) {
-  const addr = bounds.get(settlement);
-  const place = bySettlement.get(settlement);
-  let box = addr;
-  if (!box && place) {
-    box = {
-      minLat: Number(place.lat) - 0.02,
-      maxLat: Number(place.lat) + 0.02,
-      minLng: Number(place.lng) - 0.02,
-      maxLng: Number(place.lng) + 0.02,
-    };
-  }
-  if (!box) {
+for (const [ashkol, rows] of byAshkol) {
+  const place = bySettlement.get(rows[0].settlement_name);
+  const area = areaFor(housesByAshkol.get(ashkol) ?? [], place);
+  if (!area) {
     missedRows += rows.length;
     continue;
   }
-  const area = pad(box, 1.5);
   const local = new Map();
   for (const street of osm) {
-    if (street.lat < area.minLat || street.lat > area.maxLat || street.lng < area.minLng || street.lng > area.maxLng) {
-      continue;
-    }
+    if (havKm([area.lat, area.lng], [street.lat, street.lng]) > area.radius) continue;
     const name = normStreet(street.name_he);
     if (!name) continue;
     if (!local.has(name)) local.set(name, []);
