@@ -13,6 +13,7 @@
     "build:streets": "node scripts/build-streets.mjs",
     "import:cluster-streets": "node scripts/import-cluster-streets.mjs",
     "import:eshkol-houses": "node scripts/import-eshkol-houses.mjs",
+    "link:eshkol-streets": "node scripts/link-eshkol-osm-streets.mjs",
     "db:search-index": "node scripts/ensure-street-search-index.mjs",
     "db:schema": "node scripts/apply-schema.mjs",
     "import:institutions": "node scripts/import-institutions.mjs"

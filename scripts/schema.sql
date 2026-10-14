@@ -289,3 +289,15 @@ CREATE INDEX IF NOT EXISTS eshkol_houses_settlement_idx
 
 CREATE INDEX IF NOT EXISTS eshkol_houses_ashkol_idx
   ON eshkol_houses (ashkol);
+
+-- OSM ways matched to an eshkol's street name. One way can belong to several eshkols,
+-- so this is not stored on streets.ashkol.
+CREATE TABLE IF NOT EXISTS eshkol_osm_streets (
+  ashkol text NOT NULL REFERENCES clusters(ashkol) ON DELETE CASCADE,
+  street_name text NOT NULL,
+  street_id text NOT NULL REFERENCES streets(id) ON DELETE CASCADE,
+  PRIMARY KEY (ashkol, street_name, street_id)
+);
+
+CREATE INDEX IF NOT EXISTS eshkol_osm_streets_ashkol_idx
+  ON eshkol_osm_streets (ashkol);
