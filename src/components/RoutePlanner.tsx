@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
 import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
-import { formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
+import { arrowMarksEvery, formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
 
 /** Stage colors stay off blue, green, gold, cyan, orange, red, and near-black. */
 const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
@@ -122,6 +122,13 @@ function toFeatures(
           },
           geometry: { type: "LineString", coordinates },
         });
+        for (const mark of arrowMarksEvery(coordinates, 40)) {
+          features.push({
+            type: "Feature",
+            properties: { kind: "arrow", bearing: mark.bearing },
+            geometry: { type: "Point", coordinates: [mark.lng, mark.lat] },
+          });
+        }
         const last = coordinates[coordinates.length - 1]!;
         const mid = coordinates[Math.floor((coordinates.length - 1) / 2)]!;
         const selected = picked?.stage === stage.stage_no && picked.index === index;

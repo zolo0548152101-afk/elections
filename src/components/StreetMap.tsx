@@ -311,33 +311,29 @@ function addMapOverlays(map: MapLibreMap) {
     type: "line",
     source: "route",
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.95 },
+    paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.95 },
   });
   map.addLayer({
     id: "route-line",
     type: "line",
     source: "route",
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": ["get", "color"], "line-width": 9, "line-opacity": 1 },
+    paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-opacity": 1 },
   });
   map.addLayer({
     id: "route-arrows",
     type: "symbol",
-    source: "arrows",
+    source: "route",
+    filter: ["==", ["get", "kind"], "arrow"],
     layout: {
       "icon-image": "route-dir",
-      "icon-size": ["coalesce", ["get", "scale"], 0.55],
+      "icon-size": 0.8,
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "icon-keep-upright": false,
       "icon-rotate": ["get", "bearing"],
       "icon-rotation-alignment": "map",
       "icon-pitch-alignment": "viewport",
-    },
-    paint: {
-      "icon-color": "#111111",
-      "icon-halo-color": "#ffffff",
-      "icon-halo-width": 2,
     },
   });
   map.addLayer({
@@ -346,7 +342,7 @@ function addMapOverlays(map: MapLibreMap) {
     source: "pin",
     layout: {
       "icon-image": "place-pin",
-      "icon-size": 1,
+      "icon-size": 0.25,
       "icon-anchor": "bottom",
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
@@ -682,16 +678,19 @@ export function StreetMap({
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.clearRect(0, 0, size, size);
-          ctx.fillStyle = "#fff";
+          ctx.fillStyle = "#111111";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 3;
           ctx.beginPath();
-          // Tip points north. icon-rotate is the street bearing, 0 = north.
-          ctx.moveTo(16, 2);
+          // Tip points north. icon-rotate is the travel bearing, 0 = north.
+          ctx.moveTo(16, 3);
           ctx.lineTo(28, 28);
           ctx.lineTo(16, 21);
           ctx.lineTo(4, 28);
           ctx.closePath();
           ctx.fill();
-          map.addImage("route-dir", ctx.getImageData(0, 0, size, size), { sdf: true });
+          ctx.stroke();
+          map.addImage("route-dir", ctx.getImageData(0, 0, size, size));
         }
       }
       setStatus("לחצו על רחוב לסימון");
@@ -1567,30 +1566,6 @@ export function StreetMap({
     const apply = () => {
       const src = map.getSource("route") as GeoJSONSource | undefined;
       src?.setData({ type: "FeatureCollection", features: routeFeatures });
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
-  }, [routeFeatures]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      const src = map.getSource("arrows") as GeoJSONSource | undefined;
-      if (!src) return;
-      // Street geometry is not a route. A ring's first and last points are the
-      // same corner, and walking arrows around it makes that corner look like
-      // both the start and the end. Arrows belong only to a stretched segment.
-      const features = routeFeatures.flatMap((feature) => {
-        if (feature.properties?.kind !== "draw" || feature.geometry.type !== "LineString") return [];
-        return arrowMarksEvery(feature.geometry.coordinates as number[][], 40).map((mark) => ({
-          type: "Feature" as const,
-          properties: { bearing: mark.bearing, kind: "arrow", scale: 0.55 },
-          geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
-        }));
-      });
-      src.setData({ type: "FeatureCollection", features });
-      map.triggerRepaint();
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);

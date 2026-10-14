@@ -1390,6 +1390,26 @@ tbody tr.cluster-row-selected:hover {
   width: min(200px, calc(75vw - 40px));
 }
 
+/* A phone held sideways is short. The menu drops from the top, at most a quarter of the height. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .route-map-menu.is-open {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    bottom: auto;
+    width: auto;
+    max-width: none;
+    height: 25vh;
+    max-height: 25vh;
+  }
+
+  .street-map-stage:has(.route-map-menu.is-open) .map-side-panel {
+    top: calc(25vh + 16px);
+    right: 8px;
+    width: min(200px, 40vw);
+  }
+}
+
 .map-side-panel {
   position: absolute;
   z-index: 5;
