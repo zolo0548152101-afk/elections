@@ -1142,6 +1142,7 @@ export function RoutePlanner({
                     <button
                       type="button"
                       className="route-more-name route-resume"
+                      data-tip="מקטע"
                       aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
                       onClick={() => {
                         if (ateHoldClick()) return;
@@ -1153,7 +1154,7 @@ export function RoutePlanner({
                             kind: "draw",
                             stageNo: stage.stage_no,
                             index,
-                            label: `מקטע ${index + 1}`,
+                            label: `מ.${index + 1}`,
                           }),
                         )
                       }
@@ -1162,7 +1163,7 @@ export function RoutePlanner({
                       onPointerCancel={endRemove}
                       onContextMenu={(event) => event.preventDefault()}
                     >
-                      מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
+                      מ.{index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
                     </button>
                   </div>
                 ))}
@@ -1204,7 +1205,7 @@ export function RoutePlanner({
         <div className="route-remove-pop" role="dialog" aria-label="הסרה">
           <p>
             {removeAsk.kind === "stage"
-              ? `האם אתה בטוח שאתה רוצה למחוק את ${removeAsk.label}?`
+              ? `בטוח למחוק שלב ${removeAsk.stageNo}?`
               : `להסיר את ${removeAsk.label}?`}
           </p>
           <button type="button" className="route-btn" onClick={confirmRemove}>

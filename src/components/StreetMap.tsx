@@ -970,7 +970,10 @@ export function StreetMap({
       if (pendingLeg && Math.hypot(e.point.x - pendingLeg.x, e.point.y - pendingLeg.y) > 8) {
         const leg = pendingLeg;
         pendingLeg = null;
-        clearPress();
+        if (pressTimer != null) {
+          window.clearTimeout(pressTimer);
+          pressTimer = null;
+        }
         const hit = closestInsert(leg.coordinates, e.lngLat.lng, e.lngLat.lat);
         if (hit) {
           const vertex =
@@ -983,17 +986,23 @@ export function StreetMap({
           stretchDrag = { stage: leg.stage, draw: leg.draw, vertex, moved: true };
         }
       }
-      if (stretchDrag && pressAt && Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 6) {
-        clearPress();
-        stretchDrag = { ...stretchDrag, moved: true };
-        routeApiRef.current?.moveStretchVertex(
-          stretchDrag.stage,
-          stretchDrag.draw,
-          stretchDrag.vertex,
-          e.lngLat.lng,
-          e.lngLat.lat,
-          false,
-        );
+      if (stretchDrag) {
+        const dragged = pressAt != null && Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 4;
+        if (dragged || stretchDrag.moved) {
+          if (pressTimer != null) {
+            window.clearTimeout(pressTimer);
+            pressTimer = null;
+          }
+          stretchDrag = { ...stretchDrag, moved: true };
+          routeApiRef.current?.moveStretchVertex(
+            stretchDrag.stage,
+            stretchDrag.draw,
+            stretchDrag.vertex,
+            e.lngLat.lng,
+            e.lngLat.lat,
+            false,
+          );
+        }
       } else if (pressAt && pressTimer != null && Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 40) {
         clearPress();
       }

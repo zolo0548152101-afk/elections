@@ -1288,13 +1288,15 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .route-map-menu.is-open {
-  bottom: 0;
+  bottom: auto;
+  height: auto;
+  max-height: calc(100% - 52px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   width: var(--route-menu-width);
   max-width: var(--route-menu-width);
-  overflow: hidden;
+  overflow: auto;
   background: rgba(255, 255, 255, 0.96);
   color: var(--ink);
   border-radius: 0;
@@ -1352,6 +1354,7 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .route-icon-btn[data-tip],
+.route-more-name[data-tip],
 .route-menu-toggle[data-tip],
 .map-full-btn[data-tip] {
   position: relative;
@@ -1359,6 +1362,8 @@ tbody tr.cluster-row-selected:hover {
 
 .route-icon-btn[data-tip]:hover::after,
 .route-icon-btn[data-tip]:focus-visible::after,
+.route-more-name[data-tip]:hover::after,
+.route-more-name[data-tip]:focus-visible::after,
 .route-menu-toggle[data-tip]:hover::after,
 .route-menu-toggle[data-tip]:focus-visible::after,
 .map-full-btn[data-tip]:hover::after,
@@ -1402,16 +1407,17 @@ tbody tr.cluster-row-selected:hover {
   z-index: 6;
   top: 8px;
   right: 8px;
-  min-height: 40px;
+  min-height: 28px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #fff;
   color: var(--ink);
   box-shadow: var(--shadow);
   font: inherit;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
-  padding: 0 0.75rem;
+  padding: 0 0.45rem;
 }
 
 .map-full-btn:focus-visible {
