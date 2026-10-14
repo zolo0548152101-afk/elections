@@ -1003,6 +1003,7 @@ export function StreetMap({
     }
 
     map.on("click", (e) => {
+      setPin({ lng: e.lngLat.lng, lat: e.lngLat.lat });
       if (startLong) {
         startLong = false;
         return;
@@ -1512,12 +1513,23 @@ export function StreetMap({
 
   useEffect(() => {
     routeModeRef.current = routeMode;
-    if (routeMode !== "point") setPin(null);
     const map = mapRef.current;
     if (!map) return;
     if (routeMode === "stretch") map.doubleClickZoom.disable();
     else map.doubleClickZoom.enable();
   }, [routeMode]);
+
+  useEffect(() => {
+    function leaveMarking(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".street-map-canvas")) return;
+      if (target.closest(".route-icon-row")) return;
+      setRouteMode("off");
+    }
+    document.addEventListener("pointerdown", leaveMarking);
+    return () => document.removeEventListener("pointerdown", leaveMarking);
+  }, []);
 
   useEffect(() => {
     setRouteMode("off");
@@ -2751,7 +2763,12 @@ export function StreetMap({
               aria-expanded={menuOpen}
               aria-label={menuOpen ? "סגור מסלול" : "פתח מסלול"}
               data-tip={menuOpen ? "סוגרים את תפריט המסלול" : "פותחים את תפריט המסלול"}
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={() =>
+                setMenuOpen((open) => {
+                  if (open) setRouteMode("off");
+                  return !open;
+                })
+              }
             >
               {menuOpen ? "סגור" : "מסלול"}
             </button>

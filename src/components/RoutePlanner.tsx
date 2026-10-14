@@ -830,9 +830,9 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn"
-          aria-label={stageFilter === "all" ? "סינון שלבים" : `סינון: שלב ${stageFilter}`}
+          aria-label="סינון לפי שלבים"
           aria-expanded={filterOpen}
-          data-tip="סינון לפי שלב"
+          data-tip="סינון לפי שלבים"
           onClick={() => {
             onMode("off");
             setFilterOpen((open) => !open);
@@ -844,8 +844,8 @@ export function RoutePlanner({
           type="button"
           className="route-icon-btn"
           aria-pressed={mode === "stretch"}
-          aria-label="מסלול"
-          data-tip="מסלול. לחיצה כפולה מסיימת"
+          aria-label="הוספת מסלול"
+          data-tip="הוספת מסלול"
           onClick={() => onMode(mode === "stretch" ? "off" : "stretch")}
         >
           <RouteMark />
@@ -854,8 +854,8 @@ export function RoutePlanner({
           type="button"
           className="route-icon-btn"
           aria-pressed={mode === "point"}
-          aria-label="נקודת השלב"
-          data-tip="מזיזים את נקודת השלב הנוכחי"
+          aria-label="סימון נקודת התחלה/קיבוץ"
+          data-tip="סימון נקודת התחלה/קיבוץ"
           onClick={() => onMode(mode === "point" ? "off" : "point")}
         >
           <PointMark />
@@ -863,8 +863,8 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn"
-          aria-label="שלב חדש"
-          data-tip="שלב חדש"
+          aria-label="הוספת שלב"
+          data-tip="הוספת שלב"
           onClick={() => addStage()}
         >
           +
