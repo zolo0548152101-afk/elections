@@ -16,14 +16,6 @@ export function stageColor(stageNo: number) {
   return STAGE_COLORS[(Math.max(stageNo, 1) - 1) % STAGE_COLORS.length]!;
 }
 
-function FilterMark() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path d="M4 5 H20 L14 12 V19 L10 17 V12 Z" fill="currentColor" />
-    </svg>
-  );
-}
-
 function RouteMark() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -249,7 +241,6 @@ export function RoutePlanner({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [stageFilter, setStageFilter] = useState<number | "all">("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [openStage, setOpenStage] = useState<number | null>(null);
   const [pickedDraw, setPickedDraw] = useState<{ stage: number; index: number } | null>(null);
   const [noteEdit, setNoteEdit] = useState<
@@ -952,19 +943,6 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn"
-          aria-label="סינון לפי שלבים"
-          aria-expanded={filterOpen}
-          data-tip="סינון לפי שלבים"
-          onClick={() => {
-            onMode("off");
-            setFilterOpen((open) => !open);
-          }}
-        >
-          <FilterMark />
-        </button>
-        <button
-          type="button"
-          className="route-icon-btn"
           aria-pressed={mode === "stretch"}
           aria-label="הוספת מסלול"
           data-tip="הוספת מסלול"
@@ -992,35 +970,6 @@ export function RoutePlanner({
           +
         </button>
       </div>
-      {filterOpen ? (
-        <div className="route-filter-menu" role="menu">
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={stageFilter === "all"}
-            onClick={() => {
-              setStageFilter("all");
-              setFilterOpen(false);
-            }}
-          >
-            הכל
-          </button>
-          {stages.map((stage) => (
-            <button
-              key={stage.stage_no}
-              type="button"
-              role="menuitemradio"
-              aria-checked={stageFilter === stage.stage_no}
-              onClick={() => {
-                setStageFilter(stage.stage_no);
-                setFilterOpen(false);
-              }}
-            >
-              שלב {stage.stage_no}
-            </button>
-          ))}
-        </div>
-      ) : null}
       {error ? (
         <p className="form-msg form-msg-err" role="alert">
           {error}
@@ -1142,7 +1091,6 @@ export function RoutePlanner({
                     <button
                       type="button"
                       className="route-more-name route-resume"
-                      data-tip="מקטע"
                       aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
                       onClick={() => {
                         if (ateHoldClick()) return;

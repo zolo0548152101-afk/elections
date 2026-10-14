@@ -1354,7 +1354,6 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .route-icon-btn[data-tip],
-.route-more-name[data-tip],
 .route-menu-toggle[data-tip],
 .map-full-btn[data-tip] {
   position: relative;
@@ -1362,8 +1361,6 @@ tbody tr.cluster-row-selected:hover {
 
 .route-icon-btn[data-tip]:hover::after,
 .route-icon-btn[data-tip]:focus-visible::after,
-.route-more-name[data-tip]:hover::after,
-.route-more-name[data-tip]:focus-visible::after,
 .route-menu-toggle[data-tip]:hover::after,
 .route-menu-toggle[data-tip]:focus-visible::after,
 .map-full-btn[data-tip]:hover::after,
