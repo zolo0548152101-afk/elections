@@ -1,5 +1,4 @@
 import type { getSql } from "@/lib/db";
-import { offsetWithinSettlement } from "@/lib/geo";
 import type { SessionUser } from "@/lib/auth";
 
 type Sql = ReturnType<typeof getSql>;
@@ -154,9 +153,13 @@ async function sectionsFor(
   const clusters = (await sql`
     SELECT c.ashkol, c.settlement_name, c.bzb, c.voters, c.valid,
            c.turnout_pct, c.right_votes, c.right_pct, c.ballot_count,
-           s.lat, s.lng
+           h.lat, h.lng
     FROM clusters c
-    LEFT JOIN settlements s ON s.name_he = c.settlement_name
+    LEFT JOIN (
+      SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
+      FROM eshkol_houses
+      GROUP BY ashkol
+    ) h ON h.ashkol = c.ashkol
     WHERE c.ashkol = ANY(${ashkols})
   `) as ClusterSql[];
   const byAshkol = new Map(clusters.map((c) => [c.ashkol, c]));
@@ -213,8 +216,7 @@ async function sectionsFor(
     if (!row) continue;
     const lat = row.lat == null ? null : num(row.lat);
     const lng = row.lng == null ? null : num(row.lng);
-    const marker =
-      lat != null && lng != null ? offsetWithinSettlement(lat, lng, ashkol) : null;
+    const marker = lat != null && lng != null ? { lat, lng } : null;
     const total = countByAshkol.get(ashkol) ?? 0;
     sections.push({
       institutions: grouped.get(ashkol) ?? [],

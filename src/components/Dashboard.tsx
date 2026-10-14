@@ -31,9 +31,9 @@ type SortKey =
   | "likud_votes";
 
 export function Dashboard() {
-  const [minRight, setMinRight] = useState(70);
-  const [maxTurnout, setMaxTurnout] = useState(60);
-  const [minBzb, setMinBzb] = useState(300);
+  const [minRight, setMinRight] = useState(0);
+  const [maxTurnout, setMaxTurnout] = useState(100);
+  const [minBzb, setMinBzb] = useState(0);
   const [minLikud, setMinLikud] = useState(0);
   const [sort, setSort] = useState<SortKey>("right_pct");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
@@ -236,13 +236,13 @@ export function Dashboard() {
               type="button"
               className="reset"
               onClick={() => {
-                setMinRight(70);
-                setMaxTurnout(60);
-                setMinBzb(300);
+                setMinRight(0);
+                setMaxTurnout(100);
+                setMinBzb(0);
                 setMinLikud(0);
               }}
             >
-              ברירת מחדל 70 / 60 / 300 / 0
+              הצג את כל האשכולות
             </button>
             <button
               type="button"

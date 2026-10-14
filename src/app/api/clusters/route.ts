@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getSql, type ClusterRow } from "@/lib/db";
-import { offsetWithinSettlement } from "@/lib/geo";
 import { visibleClusterAshkols } from "@/lib/streets-access";
 import {
   ashkolStreetStatsForUser,
@@ -17,9 +16,9 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const minRight = Number(sp.get("minRight") ?? "70");
-  const maxTurnout = Number(sp.get("maxTurnout") ?? "60");
-  const minBzb = Number(sp.get("minBzb") ?? "300");
+  const minRight = Number(sp.get("minRight") ?? "0");
+  const maxTurnout = Number(sp.get("maxTurnout") ?? "100");
+  const minBzb = Number(sp.get("minBzb") ?? "0");
   const minLikud = Number(sp.get("minLikud") ?? "0");
   const sort = sp.get("sort") ?? "right_pct";
   const dir = sp.get("dir") === "asc" ? "ASC" : "DESC";
@@ -56,14 +55,22 @@ export async function GET(req: NextRequest) {
             c.ballot_count,
             c.likud_votes,
             c.likud_pct,
-            s.lat,
-            s.lng
+            h.lat,
+            h.lng
           FROM clusters c
-          LEFT JOIN settlements s ON s.name_he = c.settlement_name
+          LEFT JOIN (
+            SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
+            FROM eshkol_houses
+            GROUP BY ashkol
+          ) h ON h.ashkol = c.ashkol
           WHERE c.right_pct >= ${minRight}
-            AND c.turnout_pct < ${maxTurnout}
+            AND c.turnout_pct <= ${maxTurnout}
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
+            AND (
+              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
+              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
+            )
         `
       : ashkols.length === 0
         ? []
@@ -81,15 +88,23 @@ export async function GET(req: NextRequest) {
             c.ballot_count,
             c.likud_votes,
             c.likud_pct,
-            s.lat,
-            s.lng
+            h.lat,
+            h.lng
           FROM clusters c
-          LEFT JOIN settlements s ON s.name_he = c.settlement_name
+          LEFT JOIN (
+            SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
+            FROM eshkol_houses
+            GROUP BY ashkol
+          ) h ON h.ashkol = c.ashkol
           WHERE c.right_pct >= ${minRight}
-            AND c.turnout_pct < ${maxTurnout}
+            AND c.turnout_pct <= ${maxTurnout}
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
             AND c.ashkol = ANY(${ashkols})
+            AND (
+              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
+              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
+            )
         `
   ) as ClusterRow[];
 
@@ -123,8 +138,7 @@ export async function GET(req: NextRequest) {
     if (c.lat == null || c.lng == null) {
       return { ...c, map_lat: null, map_lng: null, ...status };
     }
-    const p = offsetWithinSettlement(c.lat, c.lng, c.ashkol);
-    return { ...c, map_lat: p.lat, map_lng: p.lng, ...status };
+    return { ...c, map_lat: Number(c.lat), map_lng: Number(c.lng), ...status };
   });
 
   return NextResponse.json({
