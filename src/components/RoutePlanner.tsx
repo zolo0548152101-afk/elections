@@ -223,6 +223,7 @@ export function RoutePlanner({
   onStages,
   onActive,
   onDrawDone,
+  onShowStage,
   bindRef,
 }: {
   ashkol: string;
@@ -238,6 +239,7 @@ export function RoutePlanner({
   ) => void;
   onActive: (stageNo: number | null) => void;
   onDrawDone?: (draw: { stageNo: number; index: number; coordinates: number[][]; done: boolean }) => void;
+  onShowStage?: (points: [number, number][]) => void;
   bindRef: React.MutableRefObject<RouteApi | null>;
 }) {
   const [stages, setStages] = useState<RouteStage[]>([]);
@@ -259,6 +261,8 @@ export function RoutePlanner({
   const saveTail = useRef<Promise<void>>(Promise.resolve());
   const onDrawDoneRef = useRef(onDrawDone);
   onDrawDoneRef.current = onDrawDone;
+  const onShowRef = useRef(onShowStage);
+  onShowRef.current = onShowStage;
   const ashkolRef = useRef(ashkol);
   const ticket = useRef(0);
   const onFeaturesRef = useRef(onFeatures);
@@ -406,6 +410,19 @@ export function RoutePlanner({
         ],
       };
     });
+  }
+
+  function revealStage(stageNo: number) {
+    const stage = stagesRef.current.find((item) => Number(item.stage_no) === Number(stageNo));
+    if (!stage || !onShowRef.current) return;
+    const points: [number, number][] = [];
+    for (const draw of asDraws(stage.draws)) {
+      for (const coord of draw.coordinates ?? []) {
+        if (coord.length >= 2) points.push([coord[0]!, coord[1]!]);
+      }
+    }
+    if (stage.point) points.push([stage.point.lng, stage.point.lat]);
+    onShowRef.current(points);
   }
 
   bindRef.current = {
@@ -652,6 +669,7 @@ export function RoutePlanner({
       setActive(stageNo);
       setOpenStage(stageNo);
       onMode("off");
+      revealStage(stageNo);
     },
     splitStretch(stageNo, drawIndex, vertex) {
       const next = stagesRef.current.map((stage) => {
@@ -932,6 +950,7 @@ export function RoutePlanner({
                 setActive(stage.stage_no);
                 activeRef.current = stage.stage_no;
                 onMode("off");
+                revealStage(stage.stage_no);
               }}
             >
               <button
@@ -955,6 +974,7 @@ export function RoutePlanner({
                   activeRef.current = stage.stage_no;
                   setOpenStage(expanded ? null : stage.stage_no);
                   onMode("off");
+                  revealStage(stage.stage_no);
                 }}
               >
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>
@@ -970,6 +990,7 @@ export function RoutePlanner({
                     onClick={(event) => {
                       event.stopPropagation();
                       bindRef.current?.selectStretch(stage.stage_no, index);
+                      revealStage(stage.stage_no);
                     }}
                   >
                     מסלול {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}

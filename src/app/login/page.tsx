@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormMsg } from "@/components/FormMsg";
 import { useTimedFlash } from "@/hooks/useTimedFlash";
@@ -13,6 +13,40 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const infoFlash = useTimedFlash(5000);
   const [loading, setLoading] = useState(false);
+  const [previewEntry, setPreviewEntry] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/preview-entry")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.enabled) setPreviewEntry(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function enterAs(role: "super_admin" | "area_manager" | "coordinator") {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/preview-entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "שגיאה");
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +99,24 @@ export default function LoginPage() {
         className="login-card"
         onSubmit={mode === "login" ? onLogin : onForgot}
       >
-        <h1>{mode === "login" ? "התחברות" : "סיסמה זמנית"}</h1>
+        <h1>{previewEntry ? "כניסה לבדיקה" : mode === "login" ? "התחברות" : "סיסמה זמנית"}</h1>
+        {previewEntry ? (
+          <>
+            <p className="lede">מה אני רוצה להתחבר?</p>
+            {error && <FormMsg kind="err">{error}</FormMsg>}
+            <button type="button" className="export" disabled={loading} onClick={() => void enterAs("super_admin")}>
+              מנהל
+            </button>
+            <button type="button" className="export" disabled={loading} onClick={() => void enterAs("area_manager")}>
+              רכז על
+            </button>
+            <button type="button" className="export" disabled={loading} onClick={() => void enterAs("coordinator")}>
+              רכז
+            </button>
+          </>
+        ) : null}
+        {!previewEntry ? (
+          <>
         <p className="lede">
           {mode === "login"
             ? "ניהול יום בחירות"
@@ -121,6 +172,8 @@ export default function LoginPage() {
         >
           {mode === "login" ? "שכחתי סיסמה / כניסה חד-פעמית" : "חזרה להתחברות"}
         </button>
+          </>
+        ) : null}
       </form>
     </main>
   );

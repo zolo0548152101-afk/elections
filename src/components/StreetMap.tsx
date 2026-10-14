@@ -523,6 +523,7 @@ export function StreetMap({
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
   const [menuOpen, setMenuOpen] = useState(true);
+  const [mapFull, setMapFull] = useState(false);
   const [pin, setPin] = useState<{ lng: number; lat: number } | null>(null);
   const [panel, setPanel] = useState<
     | {
@@ -1534,6 +1535,35 @@ export function StreetMap({
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   }, [focusAshkol, focusAshkolToken, clusters]);
+
+  function showStage(points: [number, number][]) {
+    const map = mapRef.current;
+    if (!map || points.length === 0) return;
+    const apply = () => {
+      if (points.length === 1) {
+        map.flyTo({ center: points[0]!, zoom: 16 });
+        return;
+      }
+      const lngs = points.map((p) => p[0]);
+      const lats = points.map((p) => p[1]);
+      map.fitBounds(
+        [
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)],
+        ],
+        { padding: 80, maxZoom: 16 },
+      );
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = window.requestAnimationFrame(() => map.resize());
+    return () => window.cancelAnimationFrame(id);
+  }, [mapFull]);
 
   useEffect(() => {
     routeModeRef.current = routeMode;
@@ -2755,7 +2785,17 @@ export function StreetMap({
           )}
         </aside>
       </div>
-      <div className="street-map-stage">
+      <div className={mapFull ? "street-map-stage is-full" : "street-map-stage"}>
+        <button
+          type="button"
+          className="map-full-btn"
+          aria-pressed={mapFull}
+          aria-label={mapFull ? "יציאה ממסך מלא" : "מסך מלא"}
+          data-tip={mapFull ? "המפה חוזרת למקום" : "המפה על כל המסך"}
+          onClick={() => setMapFull((full) => !full)}
+        >
+          {mapFull ? "חזור" : "מסך מלא"}
+        </button>
         {picked ? (
           <aside className={menuOpen ? "route-map-menu is-open" : "route-map-menu"}>
             <button
@@ -2783,6 +2823,7 @@ export function StreetMap({
               onDrawDone={(draw) => {
                 if (draw.done) void markStreetsAlong(draw.coordinates);
               }}
+              onShowStage={showStage}
               onStages={(stages) => {
                 setRouteStages(
                   stages.map((stage) => ({ stage_no: stage.stage_no, hasPoint: stage.hasPoint })),

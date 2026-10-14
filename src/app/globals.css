@@ -1348,14 +1348,17 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .route-icon-btn[data-tip],
-.route-menu-toggle[data-tip] {
+.route-menu-toggle[data-tip],
+.map-full-btn[data-tip] {
   position: relative;
 }
 
 .route-icon-btn[data-tip]:hover::after,
 .route-icon-btn[data-tip]:focus-visible::after,
 .route-menu-toggle[data-tip]:hover::after,
-.route-menu-toggle[data-tip]:focus-visible::after {
+.route-menu-toggle[data-tip]:focus-visible::after,
+.map-full-btn[data-tip]:hover::after,
+.map-full-btn[data-tip]:focus-visible::after {
   content: attr(data-tip);
   position: absolute;
   z-index: 8;
@@ -1390,8 +1393,44 @@ tbody tr.cluster-row-selected:hover {
   width: min(200px, calc(75vw - 40px));
 }
 
-/* A phone held sideways is short. The menu drops from the top, at most a quarter of the height. */
-@media (orientation: landscape) and (max-height: 520px) {
+.map-full-btn {
+  position: absolute;
+  z-index: 6;
+  bottom: 16px;
+  left: 12px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 0.75rem;
+}
+
+.map-full-btn:focus-visible {
+  outline: 2px solid #6d28d9;
+  outline-offset: 2px;
+}
+
+.street-map-stage.is-full {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #0f1720;
+}
+
+.street-map-stage.is-full .street-map-canvas,
+.street-map-stage.is-full .map-fallback {
+  height: 100%;
+  border-radius: 0;
+}
+
+/* Phone upright, or a short landscape phone: the menu drops from the top. */
+@media (orientation: portrait) and (max-width: 800px),
+       (orientation: landscape) and (max-height: 520px) {
   .route-map-menu.is-open {
     top: 8px;
     right: 8px;
