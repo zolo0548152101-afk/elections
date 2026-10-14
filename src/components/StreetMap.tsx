@@ -321,22 +321,6 @@ function addMapOverlays(map: MapLibreMap) {
     paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-opacity": 1 },
   });
   map.addLayer({
-    id: "route-arrows",
-    type: "symbol",
-    source: "route",
-    filter: ["==", ["get", "kind"], "arrow"],
-    layout: {
-      "icon-image": "route-dir",
-      "icon-size": 0.8,
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-      "icon-keep-upright": false,
-      "icon-rotate": ["get", "bearing"],
-      "icon-rotation-alignment": "map",
-      "icon-pitch-alignment": "viewport",
-    },
-  });
-  map.addLayer({
     id: "proposed-pin",
     type: "symbol",
     source: "pin",
@@ -444,6 +428,22 @@ function addMapOverlays(map: MapLibreMap) {
       "text-color": "#102033",
       "text-halo-color": "#ffffff",
       "text-halo-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "route-arrows",
+    type: "symbol",
+    source: "route",
+    filter: ["==", ["get", "kind"], "arrow"],
+    layout: {
+      "icon-image": "route-dir",
+      "icon-size": 1,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+      "icon-keep-upright": false,
+      "icon-rotate": ["get", "bearing"],
+      "icon-rotation-alignment": "map",
+      "icon-pitch-alignment": "viewport",
     },
   });
 }
@@ -642,12 +642,6 @@ export function StreetMap({
     map.addControl(new NavigationControl(), "top-left");
     let overlayBound = false;
     map.on("load", () => {
-      addMapOverlays(map);
-      if (mapStateRef.current) applyStreetState(map, mapStateRef.current, doneIdsRef.current);
-      if (!overlayBound) {
-        overlayBound = true;
-        bindOverlayInteractions();
-      }
       if (!map.hasImage("place-pin")) {
         const w = 48;
         const h = 64;
@@ -683,7 +677,6 @@ export function StreetMap({
           ctx.strokeStyle = "#ffffff";
           ctx.lineWidth = 3;
           ctx.beginPath();
-          // Tip points north. icon-rotate is the travel bearing, 0 = north.
           ctx.moveTo(16, 3);
           ctx.lineTo(28, 28);
           ctx.lineTo(16, 21);
@@ -693,6 +686,12 @@ export function StreetMap({
           ctx.stroke();
           map.addImage("route-dir", ctx.getImageData(0, 0, size, size));
         }
+      }
+      addMapOverlays(map);
+      if (mapStateRef.current) applyStreetState(map, mapStateRef.current, doneIdsRef.current);
+      if (!overlayBound) {
+        overlayBound = true;
+        bindOverlayInteractions();
       }
       setStatus("לחצו על רחוב לסימון");
     });
