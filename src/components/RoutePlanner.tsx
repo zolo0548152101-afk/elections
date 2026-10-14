@@ -257,6 +257,19 @@ export function RoutePlanner({
     | { kind: "point"; stageNo: number; title: string }
     | null
   >(null);
+  const [removeAsk, setRemoveAsk] = useState<
+    | { kind: "stage"; stageNo: number; label: string }
+    | { kind: "draw"; stageNo: number; index: number; label: string }
+    | { kind: "point"; stageNo: number; label: string }
+    | { kind: "street"; stageNo: number; streetId: string; label: string }
+    | null
+  >(null);
+  const holdRef = useRef<{ timer: number | null; fired: boolean; x: number; y: number }>({
+    timer: null,
+    fired: false,
+    x: 0,
+    y: 0,
+  });
   const stagesRef = useRef(stages);
   const activeRef = useRef(active);
   const chainRef = useRef<{ stageNo: number; index: number } | null>(null);
@@ -412,6 +425,78 @@ export function RoutePlanner({
         ],
       };
     });
+  }
+
+  function showPoint(stageNo: number) {
+    const stage = stagesRef.current.find((item) => Number(item.stage_no) === Number(stageNo));
+    if (!stage?.point || !onShowRef.current) return;
+    setActive(stage.stage_no);
+    activeRef.current = stage.stage_no;
+    onShowRef.current([[stage.point.lng, stage.point.lat]]);
+  }
+
+  function pressRemove(event: React.PointerEvent, open: () => void) {
+    const hold = holdRef.current;
+    hold.fired = false;
+    hold.x = event.clientX;
+    hold.y = event.clientY;
+    if (hold.timer != null) window.clearTimeout(hold.timer);
+    hold.timer = window.setTimeout(() => {
+      hold.fired = true;
+      hold.timer = null;
+      open();
+      const swallow = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        hold.fired = false;
+      };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+    }, 550);
+  }
+
+  function moveRemove(event: React.PointerEvent) {
+    const hold = holdRef.current;
+    if (hold.timer == null) return;
+    if (Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 8) {
+      window.clearTimeout(hold.timer);
+      hold.timer = null;
+    }
+  }
+
+  function endRemove() {
+    const hold = holdRef.current;
+    if (hold.timer != null) window.clearTimeout(hold.timer);
+    hold.timer = null;
+  }
+
+  function ateHoldClick() {
+    if (!holdRef.current.fired) return false;
+    holdRef.current.fired = false;
+    return true;
+  }
+
+  function removeStage(stageNo: number) {
+    const target = Number(stageNo);
+    const next = stagesRef.current.filter((stage) => Number(stage.stage_no) !== target);
+    if (Number(activeRef.current) === target) {
+      const fallback = next[0]?.stage_no ?? null;
+      activeRef.current = fallback;
+      setActive(fallback);
+    }
+    if (openStage === target) setOpenStage(null);
+    if (stageFilter === target) setStageFilter("all");
+    onMode("off");
+    void persist(next);
+  }
+
+  function confirmRemove() {
+    const ask = removeAsk;
+    setRemoveAsk(null);
+    if (!ask) return;
+    if (ask.kind === "stage") removeStage(ask.stageNo);
+    else if (ask.kind === "draw") bindRef.current?.removeStretch(ask.stageNo, ask.index);
+    else if (ask.kind === "point") clearPoint(ask.stageNo);
+    else removeStreet(ask.stageNo, ask.streetId);
   }
 
   function revealStage(stageNo: number) {
@@ -775,20 +860,6 @@ export function RoutePlanner({
     void persist(next);
   }
 
-  function removeStage(stageNo: number) {
-    const target = Number(stageNo);
-    const next = stagesRef.current.filter((stage) => Number(stage.stage_no) !== target);
-    if (Number(activeRef.current) === target) {
-      const fallback = next[0]?.stage_no ?? null;
-      activeRef.current = fallback;
-      setActive(fallback);
-    }
-    if (openStage === target) setOpenStage(null);
-    if (stageFilter === target) setStageFilter("all");
-    onMode("off");
-    void persist(next);
-  }
-
   function removeStreet(stageNo: number, streetId: string) {
     const next = stagesRef.current.map((stage) =>
       stage.stage_no === stageNo
@@ -980,12 +1051,15 @@ export function RoutePlanner({
             >
               <button
                 type="button"
-                className="route-icon-btn"
+                className="route-stage-x"
                 aria-label={`מחק שלב ${stage.stage_no}`}
-                data-stage={stage.stage_no}
                 onClick={(event) => {
                   event.stopPropagation();
-                  removeStage(Number(event.currentTarget.dataset.stage));
+                  setRemoveAsk({
+                    kind: "stage",
+                    stageNo: stage.stage_no,
+                    label: `שלב ${stage.stage_no}`,
+                  });
                 }}
               >
                 ×
@@ -1009,7 +1083,26 @@ export function RoutePlanner({
               <div className="route-stage-more">
                 {stage.streets.map((street) => (
                   <div className="route-inline" key={street.street_id}>
-                    <span className="route-more-name">{street.name_he}</span>
+                    <button
+                      type="button"
+                      className="route-more-name"
+                      onPointerDown={(event) =>
+                        pressRemove(event, () =>
+                          setRemoveAsk({
+                            kind: "street",
+                            stageNo: stage.stage_no,
+                            streetId: street.street_id,
+                            label: street.name_he,
+                          }),
+                        )
+                      }
+                      onPointerMove={moveRemove}
+                      onPointerUp={endRemove}
+                      onPointerCancel={endRemove}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      {street.name_he}
+                    </button>
                     <button
                       type="button"
                       className="route-icon-btn"
@@ -1042,13 +1135,6 @@ export function RoutePlanner({
                     >
                       הערות
                     </button>
-                    <button
-                      type="button"
-                      className="route-btn"
-                      onClick={() => removeStreet(stage.stage_no, street.street_id)}
-                    >
-                      הסר
-                    </button>
                   </div>
                 ))}
                 {asDraws(stage.draws).map((draw, index) => (
@@ -1057,32 +1143,78 @@ export function RoutePlanner({
                       type="button"
                       className="route-more-name route-resume"
                       aria-pressed={pickedDraw?.stage === stage.stage_no && pickedDraw.index === index}
-                      onClick={() => bindRef.current?.editStretch(stage.stage_no, index)}
+                      onClick={() => {
+                        if (ateHoldClick()) return;
+                        bindRef.current?.editStretch(stage.stage_no, index);
+                      }}
+                      onPointerDown={(event) =>
+                        pressRemove(event, () =>
+                          setRemoveAsk({
+                            kind: "draw",
+                            stageNo: stage.stage_no,
+                            index,
+                            label: `מקטע ${index + 1}`,
+                          }),
+                        )
+                      }
+                      onPointerMove={moveRemove}
+                      onPointerUp={endRemove}
+                      onPointerCancel={endRemove}
+                      onContextMenu={(event) => event.preventDefault()}
                     >
                       מקטע {index + 1} · {formatMeters(lineLengthMeters(draw.coordinates))}
-                    </button>
-                    <button
-                      type="button"
-                      className="route-btn"
-                      onClick={() => bindRef.current?.removeStretch(stage.stage_no, index)}
-                    >
-                      הסר
                     </button>
                   </div>
                 ))}
                 <div className="route-inline">
-                  <span>{stage.point ? pointName(stage.stage_no) : `אין ${pointName(stage.stage_no)}`}</span>
                   {stage.point ? (
-                    <button type="button" className="route-btn" onClick={() => clearPoint(stage.stage_no)}>
-                      הסר נקודה
+                    <button
+                      type="button"
+                      className="route-more-name"
+                      onClick={() => {
+                        if (ateHoldClick()) return;
+                        showPoint(stage.stage_no);
+                      }}
+                      onPointerDown={(event) =>
+                        pressRemove(event, () =>
+                          setRemoveAsk({
+                            kind: "point",
+                            stageNo: stage.stage_no,
+                            label: pointName(stage.stage_no),
+                          }),
+                        )
+                      }
+                      onPointerMove={moveRemove}
+                      onPointerUp={endRemove}
+                      onPointerCancel={endRemove}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      {pointName(stage.stage_no)}
                     </button>
-                  ) : null}
+                  ) : (
+                    <span>{`אין ${pointName(stage.stage_no)}`}</span>
+                  )}
                 </div>
               </div>
             ) : null}
           </article>
         );
       })}
+      {removeAsk ? (
+        <div className="route-remove-pop" role="dialog" aria-label="הסרה">
+          <p>
+            {removeAsk.kind === "stage"
+              ? `האם אתה בטוח שאתה רוצה למחוק את ${removeAsk.label}?`
+              : `להסיר את ${removeAsk.label}?`}
+          </p>
+          <button type="button" className="route-btn" onClick={confirmRemove}>
+            {removeAsk.kind === "stage" ? "מחק" : "הסר"}
+          </button>
+          <button type="button" className="route-btn" onClick={() => setRemoveAsk(null)}>
+            ביטול
+          </button>
+        </div>
+      ) : null}
       {noteEdit ? (
         <div className="note-float-back" onClick={closeNote}>
           <div

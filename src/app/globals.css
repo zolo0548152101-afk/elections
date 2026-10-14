@@ -1275,12 +1275,13 @@ tbody tr.cluster-row-selected:hover {
 
 .street-map-stage {
   position: relative;
+  --route-menu-width: min(180px, 46vw);
 }
 
 .route-map-menu {
   position: absolute;
   z-index: 4;
-  top: 0;
+  top: 52px;
   right: 0;
   width: auto;
   pointer-events: none;
@@ -1291,8 +1292,8 @@ tbody tr.cluster-row-selected:hover {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: min(180px, 46vw);
-  max-width: min(180px, 46vw);
+  width: var(--route-menu-width);
+  max-width: var(--route-menu-width);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.96);
   color: var(--ink);
@@ -1392,15 +1393,15 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .street-map-stage:has(.route-map-menu.is-open) .map-side-panel {
-  right: calc(min(180px, 46vw) + 8px);
-  width: min(200px, calc(100vw - min(180px, 46vw) - 24px));
+  right: calc(var(--route-menu-width) + 8px);
+  width: min(200px, calc(100vw - var(--route-menu-width) - 24px));
 }
 
 .map-full-btn {
   position: absolute;
   z-index: 6;
-  bottom: 16px;
-  left: 12px;
+  top: 8px;
+  right: 8px;
   min-height: 40px;
   border: 0;
   border-radius: 12px;
@@ -1432,6 +1433,7 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .route-map-menu .route-panel {
+  position: relative;
   gap: 0.25rem;
   margin-top: 0;
 }
@@ -1806,9 +1808,29 @@ tbody tr.cluster-row-selected:hover {
 .route-stage-summary {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: flex-start;
+  gap: 2px;
   width: 100%;
-  min-height: 36px;
+  min-height: 28px;
+}
+
+.route-stage-x {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #667085;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.route-stage-x:focus-visible {
+  outline: 2px solid #6d28d9;
+  outline-offset: 2px;
 }
 
 .route-stage-summary > button {
@@ -1913,6 +1935,44 @@ button.route-more-name[aria-pressed="true"] {
 .route-icon-btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.route-remove-pop {
+  position: absolute;
+  z-index: 7;
+  inset-inline: 4px;
+  top: 36px;
+  display: grid;
+  gap: 6px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid rgba(16, 32, 51, 0.16);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 0.45rem;
+  text-align: right;
+}
+
+.route-remove-pop p {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.route-remove-pop .route-btn {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .street-map-stage {
+    --route-menu-width: 148px;
+  }
+
+  .route-icon-row {
+    display: grid;
+    grid-template-columns: 40px 40px;
+    width: max-content;
+  }
 }
 
 .route-stage-head {

@@ -223,6 +223,10 @@ function applyStreetState(map: MapLibreMap, state: MapState, doneIds: Set<string
   }
 }
 
+const ROUTE_LINE_PX = 4.5 * 0.9;
+const ROUTE_CASING_PX = 7 * 0.9;
+const ROUTE_ARROW_PX = 24;
+
 function addMapOverlays(map: MapLibreMap) {
   if (map.getSource("streets")) return;
   map.addSource("streets", {
@@ -311,14 +315,14 @@ function addMapOverlays(map: MapLibreMap) {
     type: "line",
     source: "route",
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.95 },
+    paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": 0.95 },
   });
   map.addLayer({
     id: "route-line",
     type: "line",
     source: "route",
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-opacity": 1 },
+    paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": 1 },
   });
   map.addLayer({
     id: "proposed-pin",
@@ -437,7 +441,7 @@ function addMapOverlays(map: MapLibreMap) {
     filter: ["==", ["get", "kind"], "arrow"],
     layout: {
       "icon-image": "route-dir",
-      "icon-size": 1,
+      "icon-size": ROUTE_LINE_PX / ROUTE_ARROW_PX,
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "icon-keep-upright": false,
@@ -666,7 +670,7 @@ export function StreetMap({
         }
       }
       if (!map.hasImage("route-dir")) {
-        const size = 32;
+        const size = ROUTE_ARROW_PX;
         const canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size;
@@ -674,17 +678,14 @@ export function StreetMap({
         if (ctx) {
           ctx.clearRect(0, 0, size, size);
           ctx.fillStyle = "#111111";
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.moveTo(16, 3);
-          ctx.lineTo(28, 28);
-          ctx.lineTo(16, 21);
-          ctx.lineTo(4, 28);
+          ctx.moveTo(size / 2, 1);
+          ctx.lineTo(size - 1, size - 2);
+          ctx.lineTo(size / 2, size * 0.62);
+          ctx.lineTo(1, size - 2);
           ctx.closePath();
           ctx.fill();
-          ctx.stroke();
-          map.addImage("route-dir", ctx.getImageData(0, 0, size, size));
+          map.addImage("route-dir", ctx.getImageData(0, 0, size, size), { pixelRatio: 1 });
         }
       }
       addMapOverlays(map);
