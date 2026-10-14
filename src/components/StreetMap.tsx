@@ -543,7 +543,6 @@ export function StreetMap({
   >(() => {});
   const openStartRef = useRef<(lat: number, lng: number) => void>(() => {});
   const openClusterPanelRef = useRef<(cluster: ClusterView) => void>(() => {});
-  const zoomClusterRef = useRef<(lng: number, lat: number, ashkol: string) => void>(() => {});
   const [q, setQ] = useState("");
   const [cityHits, setCityHits] = useState<SearchCity[]>([]);
   const [streetHits, setStreetHits] = useState<SearchStreet[]>([]);
@@ -1145,6 +1144,12 @@ export function StreetMap({
 
     map.on("click", (e) => {
       if (hitsHouse(e.point)) return;
+      if (
+        map.getLayer("clusters-circle") &&
+        map.queryRenderedFeatures(e.point, { layers: ["clusters-circle"] }).length > 0
+      ) {
+        return;
+      }
       setPin({ lng: e.lngLat.lng, lat: e.lngLat.lat });
       if (startLong) {
         startLong = false;
@@ -1203,14 +1208,17 @@ export function StreetMap({
       }, 280);
     });
 
-    let clusterClickTimer: number | null = null;
     let clusterLong = false;
     let clusterTimer: number | null = null;
-    function zoomCluster(e: MapLayerMouseEvent) {
+    function focusCluster(e: MapLayerMouseEvent) {
       const raw = e.features?.[0]?.properties;
       if (!raw) return;
       const cluster = clusterFromProps(raw as Record<string, unknown>);
-      zoomClusterRef.current(e.lngLat.lng, e.lngLat.lat, cluster.ashkol);
+      setPin(null);
+      openClusterPanelRef.current(cluster);
+      if (!pendingHouseFit.current) return;
+      map.stop();
+      map.flyTo({ center: [e.lngLat.lng, e.lngLat.lat], zoom: 14 });
     }
     const armClusterZoom = (e: {
       lngLat: MapLayerMouseEvent["lngLat"];
@@ -1221,7 +1229,7 @@ export function StreetMap({
       clusterTimer = window.setTimeout(() => {
         clusterTimer = null;
         clusterLong = true;
-        zoomCluster(e as MapLayerMouseEvent);
+        focusCluster(e as MapLayerMouseEvent);
       }, 550);
     };
     map.on("mousedown", "clusters-circle", armClusterZoom);
@@ -1235,11 +1243,9 @@ export function StreetMap({
     map.on("dblclick", "clusters-circle", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       e.originalEvent.preventDefault();
-      if (clusterClickTimer != null) window.clearTimeout(clusterClickTimer);
-      clusterClickTimer = null;
       if (clusterTimer != null) window.clearTimeout(clusterTimer);
       clusterTimer = null;
-      zoomCluster(e);
+      focusCluster(e);
     });
     map.on("click", "clusters-circle", (e: MapLayerMouseEvent) => {
       if (routeModeRef.current !== "off") return;
@@ -1247,13 +1253,7 @@ export function StreetMap({
         clusterLong = false;
         return;
       }
-      if (clusterClickTimer != null) window.clearTimeout(clusterClickTimer);
-      clusterClickTimer = window.setTimeout(() => {
-        clusterClickTimer = null;
-        const raw = e.features?.[0]?.properties;
-        if (!raw) return;
-        openClusterPanelRef.current(clusterFromProps(raw as Record<string, unknown>));
-      }, 280);
+      focusCluster(e);
     });
 
     map.on("mouseenter", "streets-line", () => {
@@ -2299,20 +2299,6 @@ export function StreetMap({
     setPicked(cluster);
     setPanel({ kind: "cluster", cluster });
     fitAshkolHousesRef.current(cluster.ashkol);
-  };
-  zoomClusterRef.current = (lng, lat, ashkol) => {
-    const cluster = clusters.find((c) => c.ashkol === ashkol);
-    if (cluster) {
-      setSelectedAshkol(cluster.ashkol);
-      setPicked(cluster);
-    }
-    setPanel(null);
-    const map = mapRef.current;
-    if (!map) return;
-    window.setTimeout(() => {
-      map.stop();
-      map.flyTo({ center: [lng, lat], zoom: 16 });
-    }, 0);
   };
 
   useEffect(() => {
