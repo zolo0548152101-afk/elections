@@ -12,6 +12,7 @@
     "seed:admin": "node scripts/seed-admin.mjs",
     "build:streets": "node scripts/build-streets.mjs",
     "import:cluster-streets": "node scripts/import-cluster-streets.mjs",
+    "import:eshkol-houses": "node scripts/import-eshkol-houses.mjs",
     "db:search-index": "node scripts/ensure-street-search-index.mjs",
     "db:schema": "node scripts/apply-schema.mjs",
     "import:institutions": "node scripts/import-institutions.mjs"
@@ -42,6 +43,7 @@
     "dotenv": "^18.0.6",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
+    "proj4": "^2.22.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

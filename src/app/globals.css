@@ -2139,6 +2139,59 @@ button.route-more-name[aria-pressed="true"] {
   box-shadow: var(--shadow);
 }
 
+.eshkol-legend {
+  position: absolute;
+  z-index: 5;
+  left: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 0.15rem;
+  max-width: min(240px, 70vw);
+  max-height: 42%;
+  overflow: auto;
+  margin: 0;
+  padding: 0.35rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+
+.eshkol-legend button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: right;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+}
+
+.eshkol-legend button[aria-pressed="true"] {
+  background: #e8eef8;
+  font-weight: 700;
+}
+
+.eshkol-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 32, 0.25);
+  flex: none;
+}
+
+.eshkol-legend p {
+  margin: 0.15rem 0.3rem 0.1rem;
+  color: var(--muted, #526072);
+  font-size: 0.72rem;
+}
+
 .map-fallback {
   display: grid;
   place-items: center;
