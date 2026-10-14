@@ -506,35 +506,20 @@ export function RoutePlanner({
     },
     placeRoutePoint(lat, lng) {
       const prev = stagesRef.current;
-      const first = prev.find((stage) => stage.stage_no === 1);
-      if (!first?.point) {
-        const base = prev.some((stage) => stage.stage_no === 1) ? prev : [blankStage(1), ...prev];
-        const withFirst = base.length === 0 ? [blankStage(1)] : base;
-        activeRef.current = 1;
-        setActive(1);
-        void persist(
-          withFirst.map((stage) =>
-            stage.stage_no === 1
-              ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
-              : stage,
-          ),
-        );
-        return;
-      }
-      const open = prev.find((stage) => stage.stage_no > 1 && !stage.point);
-      if (open) {
-        void persist(
-          prev.map((stage) =>
-            stage.stage_no === open.stage_no
-              ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
-              : stage,
-          ),
-        );
-        return;
-      }
-      const nextNo = prev.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;
-      const stageNo = nextNo < 2 ? 2 : nextNo;
-      void persist([...prev, { ...blankStage(stageNo), point: { lat, lng, note: "" } }]);
+      const wanted = activeRef.current ?? prev[0]?.stage_no ?? 1;
+      const base = prev.length === 0 ? [blankStage(1)] : prev;
+      const target = base.some((stage) => Number(stage.stage_no) === Number(wanted))
+        ? wanted
+        : base[0]!.stage_no;
+      activeRef.current = target;
+      setActive(target);
+      void persist(
+        base.map((stage) =>
+          Number(stage.stage_no) === Number(target)
+            ? { ...stage, point: { lat, lng, note: stage.point?.note ?? "" } }
+            : stage,
+        ),
+      );
     },
     addCollectionPoint(lat, lng) {
       const prev = stagesRef.current;
@@ -646,6 +631,7 @@ export function RoutePlanner({
         };
       });
       if (!closed) return false;
+      onMode("off");
       void persist(next);
       return true;
     },
@@ -657,6 +643,7 @@ export function RoutePlanner({
       setPickedDraw({ stage: stageNo, index });
       activeRef.current = stageNo;
       setActive(stageNo);
+      onMode("off");
     },
     splitStretch(stageNo, drawIndex, vertex) {
       const next = stagesRef.current.map((stage) => {
@@ -843,8 +830,22 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn"
+          aria-label={stageFilter === "all" ? "סינון שלבים" : `סינון: שלב ${stageFilter}`}
+          aria-expanded={filterOpen}
+          data-tip="סינון לפי שלב"
+          onClick={() => {
+            onMode("off");
+            setFilterOpen((open) => !open);
+          }}
+        >
+          <FilterMark />
+        </button>
+        <button
+          type="button"
+          className="route-icon-btn"
           aria-pressed={mode === "stretch"}
           aria-label="מסלול"
+          data-tip="מסלול. לחיצה כפולה מסיימת"
           onClick={() => onMode(mode === "stretch" ? "off" : "stretch")}
         >
           <RouteMark />
@@ -853,7 +854,8 @@ export function RoutePlanner({
           type="button"
           className="route-icon-btn"
           aria-pressed={mode === "point"}
-          aria-label="נקודת התחלה או איסוף"
+          aria-label="נקודת השלב"
+          data-tip="מזיזים את נקודת השלב הנוכחי"
           onClick={() => onMode(mode === "point" ? "off" : "point")}
         >
           <PointMark />
@@ -861,13 +863,10 @@ export function RoutePlanner({
         <button
           type="button"
           className="route-icon-btn"
-          aria-label={stageFilter === "all" ? "סינון שלבים: הכל" : `סינון שלבים: שלב ${stageFilter}`}
-          aria-expanded={filterOpen}
-          onClick={() => setFilterOpen((open) => !open)}
+          aria-label="שלב חדש"
+          data-tip="שלב חדש"
+          onClick={() => addStage()}
         >
-          <FilterMark />
-        </button>
-        <button type="button" className="route-icon-btn" aria-label="שלב חדש" onClick={() => addStage(true)}>
           +
         </button>
       </div>
@@ -924,6 +923,7 @@ export function RoutePlanner({
                 if (active !== stage.stage_no) chainRef.current = null;
                 setActive(stage.stage_no);
                 activeRef.current = stage.stage_no;
+                onMode("off");
               }}
             >
               <button
@@ -946,6 +946,7 @@ export function RoutePlanner({
                   setActive(stage.stage_no);
                   activeRef.current = stage.stage_no;
                   setOpenStage(expanded ? null : stage.stage_no);
+                  onMode("off");
                 }}
               >
                 <strong style={{ color: stageColor(stage.stage_no) }}>שלב {stage.stage_no}</strong>

@@ -526,6 +526,7 @@ export function StreetMap({
   const routeApiRef = useRef<RouteApi | null>(null);
   const [routeMode, setRouteMode] = useState<RouteMode>("off");
   const [menuOpen, setMenuOpen] = useState(true);
+  const [pin, setPin] = useState<{ lng: number; lat: number } | null>(null);
   const [panel, setPanel] = useState<
     | {
         kind: "street";
@@ -1011,6 +1012,7 @@ export function StreetMap({
         return;
       }
       if (routeModeRef.current === "point") {
+        setPin({ lng: e.lngLat.lng, lat: e.lngLat.lat });
         routeApiRef.current?.placeRoutePoint(e.lngLat.lat, e.lngLat.lng);
         return;
       }
@@ -1510,6 +1512,7 @@ export function StreetMap({
 
   useEffect(() => {
     routeModeRef.current = routeMode;
+    if (routeMode !== "point") setPin(null);
     const map = mapRef.current;
     if (!map) return;
     if (routeMode === "stretch") map.doubleClickZoom.disable();
@@ -1561,7 +1564,7 @@ export function StreetMap({
     const apply = () => {
       const src = map.getSource("pin") as GeoJSONSource | undefined;
       if (!src) return;
-      if (panel?.kind !== "start") {
+      if (!pin) {
         src.setData({ type: "FeatureCollection", features: [] });
         return;
       }
@@ -1571,14 +1574,14 @@ export function StreetMap({
           {
             type: "Feature",
             properties: {},
-            geometry: { type: "Point", coordinates: [panel.lng, panel.lat] },
+            geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
           },
         ],
       });
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [panel]);
+  }, [pin]);
 
   const isCoordinator = me?.role === "coordinator";
 
@@ -2747,6 +2750,7 @@ export function StreetMap({
               className="route-menu-toggle"
               aria-expanded={menuOpen}
               aria-label={menuOpen ? "סגור מסלול" : "פתח מסלול"}
+              data-tip={menuOpen ? "סוגרים את תפריט המסלול" : "פותחים את תפריט המסלול"}
               onClick={() => setMenuOpen((open) => !open)}
             >
               {menuOpen ? "סגור" : "מסלול"}

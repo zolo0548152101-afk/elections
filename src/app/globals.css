@@ -1340,9 +1340,39 @@ tbody tr.cluster-row-selected:hover {
 
 .route-icon-row {
   display: flex;
+  flex-direction: row;
+  direction: rtl;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 0.35rem;
+}
+
+.route-icon-btn[data-tip],
+.route-menu-toggle[data-tip] {
+  position: relative;
+}
+
+.route-icon-btn[data-tip]:hover::after,
+.route-icon-btn[data-tip]:focus-visible::after,
+.route-menu-toggle[data-tip]:hover::after,
+.route-menu-toggle[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  max-width: 11rem;
+  white-space: normal;
+  background: #111827;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+  pointer-events: none;
+  box-shadow: var(--shadow);
 }
 
 .route-map-menu .route-choice {
