@@ -273,7 +273,7 @@ CREATE INDEX IF NOT EXISTS eshkol_streets_settlement_idx
   ON eshkol_streets (settlement_name);
 
 -- Cluster street -> OSM street line. Many-to-many: a long street can serve several eshkols.
--- streets.ashkol holds one owner per line (drives map colour); this table keeps every link.
+-- The map draws these lines. streets.ashkol is not the color source.
 CREATE TABLE IF NOT EXISTS eshkol_osm_streets (
   ashkol text NOT NULL REFERENCES clusters(ashkol) ON DELETE CASCADE,
   street_name text NOT NULL,
@@ -282,6 +282,15 @@ CREATE TABLE IF NOT EXISTS eshkol_osm_streets (
 );
 
 CREATE INDEX IF NOT EXISTS eshkol_osm_streets_street_idx ON eshkol_osm_streets (street_id);
+
+CREATE INDEX IF NOT EXISTS eshkol_osm_streets_ashkol_idx ON eshkol_osm_streets (ashkol);
+
+-- Municipal outline used to decide which city an OSM street line belongs to.
+CREATE TABLE IF NOT EXISTS city_boundaries (
+  settlement_name text PRIMARY KEY,
+  osm_name text NOT NULL,
+  geom_geojson text NOT NULL
+);
 
 -- Geocoded houses only. Unmatched numbers stay in eshkol_streets.house_numbers and are not drawn.
 CREATE TABLE IF NOT EXISTS eshkol_houses (

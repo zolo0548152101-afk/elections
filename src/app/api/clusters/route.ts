@@ -68,11 +68,7 @@ export async function GET(req: NextRequest) {
               SELECT l.ashkol,
                      percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lat) AS lat,
                      percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lng) AS lng
-              FROM (
-                SELECT ashkol, street_id FROM eshkol_osm_streets
-                UNION
-                SELECT ashkol, id AS street_id FROM streets WHERE ashkol IS NOT NULL
-              ) l
+              FROM eshkol_osm_streets l
               JOIN streets s ON s.id = l.street_id
               GROUP BY l.ashkol
             ) st
@@ -86,10 +82,7 @@ export async function GET(req: NextRequest) {
             AND c.turnout_pct <= ${maxTurnout}
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
-            AND (
-              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
-              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
-            )
+            AND EXISTS (SELECT 1 FROM eshkol_osm_streets o WHERE o.ashkol = c.ashkol)
         `
       : ashkols.length === 0
         ? []
@@ -120,11 +113,7 @@ export async function GET(req: NextRequest) {
               SELECT l.ashkol,
                      percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lat) AS lat,
                      percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lng) AS lng
-              FROM (
-                SELECT ashkol, street_id FROM eshkol_osm_streets
-                UNION
-                SELECT ashkol, id AS street_id FROM streets WHERE ashkol IS NOT NULL
-              ) l
+              FROM eshkol_osm_streets l
               JOIN streets s ON s.id = l.street_id
               GROUP BY l.ashkol
             ) st
@@ -139,10 +128,7 @@ export async function GET(req: NextRequest) {
             AND c.bzb >= ${minBzb}
             AND c.likud_pct >= ${minLikud}
             AND c.ashkol = ANY(${ashkols})
-            AND (
-              EXISTS (SELECT 1 FROM eshkol_houses eh WHERE eh.ashkol = c.ashkol)
-              OR EXISTS (SELECT 1 FROM eshkol_streets es WHERE es.ashkol = c.ashkol)
-            )
+            AND EXISTS (SELECT 1 FROM eshkol_osm_streets o WHERE o.ashkol = c.ashkol)
         `
   ) as ClusterRow[];
 

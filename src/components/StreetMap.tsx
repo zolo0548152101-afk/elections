@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import {
   Map as MapLibreMap,
   NavigationControl,
-  Popup,
   setWorkerUrl,
   type GeoJSONSource,
   type MapLayerMouseEvent,
@@ -15,7 +14,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
-import type { Feature } from "geojson";
+import type { Feature, Geometry } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
@@ -31,8 +30,9 @@ import {
   ROUTE_ARROW_PX,
   addMapOverlays,
   houseCirclePaint,
+  eshkolLinePaint,
+  lineVertices,
   fitHousePoints,
-  escapeHtml,
   type MapState,
 } from "@/components/street-map/map-layers";
 import { ClusterStreetList } from "@/components/street-map/ClusterStreetList";
@@ -63,6 +63,13 @@ type EshkolHousePoint = {
   house: number;
   lat: number;
   lng: number;
+};
+
+type EshkolStreetLine = {
+  ashkol: string;
+  street: string;
+  streetId: string;
+  geometry: { type: string; coordinates: unknown };
 };
 
 type AssignUser = { id: number; full_name: string; institution_id: number | null };
@@ -213,9 +220,11 @@ export function StreetMap({
   const [status, setStatus] = useState("טוען מפה…");
   const [selectedAshkol, setSelectedAshkol] = useState<string>("");
   const [housePoints, setHousePoints] = useState<EshkolHousePoint[]>([]);
+  const [streetLines, setStreetLines] = useState<EshkolStreetLine[]>([]);
   const [houseSettlement, setHouseSettlement] = useState("");
   const [housesLoading, setHousesLoading] = useState(false);
-  const housePopupRef = useRef<Popup | null>(null);
+  const selectedAshkolRef = useRef("");
+  selectedAshkolRef.current = selectedAshkol;
   const pendingHouseFit = useRef("");
   const selectEshkolRef = useRef<(ashkol: string) => void>(() => {});
   const [picked, setPicked] = useState<ClusterView | null>(null);
@@ -499,20 +508,24 @@ export function StreetMap({
     }
 
     function streetUnder(point: { x: number; y: number }) {
-      if (!map.isStyleLoaded()) return null;
-      const layers = ["route-line", "streets-line"].filter((id) => map.getLayer(id));
-      if (layers.length === 0) return null;
+      if (!map.getLayer("eshkol-streets")) return null;
       const pad = 28;
       const hits = map.queryRenderedFeatures(
         [
           [point.x - pad, point.y - pad],
           [point.x + pad, point.y + pad],
         ],
-        { layers },
+        { layers: ["eshkol-streets"] },
       );
-      const feature = hits.find((hit) => String(hit.properties?.id ?? "") !== "");
+      const selected = selectedAshkolRef.current;
+      const feature =
+        hits.find(
+          (hit) =>
+            String(hit.properties?.ashkol ?? "") === selected &&
+            String(hit.properties?.id ?? "") !== "",
+        ) ?? hits.find((hit) => String(hit.properties?.id ?? "") !== "");
       if (!feature) return null;
-      const id = String(feature.properties?.id ?? feature.id ?? "");
+      const id = String(feature.properties?.id ?? "");
       const name = String(feature.properties?.name_he ?? "");
       return id ? { id, name: name || id } : null;
     }
@@ -577,7 +590,7 @@ export function StreetMap({
     }
 
     function bindOverlayInteractions() {
-    map.on("mousedown", "streets-line", armPress);
+    map.on("mousedown", "eshkol-streets", armPress);
     let stretchDrag: { stage: number; draw: number; vertex: number; moved: boolean } | null = null;
     let stretchMoved = false;
 
@@ -658,12 +671,12 @@ export function StreetMap({
     map.on("touchstart", "route-line", beginLine);
     map.on("mousedown", "route-casing", beginLine);
     map.on("touchstart", "route-casing", beginLine);
-    map.on("contextmenu", "streets-line", (e: MapLayerMouseEvent) => {
+    map.on("contextmenu", "eshkol-streets", (e: MapLayerMouseEvent) => {
       e.preventDefault();
       clearPress();
       void openStagePopup(e);
     });
-    map.on("dblclick", "streets-line", (e: MapLayerMouseEvent) => {
+    map.on("dblclick", "eshkol-streets", (e: MapLayerMouseEvent) => {
       if (finishByDoubleClick(e)) return;
       e.preventDefault();
       if (clickTimer != null) window.clearTimeout(clickTimer);
@@ -757,7 +770,7 @@ export function StreetMap({
     map.on("mousemove", movePress);
     map.on("touchmove", movePress);
 
-    map.on("click", "streets-line", async (e: MapLayerMouseEvent) => {
+    map.on("click", "eshkol-streets", async (e: MapLayerMouseEvent) => {
       if (longFired) {
         longFired = false;
         return;
@@ -801,37 +814,7 @@ export function StreetMap({
       );
     }
 
-    map.on("click", "eshkol-houses-hit", (e) => {
-      // A cluster diamond drawn over a house wins the click.
-      if (
-        map.getLayer("clusters-circle") &&
-        map.queryRenderedFeatures(e.point, { layers: ["clusters-circle"] }).length > 0
-      ) {
-        return;
-      }
-      const props = e.features?.[0]?.properties;
-      if (!props) return;
-      const street = escapeHtml(String(props.street ?? ""));
-      const house = escapeHtml(String(props.house ?? ""));
-      const ashkol = String(props.ashkol ?? "");
-      if (ashkol) selectEshkolRef.current(ashkol);
-      housePopupRef.current?.remove();
-      housePopupRef.current = new Popup({ closeButton: true, maxWidth: "240px" })
-        .setLngLat(e.lngLat)
-        .setHTML(
-          `<div dir="rtl" class="house-popup"><strong>${street} ${house}</strong><div>אשכול <bdi dir="ltr">${escapeHtml(ashkol)}</bdi></div></div>`,
-        )
-        .addTo(map);
-    });
-    map.on("mouseenter", "eshkol-houses-hit", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "eshkol-houses-hit", () => {
-      map.getCanvas().style.cursor = "";
-    });
-
     map.on("click", (e) => {
-      if (hitsHouse(e.point)) return;
       if (
         map.getLayer("clusters-circle") &&
         map.queryRenderedFeatures(e.point, { layers: ["clusters-circle"] }).length > 0
@@ -857,7 +840,7 @@ export function StreetMap({
           stretchMoved = false;
           return;
         }
-        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point", "eshkol-houses-hit"].filter((id) =>
+        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point"].filter((id) =>
           map.getLayer(id),
         );
         const blocked = map.queryRenderedFeatures(e.point, { layers }).some((feature) => {
@@ -867,8 +850,7 @@ export function StreetMap({
             kind === "draw" ||
             kind === "handle" ||
             kind === "point" ||
-            layer === "clusters-circle" ||
-            layer === "eshkol-houses-hit"
+            layer === "clusters-circle"
           );
         });
         if (blocked) return;
@@ -882,7 +864,7 @@ export function StreetMap({
         return;
       }
       if (routeModeRef.current !== "off") return;
-      if (map.queryRenderedFeatures(e.point, { layers: ["streets-line", "route-line", "clusters-circle", "eshkol-houses-hit"].filter((id) => map.getLayer(id)) }).length > 0) {
+      if (map.queryRenderedFeatures(e.point, { layers: ["eshkol-streets", "route-line", "clusters-circle"].filter((id) => map.getLayer(id)) }).length > 0) {
         return;
       }
       const street = streetUnder(e.point);
@@ -944,10 +926,10 @@ export function StreetMap({
       focusCluster(e);
     });
 
-    map.on("mouseenter", "streets-line", () => {
+    map.on("mouseenter", "eshkol-streets", () => {
       map.getCanvas().style.cursor = "pointer";
     });
-    map.on("mouseleave", "streets-line", () => {
+    map.on("mouseleave", "eshkol-streets", () => {
       map.getCanvas().style.cursor = "";
     });
     map.on("mouseenter", "clusters-circle", () => {
@@ -956,11 +938,6 @@ export function StreetMap({
     map.on("mouseleave", "clusters-circle", () => {
       map.getCanvas().style.cursor = "";
     });
-    }
-
-    function hitsHouse(point: { x: number; y: number }) {
-      if (!map.getLayer("eshkol-houses-hit")) return false;
-      return map.queryRenderedFeatures([point.x, point.y], { layers: ["eshkol-houses-hit"] }).length > 0;
     }
 
     function occupied(point: { x: number; y: number }) {
@@ -1004,7 +981,6 @@ export function StreetMap({
       ) {
         return;
       }
-      if (hitsHouse(e.point)) return;
       const street = streetUnder(e.point);
       if (!street) return;
       clearStart();
@@ -1024,7 +1000,6 @@ export function StreetMap({
       }
       const touches = (e.originalEvent as TouchEvent | undefined)?.touches?.length ?? 0;
       if (touches > 0) return;
-      if (hitsHouse(e.point)) return;
       const street = streetUnder(e.point);
       const now = Date.now();
       if (
@@ -1260,7 +1235,7 @@ export function StreetMap({
 
   async function markStreetsAlong(coordinates: number[][]) {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded() || !map.getLayer("streets-line")) return;
+    if (!map?.getLayer("eshkol-streets")) return;
     const samples = coordinates.map((point) => [point[0]!, point[1]!] as [number, number]);
     for (const mark of arrowMarksEvery(coordinates, 30)) samples.push([mark.lng, mark.lat]);
     const counts = new Map<string, { name: string; n: number; lat: number; lng: number }>();
@@ -1271,7 +1246,7 @@ export function StreetMap({
           [point.x - 14, point.y - 14],
           [point.x + 14, point.y + 14],
         ],
-        { layers: ["streets-line"] },
+        { layers: ["eshkol-streets"] },
       );
       const seen = new Set<string>();
       for (const hit of hits) {
@@ -1320,7 +1295,7 @@ export function StreetMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || focus) return;
+    if (!map || focus || selectedAshkol) return;
     const pts = clusters.filter((c) => c.map_lat != null && c.map_lng != null);
     if (pts.length === 0) return;
     const apply = () => {
@@ -1336,7 +1311,7 @@ export function StreetMap({
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [clusters, focus]);
+  }, [clusters, focus, selectedAshkol]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1356,6 +1331,11 @@ export function StreetMap({
     const allowed = new Set(clusters.map((c) => c.ashkol));
     return housePoints.filter((house) => allowed.has(house.ashkol));
   }, [housePoints, clusters]);
+
+  const visibleStreets = useMemo(() => {
+    const allowed = new Set(clusters.map((c) => c.ashkol));
+    return streetLines.filter((line) => allowed.has(line.ashkol));
+  }, [streetLines, clusters]);
 
   /** One colour per cluster, assigned in ashkol order within each town. Streets and house dots share it. */
 
@@ -1427,10 +1407,12 @@ export function StreetMap({
 
   const clustersRef = useRef(clusters);
   const visibleHousesRef = useRef(visibleHouses);
+  const visibleStreetsRef = useRef(visibleStreets);
   const houseSettlementRef = useRef(houseSettlement);
   const housesLoadingRef = useRef(housesLoading);
   clustersRef.current = clusters;
   visibleHousesRef.current = visibleHouses;
+  visibleStreetsRef.current = visibleStreets;
   houseSettlementRef.current = houseSettlement;
   housesLoadingRef.current = housesLoading;
 
@@ -1442,15 +1424,20 @@ export function StreetMap({
     const cluster = clustersRef.current.find((c) => c.ashkol === ashkol);
     if (!map || !cluster || houseSettlementRef.current !== cluster.settlement_name) return;
     pendingHouseFit.current = "";
+    const linePoints = visibleStreetsRef.current
+      .filter((line) => line.ashkol === ashkol)
+      .flatMap((line) => lineVertices(line.geometry));
     const mine = visibleHousesRef.current.filter((house) => house.ashkol === ashkol);
     const apply = () => {
+      map.stop();
+      if (fitHousePoints(map, linePoints)) return;
       if (fitHousePoints(map, mine)) return;
       if (cluster.map_lng != null && cluster.map_lat != null) {
         map.flyTo({ center: [cluster.map_lng, cluster.map_lat], zoom: 14 });
       }
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (map.getSource("eshkol-streets")) apply();
+    else map.once("idle", apply);
   };
   selectEshkolRef.current = (ashkol: string) => {
     const cluster = clustersRef.current.find((c) => c.ashkol === ashkol) ?? null;
@@ -1465,26 +1452,38 @@ export function StreetMap({
   useEffect(() => {
     if (!houseQuery) {
       setHousePoints([]);
+      setStreetLines([]);
       setHouseSettlement("");
       return;
     }
     let cancel = false;
     setHousesLoading(true);
     setHousePoints([]);
+    setStreetLines([]);
     setHouseSettlement("");
-    fetch(`/api/settlements/${encodeURIComponent(houseQuery)}/eshkol-houses`)
-      .then(async (res) => {
-        if (!res.ok) return { houses: [] as EshkolHousePoint[] };
-        return (await res.json()) as { houses?: EshkolHousePoint[] };
-      })
-      .then((data) => {
+    const encoded = encodeURIComponent(houseQuery);
+    Promise.all([
+      fetch(`/api/settlements/${encoded}/eshkol-houses`).then(async (res) => {
+        if (!res.ok) return [] as EshkolHousePoint[];
+        const data = (await res.json()) as { houses?: EshkolHousePoint[] };
+        return data.houses ?? [];
+      }),
+      fetch(`/api/settlements/${encoded}/eshkol-streets`).then(async (res) => {
+        if (!res.ok) return [] as EshkolStreetLine[];
+        const data = (await res.json()) as { streets?: EshkolStreetLine[] };
+        return data.streets ?? [];
+      }),
+    ])
+      .then(([houses, streets]) => {
         if (cancel) return;
-        setHousePoints(data.houses ?? []);
+        setHousePoints(houses);
+        setStreetLines(streets);
         setHouseSettlement(houseQuery);
       })
       .catch(() => {
         if (cancel) return;
         setHousePoints([]);
+        setStreetLines([]);
         setHouseSettlement(houseQuery);
       })
       .finally(() => {
@@ -1504,17 +1503,90 @@ export function StreetMap({
         ashkol: house.ashkol,
         street: house.street,
         house: house.house,
-        color: houseColors.get(house.ashkol) ?? "#64748b",
+        color: houseColors.get(house.ashkol) ?? clusterColors.get(house.ashkol) ?? "#64748b",
       },
       geometry: { type: "Point" as const, coordinates: [house.lng, house.lat] },
     }));
+    let cancelled = false;
+    let tries = 0;
     const apply = () => {
+      if (cancelled) return;
       const src = map.getSource("eshkol-houses") as GeoJSONSource | undefined;
-      src?.setData({ type: "FeatureCollection", features });
+      if (!src) {
+        if (tries++ >= 30) return;
+        map.once("idle", apply);
+        return;
+      }
+      src.setData({ type: "FeatureCollection", features });
     };
-    if (map.isStyleLoaded() && map.getSource("eshkol-houses")) apply();
-    else map.once("load", apply);
-  }, [visibleHouses, houseColors]);
+    apply();
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
+  }, [visibleHouses, houseColors, clusterColors]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const features = visibleStreets.map((line) => ({
+      type: "Feature" as const,
+      properties: {
+        id: line.streetId,
+        name_he: line.street,
+        ashkol: line.ashkol,
+        street: line.street,
+        color: clusterColors.get(line.ashkol) ?? "#64748b",
+      },
+      geometry: line.geometry as Geometry,
+    }));
+    let cancelled = false;
+    let tries = 0;
+    const apply = () => {
+      if (cancelled) return;
+      const src = map.getSource("eshkol-streets") as GeoJSONSource | undefined;
+      if (!src) {
+        if (tries++ >= 30) return;
+        map.once("idle", apply);
+        return;
+      }
+      src.setData({ type: "FeatureCollection", features });
+    };
+    apply();
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
+  }, [visibleStreets, clusterColors]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const paint = eshkolLinePaint(selectedAshkol, mapState?.doneStreetIds ?? []);
+    let cancelled = false;
+    let tries = 0;
+    const apply = () => {
+      if (cancelled) return;
+      if (!map.getLayer("eshkol-streets")) {
+        if (tries++ >= 30) return;
+        map.once("idle", apply);
+        return;
+      }
+      map.setPaintProperty("eshkol-streets", "line-color", paint["line-color"] as never);
+      map.setPaintProperty("eshkol-streets", "line-width", paint["line-width"] as never);
+      map.setPaintProperty("eshkol-streets", "line-opacity", paint["line-opacity"] as never);
+      map.setLayoutProperty(
+        "eshkol-streets",
+        "line-sort-key",
+        ["case", ["==", ["get", "ashkol"], selectedAshkol || "\u0000"], 2, 1] as never,
+      );
+    };
+    apply();
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
+  }, [selectedAshkol, mapState]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1539,7 +1611,7 @@ export function StreetMap({
   useEffect(() => {
     if (!pendingHouseFit.current) return;
     fitAshkolHousesRef.current(pendingHouseFit.current);
-  }, [houseSettlement, housesLoading, visibleHouses]);
+  }, [houseSettlement, housesLoading, visibleHouses, visibleStreets]);
 
   /** Table / external ashkol pick — select the cluster and frame its houses. */
   useEffect(() => {
@@ -2852,6 +2924,7 @@ export function StreetMap({
               <span aria-hidden="true">◆</span> אשכול · <span aria-hidden="true">●</span> בית
               שמוקם · <span aria-hidden="true">━</span> רחוב
             </p>
+            <p className="eshkol-legend-key">רק רחובות שזוהו במפה</p>
           </div>
         )}
         {mapFailed ? (

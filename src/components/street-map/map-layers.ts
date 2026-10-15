@@ -42,6 +42,43 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
 /** Streets of other clusters while one cluster is selected. */
 export const COLOR_MUTED = "#a3acb9";
 
+/** City-matched lines. The selected eshkol keeps its color; every other line goes grey. */
+export function eshkolLinePaint(selectedAshkol: string, doneIds: string[]) {
+  const chosen: Expr = selectedAshkol
+    ? ["==", ["get", "ashkol"], selectedAshkol]
+    : ["literal", true];
+  const done: Expr =
+    doneIds.length > 0
+      ? ["in", ["get", "id"], ["literal", doneIds]]
+      : ["literal", false];
+  return {
+    "line-color": [
+      "case",
+      ["all", chosen, done],
+      COLOR_DONE,
+      chosen,
+      ["get", "color"],
+      COLOR_MUTED,
+    ],
+    "line-width": ["case", chosen, 6.5, 3],
+    "line-opacity": ["case", chosen, 1, selectedAshkol ? 0.55 : 0.9],
+  };
+}
+
+export function lineVertices(geometry: { coordinates: unknown }) {
+  const points: { lat: number; lng: number }[] = [];
+  const walk = (node: unknown) => {
+    if (!Array.isArray(node) || node.length === 0) return;
+    if (typeof node[0] === "number") {
+      points.push({ lng: Number(node[0]), lat: Number(node[1]) });
+      return;
+    }
+    for (const child of node) walk(child);
+  };
+  walk(geometry.coordinates);
+  return points;
+}
+
 export function streetLinePaint(
   linkedAshkols: string[],
   selectedAshkol = "",
@@ -139,9 +176,13 @@ export function addMapOverlays(map: MapLibreMap) {
     type: "geojson",
     data: { type: "FeatureCollection", features: [] },
   });
+  map.addSource("eshkol-streets", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
   const hidden: Expr = ["literal", false];
-  // Colored street lines go under the basemap's labels (place names stay readable);
-  // our own street names, houses and clusters are added above everything.
+  // The tile street layer stays hidden. Color comes from eshkol-streets, so one
+  // road can be drawn for every eshkol that lists it. Place names stay on top.
   const firstBasemapLabel = map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
   map.addLayer(
     {
@@ -150,7 +191,7 @@ export function addMapOverlays(map: MapLibreMap) {
       source: "streets",
       "source-layer": "streets",
       filter: hidden as never,
-      layout: { visibility: "visible", "line-cap": "round", "line-join": "round" },
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
       paint: streetLinePaint([]) as never,
     },
     firstBasemapLabel,
@@ -162,7 +203,7 @@ export function addMapOverlays(map: MapLibreMap) {
     "source-layer": "streets",
     filter: hidden as never,
     layout: {
-      visibility: "visible",
+      visibility: "none",
       "symbol-placement": "line",
       "text-field": ["get", "name_he"],
       "text-size": 12,
@@ -175,18 +216,17 @@ export function addMapOverlays(map: MapLibreMap) {
     },
     minzoom: 13,
   });
-  // Houses are tiny dots; this invisible layer gives them a finger-sized hit area.
-  // Kept modest so a tap on the street line next to a house still reaches the street.
-  map.addLayer({
-    id: "eshkol-houses-hit",
-    type: "circle",
-    source: "eshkol-houses",
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 5, 16, 8, 18, 11],
-      "circle-color": "#000000",
-      "circle-opacity": 0,
+  map.addLayer(
+    {
+      id: "eshkol-streets",
+      type: "line",
+      source: "eshkol-streets",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: eshkolLinePaint("", []) as never,
     },
-  });
+    firstBasemapLabel,
+  );
+  // Small house dots. They are not a click target; the diamond and the street line are.
   map.addLayer({
     id: "eshkol-houses",
     type: "circle",
