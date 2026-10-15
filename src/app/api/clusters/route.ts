@@ -59,9 +59,28 @@ export async function GET(req: NextRequest) {
             h.lng
           FROM clusters c
           LEFT JOIN (
-            SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
-            FROM eshkol_houses
-            GROUP BY ashkol
+            -- Centre of the cluster's streets (median of street centres, so one long road does not drag it).
+            -- Falls back to the geocoded houses for clusters that have no linked street yet.
+            SELECT COALESCE(st.ashkol, hh.ashkol) AS ashkol,
+                   COALESCE(st.lat, hh.lat) AS lat,
+                   COALESCE(st.lng, hh.lng) AS lng
+            FROM (
+              SELECT l.ashkol,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lat) AS lat,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lng) AS lng
+              FROM (
+                SELECT ashkol, street_id FROM eshkol_osm_streets
+                UNION
+                SELECT ashkol, id AS street_id FROM streets WHERE ashkol IS NOT NULL
+              ) l
+              JOIN streets s ON s.id = l.street_id
+              GROUP BY l.ashkol
+            ) st
+            FULL JOIN (
+              SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
+              FROM eshkol_houses
+              GROUP BY ashkol
+            ) hh ON hh.ashkol = st.ashkol
           ) h ON h.ashkol = c.ashkol
           WHERE c.right_pct >= ${minRight}
             AND c.turnout_pct <= ${maxTurnout}
@@ -92,9 +111,28 @@ export async function GET(req: NextRequest) {
             h.lng
           FROM clusters c
           LEFT JOIN (
-            SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
-            FROM eshkol_houses
-            GROUP BY ashkol
+            -- Centre of the cluster's streets (median of street centres, so one long road does not drag it).
+            -- Falls back to the geocoded houses for clusters that have no linked street yet.
+            SELECT COALESCE(st.ashkol, hh.ashkol) AS ashkol,
+                   COALESCE(st.lat, hh.lat) AS lat,
+                   COALESCE(st.lng, hh.lng) AS lng
+            FROM (
+              SELECT l.ashkol,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lat) AS lat,
+                     percentile_cont(0.5) WITHIN GROUP (ORDER BY s.lng) AS lng
+              FROM (
+                SELECT ashkol, street_id FROM eshkol_osm_streets
+                UNION
+                SELECT ashkol, id AS street_id FROM streets WHERE ashkol IS NOT NULL
+              ) l
+              JOIN streets s ON s.id = l.street_id
+              GROUP BY l.ashkol
+            ) st
+            FULL JOIN (
+              SELECT ashkol, AVG(lat) AS lat, AVG(lng) AS lng
+              FROM eshkol_houses
+              GROUP BY ashkol
+            ) hh ON hh.ashkol = st.ashkol
           ) h ON h.ashkol = c.ashkol
           WHERE c.right_pct >= ${minRight}
             AND c.turnout_pct <= ${maxTurnout}

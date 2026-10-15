@@ -156,7 +156,6 @@ function clusterFromProps(p: Record<string, unknown>): ClusterView {
 }
 
 /** Street status. Cluster dots from the filter use a separate gold. */
-const COLOR_UNASSIGNED = "#2563eb";
 const COLOR_ASSIGNED = "#c45c26";
 const COLOR_DONE = "#16a34a";
 const COLOR_FILTERED = "#f5b942";
@@ -183,7 +182,20 @@ function linkedFlag(linkedAshkols: string[]): Expr {
   return ["match", ["get", "ashkol"], linkedAshkols, 1, 0];
 }
 
-function streetLinePaint(linkedAshkols: string[], selectedAshkol = "", streetId = "") {
+/** Each street is drawn in its cluster's colour (the same colour as that cluster's house dots). */
+function clusterColorExpr(colors: Map<string, string>): Expr {
+  if (colors.size === 0) return ["literal", COLOR_ASSIGNED];
+  const pairs: string[] = [];
+  for (const [ashkol, color] of colors) pairs.push(ashkol, color);
+  return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
+}
+
+function streetLinePaint(
+  linkedAshkols: string[],
+  selectedAshkol = "",
+  streetId = "",
+  colors: Map<string, string> = new Map(),
+) {
   const done = doneFlag();
   const linked = linkedFlag(linkedAshkols);
   const selectedStreet: Expr = streetId ? ["==", ["get", "id"], streetId] : ["literal", false];
@@ -191,26 +203,22 @@ function streetLinePaint(linkedAshkols: string[], selectedAshkol = "", streetId 
     ? ["==", ["get", "ashkol"], selectedAshkol]
     : ["literal", false];
   return {
-    "line-color": ["case", done, COLOR_DONE, ["==", linked, 1], COLOR_ASSIGNED, COLOR_UNASSIGNED],
-    "line-width": ["case", selectedStreet, 7, selectedCluster, 6, done, 5, ["==", linked, 1], 3.5, 2.5],
+    "line-color": ["case", done, COLOR_DONE, clusterColorExpr(colors)],
+    "line-width": ["case", selectedStreet, 8, selectedCluster, 6.5, done, 5, ["==", linked, 1], 4.5, 4],
     "line-opacity": [
       "case",
       selectedStreet,
       1,
       selectedCluster,
-      0.95,
-      done,
-      0.9,
-      ["==", linked, 1],
-      0.85,
-      0.75,
+      1,
+      selectedAshkol ? 0.35 : 0.9,
     ],
   };
 }
 
-function scopeFilter(active: boolean, ashkols: string[] | null): Expr | null {
-  if (!active) return null;
-  if (!ashkols || ashkols.length === 0) return ["literal", false];
+/** Show only streets that belong to a cluster on the list (the list already respects the user's scope and filters). */
+function clusterStreetFilter(ashkols: string[]): Expr {
+  if (ashkols.length === 0) return ["literal", false];
   return ["match", ["get", "ashkol"], ashkols, true, false];
 }
 
@@ -226,7 +234,10 @@ function applyStreetState(map: MapLibreMap, state: MapState, doneIds: Set<string
     map.setFeatureState(streetFeature(id), { done: true });
     doneIds.add(id);
   }
-  const filter = scopeFilter(state.scopeActive, state.visibleAshkols);
+}
+
+function applyStreetFilter(map: MapLibreMap, ashkols: string[]) {
+  const filter = clusterStreetFilter(ashkols);
   for (const layer of ["streets-line", "streets-label"]) {
     if (!map.getLayer(layer)) continue;
     map.setFilter(layer, filter as never);
@@ -277,7 +288,7 @@ function addMapOverlays(map: MapLibreMap) {
     source: "streets",
     "source-layer": "streets",
     filter: hidden as never,
-    layout: { visibility: "none" },
+    layout: { visibility: "visible", "line-cap": "round", "line-join": "round" },
     paint: streetLinePaint([]) as never,
   });
   map.addLayer({
@@ -287,7 +298,7 @@ function addMapOverlays(map: MapLibreMap) {
     "source-layer": "streets",
     filter: hidden as never,
     layout: {
-      visibility: "none",
+      visibility: "visible",
       "symbol-placement": "line",
       "text-field": ["get", "name_he"],
       "text-size": 12,
@@ -758,6 +769,7 @@ export function StreetMap({
       }
       addMapOverlays(map);
       if (mapStateRef.current) applyStreetState(map, mapStateRef.current, doneIdsRef.current);
+      applyStreetFilter(map, clustersRef.current.map((c) => c.ashkol));
       if (!overlayBound) {
         overlayBound = true;
         bindOverlayInteractions();
@@ -1458,25 +1470,6 @@ export function StreetMap({
     setSelectedAshkol("");
   }, [clusters, picked]);
 
-  /** Status colors; selection only thickens the line. Done comes from feature-state. */
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const linked = new Set<string>([
-      ...(mapState?.linkedAshkols ?? []),
-      ...linkedOverride,
-    ]);
-    const paint = streetLinePaint([...linked], selectedAshkol || "", pickedStreet?.id || "");
-    const apply = () => {
-      if (!map.getLayer("streets-line")) return;
-      map.setPaintProperty("streets-line", "line-color", paint["line-color"] as never);
-      map.setPaintProperty("streets-line", "line-width", paint["line-width"] as never);
-      map.setPaintProperty("streets-line", "line-opacity", paint["line-opacity"] as never);
-    };
-    apply();
-    if (!map.getLayer("streets-line")) map.once("idle", apply);
-  }, [selectedAshkol, pickedStreet?.id, mapState, linkedOverride]);
-
   async function loadClusterStreets(ashkol: string) {
     if (!ashkol) {
       setClusterStreets([]);
@@ -1657,10 +1650,56 @@ export function StreetMap({
     return housePoints.filter((house) => allowed.has(house.ashkol));
   }, [housePoints, clusters]);
 
-  const houseColors = useMemo(
-    () => eshkolColorMap(visibleHouses.map((house) => house.ashkol)),
-    [visibleHouses],
-  );
+  /** One colour per cluster, assigned in ashkol order within each town. Streets and house dots share it. */
+  const clusterColors = useMemo(() => {
+    const byTown = new Map<string, string[]>();
+    for (const c of clusters) {
+      const list = byTown.get(c.settlement_name);
+      if (list) list.push(c.ashkol);
+      else byTown.set(c.settlement_name, [c.ashkol]);
+    }
+    const colors = new Map<string, string>();
+    for (const list of byTown.values()) {
+      for (const [ashkol, color] of eshkolColorMap(list)) colors.set(ashkol, color);
+    }
+    return colors;
+  }, [clusters]);
+
+  const houseColors = useMemo(() => {
+    const ashkols = [...new Set(visibleHouses.map((house) => house.ashkol))].sort((a, b) =>
+      a.localeCompare(b, "en", { numeric: true }),
+    );
+    return new Map(ashkols.map((a) => [a, clusterColors.get(a) ?? "#64748b"] as [string, string]));
+  }, [visibleHouses, clusterColors]);
+
+  /** Street colours: each cluster's streets in its colour; done streets green; selection thickens. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const linked = new Set<string>([
+      ...(mapState?.linkedAshkols ?? []),
+      ...linkedOverride,
+    ]);
+    const paint = streetLinePaint([...linked], selectedAshkol || "", pickedStreet?.id || "", clusterColors);
+    const apply = () => {
+      if (!map.getLayer("streets-line")) return;
+      map.setPaintProperty("streets-line", "line-color", paint["line-color"] as never);
+      map.setPaintProperty("streets-line", "line-width", paint["line-width"] as never);
+      map.setPaintProperty("streets-line", "line-opacity", paint["line-opacity"] as never);
+    };
+    apply();
+    if (!map.getLayer("streets-line")) map.once("idle", apply);
+  }, [selectedAshkol, pickedStreet?.id, mapState, linkedOverride, clusterColors]);
+
+  /** Only streets of clusters on the current list are drawn. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const ashkols = clusters.map((c) => c.ashkol);
+    const apply = () => applyStreetFilter(map, ashkols);
+    apply();
+    if (!map.getLayer("streets-line")) map.once("idle", apply);
+  }, [clusters]);
 
   const houseLegend = useMemo(
     () => [...houseColors.entries()].map(([ashkol, color]) => ({ ashkol, color })),

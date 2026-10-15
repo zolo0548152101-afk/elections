@@ -5,7 +5,7 @@ import { canAccessAshkol } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
-/** Streets linked to a cluster ashkol (empty until import fills streets.ashkol). */
+/** Streets linked to a cluster: owned lines (streets.ashkol) plus shared lines from eshkol_osm_streets. */
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ ashkol: string }> },
@@ -30,6 +30,7 @@ export async function GET(
     LEFT JOIN street_marks m
       ON m.street_id = s.id AND m.user_id = ${user.id}
     WHERE s.ashkol = ${ashkol}
+       OR s.id IN (SELECT street_id FROM eshkol_osm_streets WHERE ashkol = ${ashkol})
     ORDER BY s.name_he, s.id
     LIMIT 500
   `;
