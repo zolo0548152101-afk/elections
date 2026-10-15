@@ -119,6 +119,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [sentOkId, setSentOkId] = useState<number | null>(null);
+  const [sentVia, setSentVia] = useState<"whatsapp" | "sms" | null>(null);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [addCoordinatorId, setAddCoordinatorId] = useState("");
@@ -284,23 +285,25 @@ export default function UsersPage() {
     await load();
   }
 
-  async function sendCredentials(u: UserRow) {
+  async function sendCredentials(u: UserRow, channel: "whatsapp" | "sms") {
     if (!u.mobile?.trim()) {
       flash("err", "למשתמש אין מספר נייד");
       return;
     }
+    const via = channel === "sms" ? "SMS" : "WhatsApp";
     const ok = window.confirm(
-      `לשלוח ל-${u.full_name} (${u.mobile}) את פרטי ההתחברות הקבועים ב-WhatsApp?`,
+      `לשלוח ל-${u.full_name} (${u.mobile}) את פרטי ההתחברות הקבועים ב-${via}?`,
     );
     if (!ok) return;
     setSendingId(u.id);
     setSentOkId(null);
+    setSentVia(channel);
     clearMsg();
     try {
       const res = await fetch(`/api/users/${u.id}/send-credentials`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ channel }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -310,9 +313,10 @@ export default function UsersPage() {
         return;
       }
       setSentOkId(u.id);
+      setSentVia(channel);
       flash(
         "ok",
-        `✓ ההודעה נשלחה בהצלחה ב-WhatsApp אל ${u.full_name} (${u.mobile})`,
+        `✓ ההודעה נשלחה בהצלחה ב-${via} אל ${u.full_name} (${u.mobile})`,
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
       window.setTimeout(() => {
@@ -376,7 +380,7 @@ export default function UsersPage() {
             <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
             <p className="lede">
-              הוספה ועריכה — סיסמה נשמרת גם לשליחה חוזרת ב-WhatsApp (לא מוצגת אחרי שמירה)
+              הוספה ועריכה — סיסמה נשמרת גם לשליחה חוזרת ב-WhatsApp או ב-SMS (לא מוצגת אחרי שמירה)
             </p>
           </div>
         </header>
@@ -657,18 +661,35 @@ export default function UsersPage() {
                         type="button"
                         className="export"
                         disabled={!u.mobile?.trim() || sendingId === u.id}
-                        onClick={() => void sendCredentials(u)}
+                        onClick={() => void sendCredentials(u, "whatsapp")}
                         title={
                           u.mobile?.trim()
                             ? "שליחת פרטי התחברות ב-WhatsApp"
                             : "אין נייד"
                         }
                       >
-                        {sendingId === u.id
+                        {sendingId === u.id && sentVia === "whatsapp"
                           ? "שולח…"
-                          : sentOkId === u.id
+                          : sentOkId === u.id && sentVia === "whatsapp"
                             ? "נשלח ✓"
                             : "שלח בוואטסאפ"}
+                      </button>
+                      <button
+                        type="button"
+                        className="export"
+                        disabled={!u.mobile?.trim() || sendingId === u.id}
+                        onClick={() => void sendCredentials(u, "sms")}
+                        title={
+                          u.mobile?.trim()
+                            ? "שליחת פרטי התחברות ב-SMS"
+                            : "אין נייד"
+                        }
+                      >
+                        {sendingId === u.id && sentVia === "sms"
+                          ? "שולח…"
+                          : sentOkId === u.id && sentVia === "sms"
+                            ? "נשלח ✓"
+                            : "שלח ב-SMS"}
                       </button>
                       <button
                         type="button"

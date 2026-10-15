@@ -70,8 +70,7 @@ export default function LoginPage() {
     }
   }
 
-  async function onForgot(e: React.FormEvent) {
-    e.preventDefault();
+  async function onForgot(channel: "whatsapp" | "sms") {
     setLoading(true);
     setError(null);
     infoFlash.clear();
@@ -79,11 +78,12 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile }),
+        body: JSON.stringify({ mobile, channel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "שגיאה");
-      infoFlash.flash("ok", data.message || "נשלחה סיסמה זמנית ב-WhatsApp");
+      const via = channel === "sms" ? "SMS" : "WhatsApp";
+      infoFlash.flash("ok", data.message || `נשלח קוד זמני ב-${via}`);
       setMode("login");
       setPassword("");
     } catch (err) {
@@ -97,7 +97,11 @@ export default function LoginPage() {
     <main className="login-main">
       <form
         className="login-card"
-        onSubmit={mode === "login" ? onLogin : onForgot}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (mode === "login") void onLogin(e);
+          else void onForgot("whatsapp");
+        }}
       >
         <h1>{previewEntry ? "כניסה לבדיקה" : mode === "login" ? "התחברות" : "סיסמה זמנית"}</h1>
         {previewEntry ? (
@@ -120,7 +124,7 @@ export default function LoginPage() {
         <p className="lede">
           {mode === "login"
             ? "ניהול יום בחירות"
-            : "נשלח אליכם ב-WhatsApp קוד בן 5 ספרות, תקף ל־5 דקות. הסיסמה הקבועה לא משתנה."}
+            : "נשלח אליכם קוד בן 5 ספרות ב-WhatsApp או ב-SMS, תקף ל־5 דקות. הסיסמה הקבועה לא משתנה."}
         </p>
         <label>
           נייד
@@ -152,13 +156,25 @@ export default function LoginPage() {
         {infoFlash.msg && (
           <FormMsg kind={infoFlash.kind}>{infoFlash.msg}</FormMsg>
         )}
-        <button type="submit" className="export" disabled={loading}>
-          {loading
-            ? "…"
-            : mode === "login"
-              ? "כניסה"
-              : "שלח סיסמה זמנית ב-WhatsApp"}
-        </button>
+        {mode === "login" ? (
+          <button type="submit" className="export" disabled={loading}>
+            {loading ? "…" : "כניסה"}
+          </button>
+        ) : (
+          <>
+            <button type="submit" className="export" disabled={loading}>
+              {loading ? "…" : "שלח ב-WhatsApp"}
+            </button>
+            <button
+              type="button"
+              className="export"
+              disabled={loading}
+              onClick={() => void onForgot("sms")}
+            >
+              {loading ? "…" : "שלח ב-SMS"}
+            </button>
+          </>
+        )}
         <button
           type="button"
           className="reset"

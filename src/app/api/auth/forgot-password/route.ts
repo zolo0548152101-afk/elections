@@ -7,6 +7,11 @@ import {
   generateTempLoginCode,
   TEMP_LOGIN_TTL_MS,
 } from "@/lib/passwords";
+import {
+  deliveryChannelLabel,
+  micropaySendSms,
+  parseDeliveryChannel,
+} from "@/lib/micropay";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -27,12 +32,20 @@ function rateLimited(key: string): boolean {
 }
 
 /**
- * Public: send a 5-digit temporary login code over WAHA (HAIM_YAHAD).
+ * Public: send a 5-digit temporary login code over WhatsApp (WAHA) or SMS (Micropay).
  * Does not replace the permanent password — only adds a 5-minute login option.
  * Always returns a generic success when the mobile format is valid (anti-enumeration).
  */
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { mobile?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    mobile?: string;
+    channel?: unknown;
+  };
+  const channel = parseDeliveryChannel(body.channel);
+  if (!channel) {
+    return NextResponse.json({ error: "ערוץ שליחה לא תקין" }, { status: 400 });
+  }
+  const via = deliveryChannelLabel(channel);
   const mobile = normalizeMobileLocal(body.mobile ?? "");
   if (!mobile) {
     return NextResponse.json(
@@ -63,8 +76,7 @@ export async function POST(req: NextRequest) {
 
   const genericOk = {
     ok: true,
-    message:
-      "אם קיים משתמש עם מספר זה, נשלח קוד זמני בן 5 ספרות ב-WhatsApp. תקף ל־5 דקות; הסיסמה הקבועה נשארת.",
+    message: `אם קיים משתמש עם מספר זה, נשלח קוד זמני בן 5 ספרות ב-${via}. תקף ל־5 דקות; הסיסמה הקבועה נשארת.`,
   };
 
   if (rows.length !== 1 || !rows[0].mobile?.trim()) {
@@ -72,7 +84,14 @@ export async function POST(req: NextRequest) {
   }
 
   const user = rows[0];
-  if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
+  if (channel === "sms") {
+    if (!process.env.MICROPAY_TOKEN?.trim() || !process.env.MICROPAY_SOURCE?.trim()) {
+      return NextResponse.json(
+        { error: "שליחת SMS לא מוגדרת בשרת (חסר Micropay)" },
+        { status: 503 },
+      );
+    }
+  } else if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
     return NextResponse.json(
       { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
       { status: 503 },
@@ -89,10 +108,13 @@ export async function POST(req: NextRequest) {
     "הקוד תקף ל־5 דקות בלבד. הסיסמה הקבועה שלכם לא משתנה.",
   ].join("\n");
 
-  const sent = await wahaSendText({ mobile: user.mobile!, text });
+  const sent =
+    channel === "sms"
+      ? await micropaySendSms({ mobile: user.mobile!, text })
+      : await wahaSendText({ mobile: user.mobile!, text });
   if (!sent.ok) {
     return NextResponse.json(
-      { error: sent.error || "שליחת WhatsApp נכשלה" },
+      { error: sent.error || `שליחה ב-${via} נכשלה` },
       { status: 502 },
     );
   }

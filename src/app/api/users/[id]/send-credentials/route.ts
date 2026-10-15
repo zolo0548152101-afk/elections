@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole, type SessionUser } from "@/lib/auth";
 import { appLoginUrl } from "@/lib/app-url";
 import { getSql } from "@/lib/db";
+import { micropaySendSms, parseDeliveryChannel } from "@/lib/micropay";
 import { wahaSendText } from "@/lib/waha";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ function canManage(actor: SessionUser, target: TargetUser) {
 }
 
 /**
- * WhatsApp permanent login details via WAHA (HAIM_YAHAD).
+ * Permanent login details via WhatsApp (WAHA) or SMS (Micropay).
  * Sends the stored permanent password — does not generate or change it.
  */
 export async function POST(
@@ -71,14 +72,25 @@ export async function POST(
     );
   }
 
-  if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
+  const body = (await req.json().catch(() => ({}))) as { channel?: unknown };
+  const channel = parseDeliveryChannel(body.channel);
+  if (!channel) {
+    return NextResponse.json({ error: "ערוץ שליחה לא תקין" }, { status: 400 });
+  }
+
+  if (channel === "sms") {
+    if (!process.env.MICROPAY_TOKEN?.trim() || !process.env.MICROPAY_SOURCE?.trim()) {
+      return NextResponse.json(
+        { error: "שליחת SMS לא מוגדרת בשרת (חסר Micropay)" },
+        { status: 503 },
+      );
+    }
+  } else if (!process.env.WAHA_BASE_URL?.trim() || !process.env.WAHA_API_KEY?.trim()) {
     return NextResponse.json(
       { error: "שליחת WhatsApp לא מוגדרת בשרת (חסר WAHA)" },
       { status: 503 },
     );
   }
-
-  await req.json().catch(() => ({}));
 
   const loginUrl = appLoginUrl(req);
   const text = [
@@ -88,13 +100,16 @@ export async function POST(
     `סיסמא- ${password}`,
   ].join("\n");
 
-  const sent = await wahaSendText({ mobile: target.mobile, text });
+  const sent =
+    channel === "sms"
+      ? await micropaySendSms({ mobile: target.mobile, text })
+      : await wahaSendText({ mobile: target.mobile, text });
   if (!sent.ok) {
     return NextResponse.json({ error: sent.error }, { status: 502 });
   }
 
   return NextResponse.json({
     ok: true,
-    message_id: sent.id,
+    ...("id" in sent ? { message_id: sent.id } : {}),
   });
 }
