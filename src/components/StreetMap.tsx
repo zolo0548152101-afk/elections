@@ -15,7 +15,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
-import type { Feature, FeatureCollection } from "geojson";
+import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
 import { streetsTilePath } from "@/lib/tiles-version";
@@ -300,28 +300,6 @@ function addMapOverlays(map: MapLibreMap) {
     },
     minzoom: 13,
   });
-  map.addSource("relevant", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addLayer({
-    id: "relevant-streets",
-    type: "line",
-    source: "relevant",
-    filter: [
-      "any",
-      ["==", ["geometry-type"], "LineString"],
-      ["==", ["geometry-type"], "MultiLineString"],
-    ],
-    paint: relevantLinePaint("") as never,
-  });
-  map.addLayer({
-    id: "relevant-points",
-    type: "circle",
-    source: "relevant",
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: relevantPointPaint("") as never,
-  });
   map.addLayer({
     id: "eshkol-houses",
     type: "circle",
@@ -494,32 +472,6 @@ function addMapOverlays(map: MapLibreMap) {
       "icon-pitch-alignment": "viewport",
     },
   });
-}
-
-function relevantChosen(selectedAshkol: string): Expr {
-  return selectedAshkol
-    ? ["in", `|${selectedAshkol}|`, ["get", "ashkols"]]
-    : ["literal", false];
-}
-
-function relevantLinePaint(selectedAshkol: string) {
-  const chosen = relevantChosen(selectedAshkol);
-  return {
-    "line-color": ["get", "color"],
-    "line-opacity": ["case", chosen, 1, selectedAshkol ? 0.18 : 0.9],
-    "line-width": ["case", chosen, 6, 3.5],
-  };
-}
-
-function relevantPointPaint(selectedAshkol: string) {
-  const chosen = relevantChosen(selectedAshkol);
-  return {
-    "circle-color": ["get", "color"],
-    "circle-radius": ["case", chosen, 7, 5],
-    "circle-opacity": ["case", chosen, 0.95, selectedAshkol ? 0.25 : 0.85],
-    "circle-stroke-width": 1.5,
-    "circle-stroke-color": "#ffffff",
-  };
 }
 
 function houseCirclePaint(selectedAshkol: string) {
@@ -1192,48 +1144,8 @@ export function StreetMap({
       map.getCanvas().style.cursor = "";
     });
 
-    map.on("click", "relevant-streets", (e) => {
-      openRelevantPopup(e);
-    });
-    map.on("click", "relevant-points", (e) => {
-      openRelevantPopup(e);
-    });
-    map.on("mouseenter", "relevant-streets", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "relevant-streets", () => {
-      map.getCanvas().style.cursor = "";
-    });
-    map.on("mouseenter", "relevant-points", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "relevant-points", () => {
-      map.getCanvas().style.cursor = "";
-    });
-
-    function openRelevantPopup(e: MapLayerMouseEvent) {
-      const props = e.features?.[0]?.properties;
-      if (!props) return;
-      const ashkol = String(props.ashkol ?? "");
-      const name = escapeHtml(String(props.name ?? ""));
-      if (ashkol) selectEshkolRef.current(ashkol);
-      housePopupRef.current?.remove();
-      housePopupRef.current = new Popup({ closeButton: true, maxWidth: "240px" })
-        .setLngLat(e.lngLat)
-        .setHTML(
-          `<div dir="rtl" class="house-popup"><strong>${name}</strong><div>אשכול <bdi dir="ltr">${escapeHtml(ashkol)}</bdi></div></div>`,
-        )
-        .addTo(map);
-    }
-
-    function hitsRelevant(point: { x: number; y: number }) {
-      const layers = ["relevant-streets", "relevant-points"].filter((id) => map.getLayer(id));
-      if (layers.length === 0) return false;
-      return map.queryRenderedFeatures([point.x, point.y], { layers }).length > 0;
-    }
-
     map.on("click", (e) => {
-      if (hitsHouse(e.point) || hitsRelevant(e.point)) return;
+      if (hitsHouse(e.point)) return;
       if (
         map.getLayer("clusters-circle") &&
         map.queryRenderedFeatures(e.point, { layers: ["clusters-circle"] }).length > 0
@@ -1259,7 +1171,7 @@ export function StreetMap({
           stretchMoved = false;
           return;
         }
-        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point", "eshkol-houses", "relevant-streets", "relevant-points"].filter((id) =>
+        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point", "eshkol-houses"].filter((id) =>
           map.getLayer(id),
         );
         const blocked = map.queryRenderedFeatures(e.point, { layers }).some((feature) => {
@@ -1270,9 +1182,7 @@ export function StreetMap({
             kind === "handle" ||
             kind === "point" ||
             layer === "clusters-circle" ||
-            layer === "eshkol-houses" ||
-            layer === "relevant-streets" ||
-            layer === "relevant-points"
+            layer === "eshkol-houses"
           );
         });
         if (blocked) return;
@@ -1286,7 +1196,7 @@ export function StreetMap({
         return;
       }
       if (routeModeRef.current !== "off") return;
-      if (map.queryRenderedFeatures(e.point, { layers: ["streets-line", "route-line", "clusters-circle", "eshkol-houses", "relevant-streets", "relevant-points"].filter((id) => map.getLayer(id)) }).length > 0) {
+      if (map.queryRenderedFeatures(e.point, { layers: ["streets-line", "route-line", "clusters-circle", "eshkol-houses"].filter((id) => map.getLayer(id)) }).length > 0) {
         return;
       }
       const street = streetUnder(e.point);
@@ -1793,57 +1703,6 @@ export function StreetMap({
     }
     fitAshkolHousesRef.current(ashkol);
   };
-
-  const [relevantData, setRelevantData] = useState<FeatureCollection | null>(null);
-
-  useEffect(() => {
-    let cancel = false;
-    fetch("/api/relevant-streets")
-      .then(async (res) => (res.ok ? ((await res.json()) as FeatureCollection) : null))
-      .then((data) => {
-        if (!cancel && data) setRelevantData(data);
-      })
-      .catch(() => {
-        if (!cancel) setRelevantData(null);
-      });
-    return () => {
-      cancel = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !relevantData) return;
-    const apply = () => {
-      const src = map.getSource("relevant") as GeoJSONSource | undefined;
-      src?.setData(relevantData);
-    };
-    if (map.isStyleLoaded() && map.getSource("relevant")) apply();
-    else map.once("load", apply);
-  }, [relevantData]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const line = relevantLinePaint(selectedAshkol);
-    const point = relevantPointPaint(selectedAshkol);
-    const apply = () => {
-      if (map.getLayer("relevant-streets")) {
-        map.setPaintProperty("relevant-streets", "line-color", line["line-color"] as never);
-        map.setPaintProperty("relevant-streets", "line-width", line["line-width"] as never);
-        map.setPaintProperty("relevant-streets", "line-opacity", line["line-opacity"] as never);
-      }
-      if (map.getLayer("relevant-points")) {
-        map.setPaintProperty("relevant-points", "circle-color", point["circle-color"] as never);
-        map.setPaintProperty("relevant-points", "circle-radius", point["circle-radius"] as never);
-        map.setPaintProperty("relevant-points", "circle-opacity", point["circle-opacity"] as never);
-        map.setPaintProperty("relevant-points", "circle-stroke-width", point["circle-stroke-width"] as never);
-        map.setPaintProperty("relevant-points", "circle-stroke-color", point["circle-stroke-color"] as never);
-      }
-    };
-    apply();
-    if (!map.getLayer("relevant-streets")) map.once("idle", apply);
-  }, [selectedAshkol]);
 
   useEffect(() => {
     if (!houseQuery) {

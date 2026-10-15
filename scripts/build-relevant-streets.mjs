@@ -31,7 +31,7 @@ for (const row of rows.slice(1)) {
   const id = String(cell(row, "street_id") ?? "").trim();
   const lat = Number(cell(row, "lat"));
   const lng = Number(cell(row, "lng"));
-  if (!ashkol || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+  if (!ashkol || lat < 29 || lat > 33.6 || lng < 34 || lng > 36.6) continue;
 
   if (id) {
     const prev = byStreet.get(id) ?? {
