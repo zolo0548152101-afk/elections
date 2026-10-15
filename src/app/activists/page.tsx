@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatMobileDisplay } from "@/lib/activists";
+import { formatMobileDisplay, SHIRT_SIZES } from "@/lib/activists";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
@@ -48,6 +49,46 @@ export default function ActivistsPage() {
   const [copied, setCopied] = useState(false);
   const [scope, setScope] = useState<"coordinator" | "manager" | "admin">("coordinator");
   const [hasInstitutions, setHasInstitutions] = useState(true);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [draft, setDraft] = useState({ full_name: "", mobile: "", shirt_size: "M" });
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function startEdit(row: Activist) {
+    setEditId(row.id);
+    setDraft({ full_name: row.full_name, mobile: row.mobile, shirt_size: row.shirt_size });
+    setRowError(null);
+  }
+
+  async function saveEdit(id: number) {
+    setSaving(true);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/activists/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "שגיאה");
+      setActivists((list) => list.map((a) => (a.id === id ? { ...a, ...data.activist } : a)));
+      setEditId(null);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "שגיאה");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id: number) {
+    const res = await fetch(`/api/activists/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "המחיקה נכשלה");
+      return;
+    }
+    setActivists((list) => list.filter((a) => a.id !== id));
+  }
 
   useEffect(() => {
     fetch("/api/activists")
@@ -139,28 +180,95 @@ export default function ActivistsPage() {
                       <SortTh k="size" sort={tsort.sort} onSort={tsort.toggle}>מידה</SortTh>
                       <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>מוסד</SortTh>
                       <SortTh k="created" sort={tsort.sort} onSort={tsort.toggle}>נרשם</SortTh>
+                      <th>פעולות</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortRows(rows, APP_ACTIVISTS_SORT, tsort.sort).map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.full_name}</td>
-                        <td>
-                          <a href={`tel:${row.mobile}`}>{formatMobileDisplay(row.mobile)}</a>
-                        </td>
-                        <td>{row.shirt_size}</td>
-                        <td>
-                          {row.institution_name}
-                          {row.settlement_name ? ` · ${row.settlement_name}` : ""}
-                        </td>
-                        <td>
-                          {when(row.created_at)}
-                          {new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 1000
-                            ? " · עודכן"
-                            : ""}
-                        </td>
-                      </tr>
-                    ))}
+                    {sortRows(rows, APP_ACTIVISTS_SORT, tsort.sort).map((row) =>
+                      editId === row.id ? (
+                        <tr key={row.id} className="is-editing">
+                          <td>
+                            <input
+                              className="row-edit-input"
+                              aria-label="שם"
+                              value={draft.full_name}
+                              onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="row-edit-input"
+                              aria-label="נייד"
+                              dir="ltr"
+                              inputMode="tel"
+                              value={draft.mobile}
+                              onChange={(e) => setDraft({ ...draft, mobile: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className="row-edit-input"
+                              aria-label="מידה"
+                              value={draft.shirt_size}
+                              onChange={(e) => setDraft({ ...draft, shirt_size: e.target.value })}
+                            >
+                              {SHIRT_SIZES.map((size) => (
+                                <option key={size} value={size}>
+                                  {size}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            {row.institution_name}
+                            {row.settlement_name ? ` · ${row.settlement_name}` : ""}
+                          </td>
+                          <td>{when(row.created_at)}</td>
+                          <td>
+                            <div className="row-actions">
+                              <button
+                                type="button"
+                                className="row-btn row-btn-primary"
+                                disabled={saving}
+                                onClick={() => void saveEdit(row.id)}
+                              >
+                                {saving ? "שומר…" : "שמירה"}
+                              </button>
+                              <button type="button" className="row-btn" onClick={() => setEditId(null)}>
+                                ביטול
+                              </button>
+                            </div>
+                            {rowError ? <p className="row-error">{rowError}</p> : null}
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={row.id}>
+                          <td>{row.full_name}</td>
+                          <td>
+                            <a href={`tel:${row.mobile}`}>{formatMobileDisplay(row.mobile)}</a>
+                          </td>
+                          <td>{row.shirt_size}</td>
+                          <td>
+                            {row.institution_name}
+                            {row.settlement_name ? ` · ${row.settlement_name}` : ""}
+                          </td>
+                          <td>
+                            {when(row.created_at)}
+                            {new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 1000
+                              ? " · עודכן"
+                              : ""}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" className="row-btn" onClick={() => startEdit(row)}>
+                                עריכה
+                              </button>
+                              <ConfirmDelete onConfirm={() => remove(row.id)} />
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
               </div>

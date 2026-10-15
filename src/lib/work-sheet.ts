@@ -7,6 +7,9 @@ export type SheetStreet = {
   id: string;
   name_he: string;
   done: boolean;
+  /** Apartments and voters of this cluster on the street (0 when unknown). */
+  door_count: number;
+  voter_count: number;
   paths: [number, number][][];
 };
 
@@ -40,6 +43,8 @@ export type SheetSection = {
   cluster: SheetCluster;
   coordinators: SheetCoordinator[];
   marker: { lat: number; lng: number } | null;
+  /** The cluster's houses as [lat, lng]; the sheet map is framed on these. */
+  houses: [number, number][];
   streets: SheetStreet[];
   street_total: number;
   streets_truncated: boolean;
@@ -75,6 +80,8 @@ type StreetSql = {
   lat: number | null;
   lng: number | null;
   done: boolean;
+  door_count: number | null;
+  voter_count: number | null;
   geom_geojson: unknown;
 };
 
@@ -164,29 +171,62 @@ async function sectionsFor(
   `) as ClusterSql[];
   const byAshkol = new Map(clusters.map((c) => [c.ashkol, c]));
 
+  // Same streets as the map: owned lines (streets.ashkol) plus shared lines (eshkol_osm_streets).
   const counts = (await sql`
-    SELECT ashkol, count(*)::int AS n
-    FROM streets
-    WHERE ashkol = ANY(${ashkols})
+    SELECT ashkol, count(DISTINCT street_id)::int AS n
+    FROM (
+      SELECT id AS street_id, ashkol FROM streets WHERE ashkol = ANY(${ashkols})
+      UNION
+      SELECT street_id, ashkol FROM eshkol_osm_streets WHERE ashkol = ANY(${ashkols})
+    ) linked
     GROUP BY ashkol
   `) as { ashkol: string; n: number }[];
   const countByAshkol = new Map(counts.map((r) => [r.ashkol, r.n]));
 
   const streets = (await sql`
-    SELECT id, name_he, ashkol, lat, lng, done, geom_geojson
+    WITH linked AS (
+      SELECT id AS street_id, ashkol FROM streets WHERE ashkol = ANY(${ashkols})
+      UNION
+      SELECT street_id, ashkol FROM eshkol_osm_streets WHERE ashkol = ANY(${ashkols})
+    ),
+    tallies AS (
+      SELECT l.ashkol, l.street_id,
+             SUM(es.door_count) AS door_count,
+             SUM(es.voter_count) AS voter_count
+      FROM eshkol_osm_streets l
+      JOIN eshkol_streets es ON es.ashkol = l.ashkol AND es.street_name = l.street_name
+      WHERE l.ashkol = ANY(${ashkols})
+      GROUP BY l.ashkol, l.street_id
+    )
+    SELECT id, name_he, ashkol, lat, lng, done, door_count, voter_count, geom_geojson
     FROM (
-      SELECT s.id, s.name_he, s.ashkol, s.lat, s.lng, s.geom_geojson,
+      SELECT s.id, s.name_he, k.ashkol, s.lat, s.lng, s.geom_geojson,
+             t.door_count, t.voter_count,
              EXISTS (
                SELECT 1 FROM street_marks m
                WHERE m.street_id = s.id AND m.user_id = ${markUserId} AND m.done
              ) AS done,
-             row_number() OVER (PARTITION BY s.ashkol ORDER BY s.name_he, s.id) AS rn
-      FROM streets s
-      WHERE s.ashkol = ANY(${ashkols})
+             row_number() OVER (PARTITION BY k.ashkol ORDER BY s.name_he, s.id) AS rn
+      FROM linked k
+      JOIN streets s ON s.id = k.street_id
+      LEFT JOIN tallies t ON t.ashkol = k.ashkol AND t.street_id = k.street_id
     ) ranked
     WHERE rn <= ${STREET_CAP}
     ORDER BY ashkol, name_he, id
   `) as StreetSql[];
+
+  const houseRows = (await sql`
+    SELECT ashkol, lat, lng
+    FROM eshkol_houses
+    WHERE ashkol = ANY(${ashkols}) AND lat IS NOT NULL AND lng IS NOT NULL
+    LIMIT 5000
+  `) as { ashkol: string; lat: number; lng: number }[];
+  const housesByAshkol = new Map<string, [number, number][]>();
+  for (const h of houseRows) {
+    const list = housesByAshkol.get(h.ashkol) ?? [];
+    if (list.length < 800) list.push([num(h.lat), num(h.lng)]);
+    housesByAshkol.set(h.ashkol, list);
+  }
   const streetsByAshkol = new Map<string, SheetStreet[]>();
   for (const s of streets) {
     const paths = pathsFromGeom(s.geom_geojson);
@@ -198,6 +238,8 @@ async function sectionsFor(
       id: s.id,
       name_he: s.name_he,
       done: s.done === true,
+      door_count: num(s.door_count),
+      voter_count: num(s.voter_count),
       paths,
     });
     streetsByAshkol.set(s.ashkol, list);
@@ -233,6 +275,7 @@ async function sectionsFor(
         ballot_count: num(row.ballot_count),
       },
       marker,
+      houses: housesByAshkol.get(ashkol) ?? [],
       streets: streetsByAshkol.get(ashkol) ?? [],
       street_total: total,
       streets_truncated: total > STREET_CAP,

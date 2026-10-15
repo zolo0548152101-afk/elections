@@ -134,7 +134,7 @@ h1 {
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(9rem, 13rem) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   gap: 0.55rem;
   align-items: end;
   background: var(--card);
@@ -495,16 +495,26 @@ tbody tr.cluster-row-selected:hover {
   color: #fff;
 }
 
-.app-nav-user button {
-  border: 0;
+/* Logout: quiet outline, not a primary action. */
+.app-nav-user .app-nav-logout {
+  border: 1px solid rgba(255, 252, 247, 0.35);
   border-radius: 999px;
-  padding: 0.55rem 0.95rem;
-  min-height: 44px;
-  background: rgba(196, 92, 38, 0.9);
-  color: white;
+  padding: 0.45rem 0.9rem;
+  min-height: 40px;
+  background: transparent;
+  color: var(--sand);
   cursor: pointer;
   font: inherit;
-  transition: background-color 180ms ease;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.app-nav-user .app-nav-logout:hover {
+  background: rgba(255, 252, 247, 0.1);
+  border-color: rgba(255, 252, 247, 0.6);
 }
 
 .progress-pill {
@@ -1645,10 +1655,10 @@ tbody tr.cluster-row-selected:hover {
 }
 
 .street-map-toolbar {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr auto auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  align-items: end;
+  align-items: flex-end;
   background: var(--card);
   border-radius: 16px;
   padding: 0.9rem;
@@ -2395,10 +2405,9 @@ button.route-more-name[aria-pressed="true"] {
   background: #fff;
   color: var(--ink);
   border-radius: 16px;
-  padding: 0.65rem 0.8rem 0.75rem;
-  margin: 0.5rem auto 1rem;
-  width: min(100%, 210mm);
-  max-width: 210mm;
+  padding: 1rem 1.1rem 1.2rem;
+  margin: 0.5rem auto 1.5rem;
+  width: min(100% - 1.5rem, 1100px);
   box-shadow: var(--shadow);
 }
 
@@ -2406,116 +2415,218 @@ button.route-more-name[aria-pressed="true"] {
 .sheet-doc h2,
 .sheet-doc h3 {
   color: var(--ink);
-}
-
-.sheet-doc h1 {
-  font-size: 1.35rem;
+  margin: 0;
 }
 
 .sheet-head {
   display: flex;
   justify-content: space-between;
-  gap: 0.6rem;
-  align-items: start;
-  margin-bottom: 0.35rem;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
 }
 
-.sheet-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
-  text-align: left;
-}
-
-.sheet-people {
+.sheet-title .eyebrow {
   margin: 0;
 }
 
-.sheet-person {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  direction: ltr;
-  gap: 0.05rem;
-  margin: 0;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.sheet-person + .sheet-person {
-  margin-top: 0.15rem;
+.sheet-title h1 {
+  font-size: 1.4rem;
 }
 
 .sheet-actions {
   flex: 0 0 auto;
 }
 
-.sheet-section {
-  margin-top: 0.15rem;
-}
-
 .sheet-section + .sheet-section {
-  margin-top: 0.7rem;
-  padding-top: 0.45rem;
-  border-top: 1px solid var(--line);
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--line);
 }
 
-.sheet-section h2 {
-  margin: 0 0 0.2rem;
-  font-size: 0.95rem;
-}
-
-.sheet-section h3 {
-  margin: 0.35rem 0 0.15rem;
-  font-size: 0.95rem;
-}
-
-.sheet-stats {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.2rem 0.45rem;
-  margin: 0.3rem 0 0.35rem;
-}
-
-.sheet-stats div {
-  margin: 0;
-}
-
-.sheet-stats dt {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.sheet-stats dd {
-  margin: 0.1rem 0 0;
-  font-weight: 700;
-}
-
-.sheet-k {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
+/* Map first: about two thirds of the sheet. */
 .sheet-map {
-  height: 52mm;
-  border-radius: 10px;
+  height: min(66vh, 720px);
+  min-height: 380px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
 }
 
-.sheet-streets {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.84rem;
+.sheet-nomap {
+  padding: 2rem 0;
+  text-align: center;
 }
 
-.sheet-streets th,
-.sheet-streets td {
-  text-align: start;
-  padding: 0.14rem 0.28rem;
+/* Bottom third: facts on one side, streets on the other. */
+.sheet-info {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) 2fr;
+  gap: 0.9rem 1.2rem;
+  margin-top: 0.75rem;
+  align-items: start;
+}
+
+.sheet-facts h2 {
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+}
+
+.sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+}
+
+.sheet-stats div {
+  margin: 0;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+}
+
+.sheet-stats dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.sheet-stats dd {
+  margin: 0.05rem 0 0;
+  font-weight: 800;
+  font-size: 0.98rem;
+}
+
+.sheet-people {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  align-items: baseline;
+  margin: 0 0 0.45rem;
+}
+
+.sheet-person {
+  font-weight: 700;
+  font-size: 0.9rem;
+  grid-column: 2;
+}
+
+.sheet-k {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  grid-column: 1;
+}
+
+.sheet-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.sheet-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0.3rem;
+  border-radius: 2px;
+  margin-inline-start: 0.4rem;
+}
+
+.sheet-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid #0f1c2e;
+  background: #fff;
+  margin-inline-start: 0.4rem;
+}
+
+.sheet-streets-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 0.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.sheet-streets-head h3 {
+  font-size: 1rem;
+}
+
+.sheet-streets-head span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Two columns of streets, each with a box to tick in the field. */
+.sheet-street-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  column-count: 2;
+  column-gap: 1.2rem;
+}
+
+.sheet-street-list li {
+  display: grid;
+  grid-template-columns: 1rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.18rem 0;
   border-bottom: 1px solid var(--line);
+  break-inside: avoid;
+  font-size: 0.86rem;
+}
+
+.sheet-check {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+li.is-done .sheet-check {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.sheet-street-name {
+  font-weight: 700;
+  min-width: 0;
+}
+
+.sheet-street-num {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .sheet-info {
+    grid-template-columns: 1fr;
+  }
+
+  .sheet-street-list {
+    column-count: 1;
+  }
+
+  .sheet-head {
+    flex-wrap: wrap;
+  }
 }
 
 @page {
@@ -2529,30 +2640,74 @@ button.route-more-name[aria-pressed="true"] {
   }
 
   .app-nav,
-  .sheet-actions {
+  .sheet-actions,
+  .help-corner {
     display: none !important;
+  }
+
+  html,
+  body,
+  *:has(> .sheet-doc) {
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
   }
 
   .sheet-doc {
     margin: 0;
-    width: auto;
+    width: 100%;
     max-width: none;
     box-shadow: none;
     border-radius: 0;
     padding: 0;
   }
 
+  .sheet-head {
+    margin-bottom: 2mm;
+  }
+
+  .sheet-title h1 {
+    font-size: 15pt;
+  }
+
+  /* A4 minus margins is about 281mm tall: ~180mm map, the rest for the info. */
   .sheet-map {
-    height: 55mm;
+    width: 194mm;
+    height: 180mm;
+    min-height: 0;
     break-inside: avoid;
   }
 
-  .sheet-streets tr {
-    break-inside: avoid;
+  .sheet-section + .sheet-section {
+    break-before: page;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .sheet-info {
+    grid-template-columns: 62mm 1fr;
+    gap: 3mm 5mm;
+    margin-top: 3mm;
+  }
+
+  .sheet-stats div {
+    padding: 1mm 1.5mm;
+  }
+
+  .sheet-street-list li {
+    font-size: 8.5pt;
+    padding: 0.6mm 0;
   }
 
   .leaflet-control-container {
     display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 
@@ -3273,4 +3428,254 @@ body.tour-hands-on .driver-overlay {
   color: #1d4ed8;
   font-weight: 700;
   text-align: center;
+}
+
+/* Row actions: edit / save / cancel / delete in tables */
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.row-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #102033;
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  min-height: 36px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.row-btn:hover {
+  background: #f1f5f9;
+}
+
+.row-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.row-btn-primary {
+  background: #102033;
+  border-color: #102033;
+  color: #fff;
+}
+
+.row-btn-primary:hover {
+  background: #1e3a5f;
+}
+
+.row-btn-danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.row-btn-danger:hover {
+  background: #fef2f2;
+}
+
+.row-btn-danger.is-armed {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.row-edit-input {
+  width: 100%;
+  min-width: 6rem;
+  min-height: 36px;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+tr.is-editing {
+  background: #fffbeb;
+}
+
+.row-error {
+  color: #b91c1c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-top: 0.25rem;
+}
+
+/* Cluster status filter (StageTabs) */
+.stage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.stage-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #102033;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.stage-tab:hover {
+  border-color: #94a3b8;
+}
+
+.stage-tab.is-active {
+  background: #102033;
+  border-color: #102033;
+  color: #fff;
+}
+
+.stage-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  flex: none;
+}
+
+.stage-tab.is-active .stage-dot {
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.stage-count {
+  font-size: 0.8rem;
+  font-weight: 800;
+  min-width: 1.6rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  text-align: center;
+}
+
+.stage-tab.is-active .stage-count {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.filters .stage-tabs,
+.users-filters .stage-tabs {
+  grid-column: 1 / -1;
+}
+
+.filters-reset {
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 0 0.4rem;
+}
+
+.stage-bar {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: var(--shadow);
+  margin-top: 0.6rem;
+}
+
+/* Search above the clusters table on the map page */
+.table-search {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: var(--shadow);
+}
+
+.table-search label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #102033;
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+.table-search input {
+  min-height: 42px;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.table-search-count {
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.88rem;
+  padding-bottom: 0.6rem;
+}
+
+/* Secondary map actions: outline, not a primary CTA */
+.map-quiet-btn {
+  border: 1px solid #94a3b8;
+  background: #fff;
+  color: #102033;
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.map-quiet-btn:hover {
+  background: #f1f5f9;
+}
+
+.street-map-toolbar > .search-box {
+  flex: 1.4 1 18rem;
+}
+
+.street-map-toolbar > label[data-tour="cluster-select"] {
+  flex: 1 1 14rem;
+}
+
+.street-map-toolbar > .map-status {
+  flex-basis: 100%;
+}
+
+.street-map-toolbar > .map-status:empty {
+  display: none;
+}
+
+.driver-popover.app-tour .tour-task-status.is-warn {
+  color: #b45309;
+}
+
+/* Before printing: the map takes its paper size on screen too, so Leaflet frames it right. */
+body.sheet-printing .sheet-map {
+  width: 194mm;
+  height: 180mm;
+  min-height: 0;
 }

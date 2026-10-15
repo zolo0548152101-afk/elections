@@ -27,16 +27,17 @@ export function AppNav({
     user.role === "super_admin" || user.role === "area_manager"
       ? [
           { href: "/users", label: "משתמשים" },
-          activistsLink,
-          ...(user.role === "super_admin"
-            ? [{ href: "/coordinator-signups", label: "הרשמת רכזים" }]
-            : []),
           { href: "/", label: "מפה" },
           institutionsLink,
           { href: "/team/clusters", label: "אשכולות" },
           { href: "/team/coordinators", label: "רכזים" },
           ...(user.role === "super_admin" ? [{ href: "/team/managers", label: "רכזי על" }] : []),
           { href: "/links", label: "קישורים" },
+          // Registrations sit at the far left (end of the row in RTL).
+          activistsLink,
+          ...(user.role === "super_admin"
+            ? [{ href: "/coordinator-signups", label: "הרשמת רכזים" }]
+            : []),
         ]
       : [
           { href: "/", label: "מפה" },
@@ -101,7 +102,7 @@ export function AppNav({
         <span className="app-nav-who">
           <ShowMore text={user.full_name} /> · {roleLabel(user.role)}
         </span>
-        <button type="button" onClick={logout}>
+        <button type="button" className="app-nav-logout" onClick={logout} title="יציאה מהמערכת">
           יציאה
         </button>
       </div>

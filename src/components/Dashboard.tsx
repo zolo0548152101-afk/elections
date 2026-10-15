@@ -2,10 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
+import { clusterStage, type ClusterStage } from "@/lib/cluster-stage";
+import { StageTabs, stageCounts } from "@/components/StageTabs";
 import { ClusterTable, type ClusterView } from "./ClusterTable";
 import { downloadClustersCsv } from "@/lib/csv";
 import { PageQuip } from "@/components/PageQuip";
+import { matchesSearch } from "@/lib/text-search";
 
 const StreetMap = dynamic(
   () => import("./StreetMap").then((m) => m.StreetMap),
@@ -48,6 +50,7 @@ export function Dashboard() {
   const [selectedAshkol, setSelectedAshkol] = useState("");
   const [tableFocusToken, setTableFocusToken] = useState(0);
   const [role, setRole] = useState<string | null>(null);
+  const [tableQuery, setTableQuery] = useState("");
 
   const isCoordinator = role === "coordinator";
   const effectiveMinRight = isCoordinator ? 0 : minRight;
@@ -116,13 +119,18 @@ export function Dashboard() {
     }
   }
 
+  const stageOf = (c: ClusterView) => clusterStage(Boolean(c.done), c.street_done ?? 0);
+  const counts = useMemo(() => stageCounts(clusters, stageOf), [clusters]);
   const openClusters = useMemo(() => {
-    if (isCoordinator) return clusters.filter((c) => !c.done);
     if (stageFilter === "any") return clusters;
-    return clusters.filter(
-      (c) => clusterStage(Boolean(c.done), c.street_done ?? 0) === stageFilter,
-    );
-  }, [clusters, isCoordinator, stageFilter]);
+    return clusters.filter((c) => stageOf(c) === stageFilter);
+  }, [clusters, stageFilter]);
+  const tableClusters = useMemo(() => {
+    const q = tableQuery.trim();
+    if (!q) return openClusters;
+    return openClusters.filter((c) => matchesSearch(`${c.settlement_name} ${c.ashkol}`, q));
+  }, [openClusters, tableQuery]);
+  const slidersChanged = minRight !== 0 || maxTurnout !== 100 || minBzb !== 0 || minLikud !== 0;
 
   function onClusterDone(ashkol: string, done: boolean) {
     setClusters((prev) =>
@@ -232,32 +240,21 @@ export function Dashboard() {
               onChange={(e) => setMinLikud(Number(e.target.value))}
             />
           </label>
-          <label>
-            מצב ביצוע
-            <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value as "any" | ClusterStage)}
-            >
-              <option value="any">הכל</option>
-              <option value="pending">{CLUSTER_STAGE_LABEL.pending} — אף רחוב לא סומן</option>
-              <option value="partial">{CLUSTER_STAGE_LABEL.partial} — חלק מהרחובות סומנו</option>
-              <option value="done">{CLUSTER_STAGE_LABEL.done} — כל הרחובות סומנו</option>
-            </select>
-          </label>
           <div className="filter-actions">
-            <button
-              type="button"
-              className="reset"
-              onClick={() => {
-                setMinRight(0);
-                setMaxTurnout(100);
-                setMinBzb(0);
-                setMinLikud(0);
-                setStageFilter("any");
-              }}
-            >
-              הצג את כל האשכולות
-            </button>
+            {slidersChanged ? (
+              <button
+                type="button"
+                className="filters-reset"
+                onClick={() => {
+                  setMinRight(0);
+                  setMaxTurnout(100);
+                  setMinBzb(0);
+                  setMinLikud(0);
+                }}
+              >
+                איפוס מסננים
+              </button>
+            ) : null}
             <button
               type="button"
               className="export"
@@ -275,6 +272,12 @@ export function Dashboard() {
         </section>
       )}
 
+      {role !== null && (
+        <section className="stage-bar" aria-label="מצב ביצוע">
+          <StageTabs value={stageFilter} onChange={setStageFilter} counts={counts} />
+        </section>
+      )}
+
       {error && (
         <p className="error" role="alert" aria-live="assertive">
           {error}
@@ -282,8 +285,8 @@ export function Dashboard() {
       )}
       {!loading && !error && openClusters.length === 0 && (
         <p className="lede" style={{ color: "var(--sand)" }}>
-          {isCoordinator && count > 0
-            ? "כל האשכולות סומנו כבוצע."
+          {count > 0 && stageFilter !== "any"
+            ? "אין אשכולות במצב הזה. בחרו «כל האשכולות» כדי לראות את כולם."
             : "אין אשכולות להצגה. לרכז: יש לשייך מוסד למשתמש ואז במפה ללחוץ «קשר למוסד» על האשכולות הרלוונטיים — רק הם יופיעו כאן."}
         </p>
       )}
@@ -296,8 +299,26 @@ export function Dashboard() {
           focusAshkolToken={tableFocusToken}
           onClusterDone={onClusterDone}
         />
+        {role !== null && !isCoordinator && (
+          <div className="table-search">
+            <label>
+              <span>חיפוש בטבלה</span>
+              <input
+                type="search"
+                value={tableQuery}
+                onChange={(e) => setTableQuery(e.target.value)}
+                placeholder="שם יישוב או מספר אשכול"
+              />
+            </label>
+            {tableQuery.trim() ? (
+              <span className="table-search-count">
+                {tableClusters.length} מתוך {openClusters.length}
+              </span>
+            ) : null}
+          </div>
+        )}
         <ClusterTable
-          clusters={openClusters}
+          clusters={tableClusters}
           sort={sort}
           dir={dir}
           onSort={onSort}

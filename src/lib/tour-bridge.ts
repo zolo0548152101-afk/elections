@@ -16,4 +16,11 @@ export const tourBridge: {
   reloadRoute?: () => void;
   /** Reload the street list and street marks. */
   refreshStreets?: () => void;
+  /** A cluster worth showing in the tour: one with the most linked streets. */
+  tourAshkol?: () => string | undefined;
 } = {};
+
+// Local development only: lets browser tests reach the map.
+if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+  (window as unknown as { __tourBridge?: typeof tourBridge }).__tourBridge = tourBridge;
+}

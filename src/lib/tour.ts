@@ -152,26 +152,44 @@ type Task = {
   run: () => Promise<void>;
 };
 
+/** Pick a cluster with streets (the tour needs one), and wait for its streets to load. */
+async function ensureCluster() {
+  if (!tourBridge.selectedAshkol) {
+    const select = document.querySelector<HTMLSelectElement>('[data-tour="cluster-select"] select');
+    if (!select) return;
+    await tapElement(select);
+    const want =
+      tourBridge.tourAshkol?.() ?? [...select.options].find((o) => o.value)?.value;
+    if (!want) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+    setter.call(select, want);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  for (let i = 0; i < 20 && !clusterLine(); i++) await wait(250);
+}
+
+/** Open the route menu if it is closed. */
+async function ensureMenu() {
+  if (document.querySelector(".route-map-menu.is-open")) return;
+  for (let i = 0; i < 12 && !document.querySelector('[data-tour="route-toggle"]'); i++) await wait(250);
+  await tapElement(document.querySelector('[data-tour="route-toggle"]'));
+  await wait(300);
+}
+
 const TASKS: Record<TaskId, Task> = {
   "select-cluster": {
     base: () => 0,
     done: () => Boolean(tourBridge.selectedAshkol),
-    run: async () => {
-      const select = document.querySelector<HTMLSelectElement>('[data-tour="cluster-select"] select');
-      if (!select) return;
-      await tapElement(select);
-      const option = [...select.options].find((o) => o.value && o.value !== select.value);
-      if (!option || tourBridge.selectedAshkol) return;
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-      setter.call(select, option.value);
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-      await wait(1200);
-    },
+    run: ensureCluster,
   },
   "mark-street": {
     base: checkedStreets,
     done: (b) => checkedStreets() > Number(b),
     run: async () => {
+      await ensureCluster();
+      for (let i = 0; i < 12 && !document.querySelector(".cluster-street-list input[type=checkbox]"); i++) {
+        await wait(250);
+      }
       const box = document.querySelector<HTMLInputElement>(
         ".cluster-street-list input[type=checkbox]:not(:checked)",
       );
@@ -183,14 +201,16 @@ const TASKS: Record<TaskId, Task> = {
     base: () => 0,
     done: () => Boolean(document.querySelector(".route-map-menu.is-open")),
     run: async () => {
-      if (document.querySelector(".route-map-menu.is-open")) return;
-      await tapElement(document.querySelector('[data-tour="route-toggle"]'));
+      await ensureCluster();
+      await ensureMenu();
     },
   },
   "place-start": {
     base: pointsKey,
     done: (b) => pointsKey() !== b,
     run: async () => {
+      await ensureCluster();
+      await ensureMenu();
       const map = tourBridge.map;
       const line = clusterLine();
       if (!map || !line) return;
@@ -205,6 +225,8 @@ const TASKS: Record<TaskId, Task> = {
     base: drawsKey,
     done: (b) => drawsKey() !== b,
     run: async () => {
+      await ensureCluster();
+      await ensureMenu();
       const map = tourBridge.map;
       const line = clusterLine();
       if (!map || !line || line.length < 2) return;
@@ -228,6 +250,8 @@ const TASKS: Record<TaskId, Task> = {
     base: () => stages().length,
     done: (b) => stages().length > Number(b),
     run: async () => {
+      await ensureCluster();
+      await ensureMenu();
       await tapElement(document.querySelector('[data-tour="route-stage"]'));
       await wait(800);
     },
@@ -538,6 +562,7 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
       const markDone = () => {
         finished = true;
         status.textContent = "✓ מעולה! אפשר להמשיך";
+        status.classList.remove("is-warn");
         status.classList.add("is-done");
         actions.hidden = true;
       };
@@ -555,6 +580,10 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
           hideCursor();
           await wait(500);
           if (task.done(base)) markDone();
+          else {
+            status.textContent = "לא הצלחתי לעשות את זה כאן. אפשר לנסות בעצמכם, או ללחוץ «הבא»";
+            status.classList.add("is-warn");
+          }
           leaveHandsOn();
           tour.refresh();
         }

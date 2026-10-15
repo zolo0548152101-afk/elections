@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
@@ -14,6 +14,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
+import { useCloseOnOutsideClick, useMapFocus } from "./street-map/useMapFocus";
 import type { Feature, Geometry } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
@@ -200,6 +201,9 @@ export function StreetMap({
   onClusterDone?: (ashkol: string, done: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const sidePanelRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const doneIdsRef = useRef<Set<string>>(new Set());
   const mapStateRef = useRef<MapState | null>(null);
@@ -1787,7 +1791,8 @@ export function StreetMap({
       return;
     }
     if (clusters.some((c) => c.ashkol === selectedAshkol)) return;
-    const next = clusters[0]!;
+    // Start on a cluster that still has work; a done one only if all are done.
+    const next = clusters.find((c) => !c.done) ?? clusters[0]!;
     setSelectedAshkol(next.ashkol);
     setPicked(next);
     if (next.map_lng == null || next.map_lat == null) return;
@@ -2275,8 +2280,16 @@ export function StreetMap({
 
   const selectedDone = selectedComputedDone;
 
+  // Clicking on the map brings it to the middle of the screen and keeps it there.
+  useMapFocus(stageRef, wrapRef);
+  // The cluster info box closes on any click outside it.
+  const closeInfoBox = useCallback(() => setPanel((p) => (p?.kind === "cluster" ? null : p)), []);
+  useCloseOnOutsideClick(sidePanelRef, panel?.kind === "cluster", closeInfoBox);
+
   // Handles for the guided tour ("do it for me" and undo at the end).
   tourBridge.selectedAshkol = selectedAshkol;
+  tourBridge.tourAshkol = () =>
+    [...clusters].sort((a, b) => (b.street_total ?? 0) - (a.street_total ?? 0))[0]?.ashkol;
   tourBridge.refreshStreets = () => {
     const a = selectedAshkolRef.current;
     if (a) void loadClusterStreets(a);
@@ -2284,7 +2297,7 @@ export function StreetMap({
   };
 
   const sidePanel = panel ? (
-    <aside className="map-side-panel" aria-live="polite">
+    <aside className="map-side-panel" aria-live="polite" ref={sidePanelRef}>
       <button type="button" className="map-side-close" onClick={() => setPanel(null)} aria-label="סגור">
         ×
       </button>
@@ -2469,7 +2482,7 @@ export function StreetMap({
   ) : null;
 
   return (
-    <div className="street-map-wrap">
+    <div className="street-map-wrap" ref={wrapRef}>
       <div className="street-map-toolbar">
         {me != null && me.role !== "coordinator" && (
         <label className="search-box" ref={searchBoxRef} data-tour="search">
@@ -2572,25 +2585,28 @@ export function StreetMap({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          className="export"
-          data-tour="cluster-done"
-          disabled={!selectedAshkol || selectedDone}
-          onClick={() => markClusterStreets(true)}
-        >
-          סמן אשכול כבוצע
-        </button>
-        <button
-          type="button"
-          className="reset"
-          disabled={!selectedAshkol || !selectedDone}
-          onClick={() => markClusterStreets(false)}
-        >
-          נקה אשכול
-        </button>
-        <button type="button" className="reset" onClick={showAllClusters}>
-          הצג הכל
+        {selectedAshkol && !selectedDone ? (
+          <button
+            type="button"
+            className="export"
+            data-tour="cluster-done"
+            onClick={() => markClusterStreets(true)}
+          >
+            סמן אשכול כבוצע
+          </button>
+        ) : null}
+        {selectedAshkol && selectedDone ? (
+          <button
+            type="button"
+            className="map-quiet-btn"
+            data-tour="cluster-done"
+            onClick={() => markClusterStreets(false)}
+          >
+            ביטול סימון ביצוע
+          </button>
+        ) : null}
+        <button type="button" className="map-quiet-btn" onClick={showAllClusters}>
+          ⤢ כל האשכולות במפה
         </button>
         <p
           className={`map-status${/סומן כבוצע|✓|💎|🇮🇱/.test(status) ? " link-success-note" : ""}`}
@@ -2755,7 +2771,7 @@ export function StreetMap({
                 const stage = pc ? clusterProgressOf(pc).stage : picked.done ? "done" : "pending";
                 return (
                   <p className={`cluster-stage-note is-${stage}`}>
-                    {stage === "done" ? "אשכול הושלם ✓" : CLUSTER_STAGE_LABEL[stage]}
+                    {stage === "done" ? "האשכול בוצע ✓" : CLUSTER_STAGE_LABEL[stage]}
                   </p>
                 );
               })()}
@@ -2907,7 +2923,7 @@ export function StreetMap({
           )}
         </aside>
       </div>
-      <div className={mapFull ? "street-map-stage is-full" : "street-map-stage"} data-tour="map">
+      <div className={mapFull ? "street-map-stage is-full" : "street-map-stage"} data-tour="map" ref={stageRef}>
         <button
           type="button"
           className="map-full-btn"
@@ -2996,9 +3012,9 @@ export function StreetMap({
             </p>
             <p className="eshkol-legend-key">רק רחובות שזוהו במפה</p>
             <p className="eshkol-legend-key eshkol-stage-key">
-              <span style={{ color: "#2563eb" }} aria-hidden="true">◆</span> טרם התחיל ·{" "}
+              <span style={{ color: "#2563eb" }} aria-hidden="true">◆</span> ממתין ·{" "}
               <span style={{ color: "#f97316" }} aria-hidden="true">◆</span> בתהליך ·{" "}
-              <span style={{ color: "#16a34a" }} aria-hidden="true">◆</span> הושלם
+              <span style={{ color: "#16a34a" }} aria-hidden="true">◆</span> בוצע
             </p>
           </div>
         )}

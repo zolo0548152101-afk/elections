@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { COORDINATOR_SIGNUP_KINDS } from "@/lib/coordinator-signups";
 import { formatMobileDisplay } from "@/lib/activists";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
@@ -49,6 +50,58 @@ export default function CoordinatorSignupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [draft, setDraft] = useState({
+    first_name: "",
+    last_name: "",
+    mobile: "",
+    institution_kind: "",
+    institution_name: "",
+  });
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function startEdit(row: Signup) {
+    setEditId(row.id);
+    setDraft({
+      first_name: row.first_name,
+      last_name: row.last_name,
+      mobile: row.mobile,
+      institution_kind: row.institution_kind,
+      institution_name: row.institution_name,
+    });
+    setRowError(null);
+  }
+
+  async function saveEdit(id: number) {
+    setSaving(true);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/coordinator-signups/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "שגיאה");
+      setSignups((list) => list.map((s) => (s.id === id ? data.signup : s)));
+      setEditId(null);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "שגיאה");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id: number) {
+    const res = await fetch(`/api/coordinator-signups/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "המחיקה נכשלה");
+      return;
+    }
+    setSignups((list) => list.filter((s) => s.id !== id));
+  }
 
   useEffect(() => {
     fetch("/api/coordinator-signups")
@@ -165,26 +218,89 @@ export default function CoordinatorSignupsPage() {
                       <SortTh k="kind" sort={tsort.sort} onSort={tsort.toggle}>סוג מוסד</SortTh>
                       <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>שם המוסד</SortTh>
                       <SortTh k="created" sort={tsort.sort} onSort={tsort.toggle}>נרשם</SortTh>
+                      <th>פעולות</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortRows(rows, APP_COORDINATOR_SIGNUPS_SORT, tsort.sort).map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.first_name}</td>
-                        <td>{row.last_name}</td>
-                        <td>
-                          <a href={`tel:${row.mobile}`}>{formatMobileDisplay(row.mobile)}</a>
-                        </td>
-                        <td>{row.institution_kind}</td>
-                        <td>{row.institution_name}</td>
-                        <td>
-                          {when(row.created_at)}
-                          {new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 1000
-                            ? " · עודכן"
-                            : ""}
-                        </td>
-                      </tr>
-                    ))}
+                    {sortRows(rows, APP_COORDINATOR_SIGNUPS_SORT, tsort.sort).map((row) => {
+                      if (editId === row.id) {
+                        const field = (key: keyof typeof draft, label: string, ltr = false) => (
+                          <td>
+                            <input
+                              className="row-edit-input"
+                              aria-label={label}
+                              dir={ltr ? "ltr" : undefined}
+                              value={draft[key]}
+                              onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+                            />
+                          </td>
+                        );
+                        return (
+                          <tr key={row.id} className="is-editing">
+                            {field("first_name", "שם פרטי")}
+                            {field("last_name", "שם משפחה")}
+                            {field("mobile", "נייד", true)}
+                            <td>
+                              <select
+                                className="row-edit-input"
+                                aria-label="סוג מוסד"
+                                value={draft.institution_kind}
+                                onChange={(e) => setDraft({ ...draft, institution_kind: e.target.value })}
+                              >
+                                {COORDINATOR_SIGNUP_KINDS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            {field("institution_name", "שם המוסד")}
+                            <td>{when(row.created_at)}</td>
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  type="button"
+                                  className="row-btn row-btn-primary"
+                                  disabled={saving}
+                                  onClick={() => void saveEdit(row.id)}
+                                >
+                                  {saving ? "שומר…" : "שמירה"}
+                                </button>
+                                <button type="button" className="row-btn" onClick={() => setEditId(null)}>
+                                  ביטול
+                                </button>
+                              </div>
+                              {rowError ? <p className="row-error">{rowError}</p> : null}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return (
+                        <tr key={row.id}>
+                          <td>{row.first_name}</td>
+                          <td>{row.last_name}</td>
+                          <td>
+                            <a href={`tel:${row.mobile}`}>{formatMobileDisplay(row.mobile)}</a>
+                          </td>
+                          <td>{row.institution_kind}</td>
+                          <td>{row.institution_name}</td>
+                          <td>
+                            {when(row.created_at)}
+                            {new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 1000
+                              ? " · עודכן"
+                              : ""}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" className="row-btn" onClick={() => startEdit(row)}>
+                                עריכה
+                              </button>
+                              <ConfirmDelete onConfirm={() => remove(row.id)} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

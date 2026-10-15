@@ -1,12 +1,13 @@
 "use client";
 
+import { StageTabs, stageCounts, type StageFilterValue } from "@/components/StageTabs";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClusterRowLinks, FirstClusterLink } from "@/components/ClusterLinks";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
-import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
+import { CLUSTER_STAGE_LABEL, clusterStage } from "@/lib/cluster-stage";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
@@ -28,7 +29,7 @@ type Row = {
 };
 
 type ScopeFilter = "linked" | "all";
-type StageFilter = "any" | ClusterStage;
+type StageFilter = StageFilterValue;
 
 const APP_TEAM_CLUSTERS_SORT: SortGetters<Row, "ashkol" | "inst" | "coord" | "stage"> = {
   ashkol: (r) => formatAshkolLabel(r.ashkol, r.settlement_name),
@@ -156,7 +157,7 @@ export default function TeamClustersPage() {
             </label>
             {!isCoordinator && (
             <label>
-              אשכולות
+              הצגה
               <select
                 value={status}
                 onChange={(e) => {
@@ -164,26 +165,19 @@ export default function TeamClustersPage() {
                   setStatus(e.target.value as ScopeFilter);
                 }}
               >
-                <option value="linked">שקושרו למוסד</option>
-                <option value="all">כולם</option>
+                <option value="linked">רק אשכולות שקושרו למוסד</option>
+                <option value="all">כל האשכולות במערכת</option>
               </select>
             </label>
             )}
-            <label>
-              מצב ביצוע
-              <select
-                value={stageFilter}
-                onChange={(e) => {
-                  setEditKey(null);
-                  setStageFilter(e.target.value as StageFilter);
-                }}
-              >
-                <option value="any">הכל</option>
-                <option value="pending">{CLUSTER_STAGE_LABEL.pending} — אף רחוב לא סומן</option>
-                <option value="partial">{CLUSTER_STAGE_LABEL.partial} — חלק מהרחובות סומנו</option>
-                <option value="done">{CLUSTER_STAGE_LABEL.done} — כל הרחובות סומנו</option>
-              </select>
-            </label>
+            <StageTabs
+              value={stageFilter}
+              onChange={(v) => {
+                setEditKey(null);
+                setStageFilter(v);
+              }}
+              counts={stageCounts(rows, (r) => clusterStage(r.done, r.street_done))}
+            />
           </div>
         )}
         {!loading && !isCoordinator && (
