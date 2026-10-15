@@ -2675,6 +2675,40 @@ body:has(.register-poster) {
   font-weight: 700;
 }
 
+/* Filter bar as a light card so labels, controls and counts read on the dark page. */
+.activists-bar {
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 14px;
+  padding: 0.75rem 0.9rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 0.75rem;
+}
+
+.activists-bar label {
+  font-size: 0.85rem;
+}
+
+.activists-bar select,
+.activists-bar input {
+  min-height: 42px;
+  min-width: 11rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  padding: 0 0.6rem;
+}
+
+.activists-bar p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
 @media (max-width: 640px) {
   .register-cards {
     grid-template-columns: 1fr;

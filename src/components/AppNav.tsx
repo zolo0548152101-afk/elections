@@ -32,6 +32,7 @@ export function AppNav({
     links.push({ href: "/team/coordinators", label: "רכזים" });
     if (user.role === "super_admin") {
       links.push({ href: "/team/managers", label: "רכזי על" });
+      links.push({ href: "/coordinator-signups", label: "רכזים שנרשמו" });
     }
     links.push({ href: "/links", label: "קישורים" });
   }
