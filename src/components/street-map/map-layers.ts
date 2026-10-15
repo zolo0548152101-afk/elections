@@ -5,10 +5,10 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { streetsTilePath } from "@/lib/tiles-version";
 
-/** Street status. Cluster dots from the filter use a separate gold. */
+/** Street status. Cluster diamonds are blue. */
 export const COLOR_ASSIGNED = "#c45c26";
 export const COLOR_DONE = "#16a34a";
-export const COLOR_FILTERED = "#f5b942";
+export const COLOR_FILTERED = "#2563eb";
 export const COLOR_SEARCH = "#22d3ee";
 
 export const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
@@ -259,7 +259,7 @@ export function addMapOverlays(map: MapLibreMap) {
     },
   });
   // The selected cluster: same source, switched by setFilter (no GeoJSON rebuild on click).
-  // Larger, in its streets' color, with a dark ring — readable without relying on color.
+  // Larger, still blue, with a dark ring so it stands out from the other diamonds.
   map.addLayer({
     id: "clusters-selected",
     type: "symbol",
@@ -272,7 +272,7 @@ export function addMapOverlays(map: MapLibreMap) {
       "icon-ignore-placement": true,
     },
     paint: {
-      "icon-color": ["get", "color"],
+      "icon-color": COLOR_FILTERED,
       "icon-halo-color": "#111827",
       "icon-halo-width": 2.5,
     },
