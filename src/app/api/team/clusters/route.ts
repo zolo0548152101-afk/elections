@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { ashkolStreetStats } from "@/lib/cluster-status";
 import { getSql } from "@/lib/db";
+import { coordinatorInstitutionIds } from "@/lib/streets-access";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ function parseCoords(value: Row["coordinators"]): Coord[] {
 }
 
 /**
- * Admin / רכז על.
+ * Admin / רכז על / רכז (a coordinator sees only clusters of their own institutions, read-only).
  * scope=linked (default): ashkols already linked to an institution.
  * scope=all: every cluster, including ones with no institution yet.
  * done is ashkol_ops_status, or every linked street marked done.
@@ -38,7 +39,7 @@ function parseCoords(value: Row["coordinators"]): Coord[] {
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   try {
-    requireRole(user, ["super_admin", "area_manager"]);
+    requireRole(user, ["super_admin", "area_manager", "coordinator"]);
   } catch {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
@@ -46,9 +47,11 @@ export async function GET(req: NextRequest) {
   const scope = req.nextUrl.searchParams.get("scope") === "all" ? "all" : "linked";
   const sql = getSql();
   const rows =
-    scope === "all"
-      ? await allClusters(sql, user!.role, user!.id)
-      : await linkedClusters(sql, user!.role, user!.id);
+    user!.role === "coordinator"
+      ? await coordinatorClusters(sql, user!.id)
+      : scope === "all"
+        ? await allClusters(sql, user!.role, user!.id)
+        : await linkedClusters(sql, user!.role, user!.id);
 
   const stats = await ashkolStreetStats(sql, [...new Set(rows.map((r) => r.ashkol))]);
   const clusters = rows.map((r) => ({
@@ -218,4 +221,41 @@ async function allClusters(
         LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
         ORDER BY cl.settlement_name, cl.ashkol, i.name NULLS LAST
       `) as Row[]);
+}
+
+async function coordinatorClusters(sql: ReturnType<typeof getSql>, userId: number) {
+  const ids = await coordinatorInstitutionIds(sql, userId);
+  if (ids.length === 0) return [] as Row[];
+  return (await sql`
+    SELECT
+      cl.ashkol,
+      cl.settlement_name,
+      i.id AS institution_id,
+      i.name AS institution_name,
+      coalesce(
+        (
+          SELECT string_agg(u.full_name, ' · ' ORDER BY u.full_name)
+          FROM institution_coordinators link
+          JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+          WHERE link.institution_id = i.id
+        ),
+        ''
+      ) AS coordinator_names,
+      coalesce(
+        (
+          SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name) ORDER BY u.full_name)
+          FROM institution_coordinators link
+          JOIN users u ON u.id = link.user_id AND u.role = 'coordinator'
+          WHERE link.institution_id = i.id
+        ),
+        '[]'
+      ) AS coordinators,
+      ops.done AS ops_done
+    FROM institution_clusters ic
+    JOIN clusters cl ON cl.ashkol = ic.ashkol
+    JOIN institutions i ON i.id = ic.institution_id
+    LEFT JOIN ashkol_ops_status ops ON ops.ashkol = cl.ashkol
+    WHERE ic.institution_id = ANY(${ids})
+    ORDER BY cl.settlement_name, cl.ashkol, i.name
+  `) as Row[];
 }

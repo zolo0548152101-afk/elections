@@ -137,13 +137,7 @@ export function Dashboard() {
     <div className="dash">
       <header className="hero">
         <div>
-          <p className="eyebrow">ניהול יום בחירות</p>
           <h1>אשכולות לפי הצבעה וימין</h1>
-          <p className="lede">
-            {isCoordinator
-              ? "מפת האשכולות של המוסד. לחצו על עיגול אשכול כדי לראות את הרחובות."
-              : "מפת האשכולות. הסינון (ימין, הצבעה, בז״ב) חל על הנקודות, הטבלה והייצוא. לחצו על עיגול אשכול כדי לראות את הרחובות."}
-          </p>
         </div>
         <div className="stats">
           <div>

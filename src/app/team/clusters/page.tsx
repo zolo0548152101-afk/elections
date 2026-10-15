@@ -45,15 +45,17 @@ export default function TeamClustersPage() {
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
   const [busyAshkol, setBusyAshkol] = useState<string | null>(null);
   const [editKey, setEditKey] = useState<string | null>(null);
+  const [isCoordinator, setIsCoordinator] = useState(false);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true);
     const me = await fetch("/api/auth/me").then((r) => r.json());
     const role = me.user?.role;
-    if (role !== "super_admin" && role !== "area_manager") {
+    if (role !== "super_admin" && role !== "area_manager" && role !== "coordinator") {
       router.replace("/");
       return;
     }
+    setIsCoordinator(role === "coordinator");
     const scope = status === "all" ? "all" : "linked";
     const res = await fetch(`/api/team/clusters?scope=${scope}`);
     const data = await res.json();
@@ -125,11 +127,7 @@ export default function TeamClustersPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>אשכולות</h1>
-            <p className="lede">
-              ברירת המחדל היא אשכולות שקושרו. כולם מציג כל אשכול.
-            </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}
@@ -151,6 +149,7 @@ export default function TeamClustersPage() {
                 placeholder="אשכול, יישוב, מוסד, רכז…"
               />
             </label>
+            {!isCoordinator && (
             <label>
               אשכולות
               <select
@@ -164,6 +163,7 @@ export default function TeamClustersPage() {
                 <option value="all">כולם</option>
               </select>
             </label>
+            )}
             <label>
               מצב ביצוע
               <select
@@ -181,7 +181,7 @@ export default function TeamClustersPage() {
             </label>
           </div>
         )}
-        {!loading && (
+        {!loading && !isCoordinator && (
           <FirstClusterLink
             onChanged={() => load({ quiet: true })}
             onMessage={(kind, text) => {
@@ -199,7 +199,7 @@ export default function TeamClustersPage() {
                   <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>מוסד</SortTh>
                   <SortTh k="coord" sort={tsort.sort} onSort={tsort.toggle}>רכז</SortTh>
                   <SortTh k="stage" sort={tsort.sort} onSort={tsort.toggle}>סטטוס</SortTh>
-                  <th>פעולות</th>
+                  {!isCoordinator && <th>פעולות</th>}
                 </tr>
               </thead>
               <tbody>
@@ -257,6 +257,7 @@ export default function TeamClustersPage() {
                         );
                       })()}
                     </td>
+                    {!isCoordinator && (
                     <td className="actions-cell">
                       <button
                         type="button"
@@ -286,8 +287,9 @@ export default function TeamClustersPage() {
                         {open ? "סגור" : "קשרים"}
                       </button>
                     </td>
+                    )}
                   </tr>
-                  {open && (
+                  {open && !isCoordinator && (
                     <tr className="edit-detail-row">
                       <td colSpan={5}>
                         <ClusterRowLinks

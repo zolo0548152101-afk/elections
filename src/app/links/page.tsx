@@ -58,11 +58,7 @@ export default function LinksHubPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>קישורים</h1>
-            <p className="lede">
-              עריכת שיוכים בהיררכיה: רכז → רכז על → מנהל. כל דף ניתן לעריכה ישירות.
-            </p>
           </div>
         </header>
         <div className="links-hub">

@@ -456,7 +456,7 @@ export function StreetMap({
         overlayBound = true;
         bindOverlayInteractions();
       }
-      setStatus("לחצו על אשכול");
+      setStatus("");
     });
     map.on("error", (e) => {
       const msg = String(
@@ -2746,7 +2746,7 @@ export function StreetMap({
               })()}
             </>
           ) : (
-            <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
+            null
           )}
         </aside>
         <aside className="street-card" aria-live="polite">
@@ -2888,10 +2888,7 @@ export function StreetMap({
               </div>
             </>
           ) : (
-            <p>
-              בחרו אשכול כדי לראות את רחובותיו (כשיהיו מקושרים) ולסמן בוצע, או לחצו
-              על רחוב במפה.
-            </p>
+            null
           )}
         </aside>
       </div>

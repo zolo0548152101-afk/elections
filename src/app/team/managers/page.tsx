@@ -97,11 +97,7 @@ export default function TeamManagersPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>רכזי על</h1>
-            <p className="lede">
-              כל רכזי העל והרכזים המשויכים אליהם — ניתן להוסיף/להסיר אשכולות לרכז.
-            </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}

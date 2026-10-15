@@ -101,11 +101,7 @@ export default function CoordinatorSignupsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">רכזים שנרשמו בטופס</p>
             <h1>הרשמת רכזים</h1>
-            <p className="lede">
-              כל מי שמילא את טופס רישום הרכזים. שם המוסד נכתב חופשי, כפי שהנרשם הקליד.
-            </p>
           </div>
         </header>
         {loading ? <p className="lede">טוען…</p> : null}

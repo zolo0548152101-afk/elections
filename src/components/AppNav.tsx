@@ -19,7 +19,7 @@ export function AppNav({
   // RTL: the first link is the rightmost.
   const institutionsLink = {
     href: "/institutions",
-    label: user.role === "coordinator" ? "המוסד שלי" : "מוסדות",
+    label: "מוסדות",
   };
   const activistsLink = { href: "/activists", label: "הרשמת פעילים" };
   const links: { href: string; label: string }[] =
@@ -37,7 +37,12 @@ export function AppNav({
           ...(user.role === "super_admin" ? [{ href: "/team/managers", label: "רכזי על" }] : []),
           { href: "/links", label: "קישורים" },
         ]
-      : [{ href: "/", label: "מפה" }, institutionsLink, activistsLink];
+      : [
+          { href: "/", label: "מפה" },
+          institutionsLink,
+          { href: "/team/clusters", label: "אשכולות" },
+          activistsLink,
+        ];
 
   useEffect(() => {
     setMenuOpen(false);

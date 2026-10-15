@@ -182,12 +182,7 @@ export default function InstitutionClustersLinksPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">קישורים</p>
             <h1>מוסד ↔ אשכולות</h1>
-            <p className="lede">
-              חפשו לפי כל חלק משם המוסד, יישוב או אשכול. אחרי קישור מוצלח תופיע הודעת
-              אישור, ואשכולות שבוצעו מסומנים.
-            </p>
           </div>
         </header>
         <LinksNav />

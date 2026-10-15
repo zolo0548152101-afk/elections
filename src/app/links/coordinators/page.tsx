@@ -157,12 +157,7 @@ export default function CoordinatorsLinksPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">קישורים</p>
             <h1>רכז ↔ מוסד</h1>
-            <p className="lede">
-              שייכו רכז למוסד. רק אשכולות המקושרים למוסד יופיעו אצל הרכז במפה — ולחיצה על
-              אשכול בטבלה מציגה אותו.
-            </p>
           </div>
         </header>
         <LinksNav />

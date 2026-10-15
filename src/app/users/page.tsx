@@ -386,11 +386,7 @@ export default function UsersPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>משתמשים</h1>
-            <p className="lede">
-              הוספה ועריכה — סיסמה נשמרת גם לשליחה חוזרת ב-WhatsApp או ב-SMS (לא מוצגת אחרי שמירה)
-            </p>
           </div>
         </header>
 

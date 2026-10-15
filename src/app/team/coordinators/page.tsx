@@ -87,13 +87,7 @@ export default function TeamCoordinatorsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
-            <p className="lede">
-              {meRole === "super_admin"
-                ? "כל הרכזים במערכת — כל שורה מקשרת מוסד לאשכול."
-                : "רכזים תחתיכם — כל שורה מקשרת מוסד לאשכול."}
-            </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}

@@ -81,11 +81,7 @@ export default function TeamInstitutionsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
             <h1>מוסדות הצוות</h1>
-            <p className="lede">
-              מוסדות המקושרים לרכזים שלכם (רכז יכול להיות משויך לכמה מוסדות).
-            </p>
           </div>
         </header>
         {loading && <p className="lede">טוען…</p>}

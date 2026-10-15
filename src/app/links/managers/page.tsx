@@ -168,12 +168,7 @@ export default function ManagersLinksPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">קישורים</p>
             <h1>רכז על ↔ רכזים</h1>
-            <p className="lede">
-              שיוך רכזים תחת רכז על. היררכיה: רכז → רכז על → מנהל.
-              {meRole === "area_manager" ? " (צפייה ברכזים שלכם)" : ""}
-            </p>
           </div>
         </header>
         <LinksNav />

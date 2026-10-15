@@ -52,15 +52,6 @@ function parseJsonField<T>(value: T[] | string | undefined): T[] {
   return value;
 }
 
-const LINKED_CLUSTER_SORT: SortGetters<LinkedCluster, "ashkol" | "city" | "right" | "turnout" | "bzb" | "done"> = {
-  ashkol: (r) => r.ashkol,
-  city: (r) => r.settlement_name,
-  right: (r) => Number(r.right_pct),
-  turnout: (r) => Number(r.turnout_pct),
-  bzb: (r) => Number(r.bzb),
-  done: (r) => Boolean(r.done),
-};
-
 const APP_INSTITUTIONS_SORT: SortGetters<Institution, "name" | "kind" | "city" | "district" | "people" | "clusters" | "coords"> = {
   name: (r) => r.name,
   kind: (r) => r.kind,
@@ -72,7 +63,6 @@ const APP_INSTITUTIONS_SORT: SortGetters<Institution, "name" | "kind" | "city" |
 };
 
 export default function InstitutionsPage() {
-  const csort = useSortState<"ashkol" | "city" | "right" | "turnout" | "bzb" | "done">();
   const tsort = useSortState<"name" | "kind" | "city" | "district" | "people" | "clusters" | "coords">();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [availableCoords, setAvailableCoords] = useState<Coord[]>([]);
@@ -286,13 +276,7 @@ export default function InstitutionsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">ניהול</p>
-            <h1>{isCoordinator ? "המוסד שלי" : "מוסדות"}</h1>
-            <p className="lede">
-              {isCoordinator
-                ? "המוסד המשויך אליך מחוברת2 — אשכולות מקושרים מופיעים במפה"
-                : "קטלוג מחוברת2 — קשרו רכזים ואשכולות מכל מוסד."}
-            </p>
+            <h1>מוסדות</h1>
           </div>
         </header>
 
@@ -314,8 +298,9 @@ export default function InstitutionsPage() {
           </p>
         )}
 
-        {!loading && canEdit && (
+        {!loading && (canEdit || isCoordinator) && (
           <>
+            {canEdit && (
             <form className="panel-form" onSubmit={onSubmit}>
               <div className="form-grid">
                 <label>
@@ -371,6 +356,7 @@ export default function InstitutionsPage() {
                 הוספה
               </button>
             </form>
+            )}
             <div className="panel-form users-filters">
               <label>
                 סינון
@@ -399,89 +385,11 @@ export default function InstitutionsPage() {
 
         {!loading && isCoordinator && institutions.length === 0 && !info && (
           <p className="lede" style={{ color: "var(--sand)" }}>
-            לא שויך מוסד למשתמש זה — מנהל צריך לשייך רכז בטבלת המוסדות.
+            לא שויך מוסד למשתמש זה — פנו למנהל.
           </p>
         )}
 
-        {!loading && isCoordinator &&
-          institutions.map((inst) => {
-            const contacts = (inst.contacts ?? []) as Contact[];
-            const clusters = (inst.linked_clusters ?? []) as LinkedCluster[];
-            return (
-              <section
-                key={inst.id}
-                className="panel-form"
-                style={{ marginBottom: "1.25rem" }}
-              >
-                <h2 style={{ margin: "0 0 0.35rem", fontSize: "1.15rem" }}>
-                  <ShowMore text={inst.name} />
-                </h2>
-                <p className="lede" style={{ marginBottom: "0.75rem" }}>
-                  <ShowMore
-                    text={[inst.kind, inst.settlement_name, inst.district]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                </p>
-                {contacts.length > 0 && (
-                  <div style={{ marginBottom: "1rem" }}>
-                    <strong>אנשי מפתח</strong>
-                    <ul style={{ margin: "0.35rem 0 0", paddingInlineStart: "1.2rem" }}>
-                      {contacts.map((c) => (
-                        <li key={c.id}>
-                          <ShowMore
-                            text={`${c.full_name}${c.role_title ? ` (${c.role_title})` : ""}${
-                              c.phone ? ` · ${c.phone}` : ""
-                            }`}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <strong>
-                  אשכולות מקושרים (
-                  {clusters.filter((c) => c.done).length}/{clusters.length} בוצעו)
-                </strong>
-                {clusters.length === 0 ? (
-                  <p className="lede" style={{ marginTop: "0.35rem" }}>
-                    עדיין אין אשכולות — במפה לחצו על אשכול ואז «קשר למוסד».
-                  </p>
-                ) : (
-                  <div className="table-wrap" style={{ marginTop: "0.5rem" }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <SortTh k="ashkol" sort={csort.sort} onSort={csort.toggle}>אשכול</SortTh>
-                          <SortTh k="city" sort={csort.sort} onSort={csort.toggle}>יישוב</SortTh>
-                          <SortTh k="right" sort={csort.sort} onSort={csort.toggle}>% ימין</SortTh>
-                          <SortTh k="turnout" sort={csort.sort} onSort={csort.toggle}>הצבעה</SortTh>
-                          <SortTh k="bzb" sort={csort.sort} onSort={csort.toggle}>בז״ב</SortTh>
-                          <SortTh k="done" sort={csort.sort} onSort={csort.toggle}>סטטוס</SortTh>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortRows(clusters, LINKED_CLUSTER_SORT, csort.sort).map((c) => (
-                          <tr key={c.ashkol}>
-                            <td>{c.ashkol}</td>
-                            <td>
-                              <ShowMore text={c.settlement_name} />
-                            </td>
-                            <td>{Number(c.right_pct).toFixed(1)}</td>
-                            <td>{Number(c.turnout_pct).toFixed(1)}</td>
-                            <td>{c.bzb}</td>
-                            <td>{c.done ? "בוצע" : "לא בוצע"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-            );
-          })}
-
-        {!loading && canEdit && (
+        {!loading && (canEdit || isCoordinator) && (
           <div className={`table-wrap${editId != null ? " is-editing" : ""}`}>
             <table>
               <thead>
@@ -493,7 +401,7 @@ export default function InstitutionsPage() {
                   <SortTh k="people" sort={tsort.sort} onSort={tsort.toggle}>אנשי מפתח</SortTh>
                   <SortTh k="clusters" sort={tsort.sort} onSort={tsort.toggle}>אשכולות</SortTh>
                   <SortTh k="coords" sort={tsort.sort} onSort={tsort.toggle}>רכזים</SortTh>
-                  <th>פעולות</th>
+                  {canEdit && <th>פעולות</th>}
                 </tr>
               </thead>
               <tbody>
@@ -557,6 +465,7 @@ export default function InstitutionsPage() {
                           />
                         )}
                       </td>
+                      {canEdit && (
                       <td className="actions-cell">
                         <button
                           type="button"
@@ -568,8 +477,9 @@ export default function InstitutionsPage() {
                           {open ? "סגור" : "קשרים"}
                         </button>
                       </td>
+                      )}
                     </tr>
-                    {open && (
+                    {open && canEdit && (
                       <tr className="edit-detail-row">
                         <td colSpan={8}>
                           <InstitutionLinks

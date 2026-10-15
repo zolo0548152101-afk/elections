@@ -80,15 +80,7 @@ export default function ActivistsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">פעילים שנרשמו בטופס</p>
             <h1>הרשמת פעילים</h1>
-            <p className="lede">
-              {scope === "admin"
-                ? "כל הפעילים שנרשמו. הסינון מציג רק מוסדות שכבר נרשמו אליהם."
-                : scope === "manager"
-                  ? "פעילים שנרשמו למוסדות של הרכזים שלכם."
-                  : "פעילים שנרשמו למוסדות המקושרים אליכם."}
-            </p>
           </div>
         </header>
         {loading ? <p className="lede">טוען…</p> : null}
