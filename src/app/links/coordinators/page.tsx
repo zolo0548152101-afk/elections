@@ -6,6 +6,7 @@ import { LinksNav } from "@/components/LinksNav";
 import { ShowMore } from "@/components/ShowMore";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Coord = {
   id: number;
@@ -160,6 +161,7 @@ export default function CoordinatorsLinksPage() {
         <header className="hero">
           <div>
             <h1>רכז ↔ מוסד</h1>
+            <PageQuip />
           </div>
         </header>
         <LinksNav />

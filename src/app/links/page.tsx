@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 const CARDS = [
   {
@@ -61,6 +62,7 @@ export default function LinksHubPage() {
         <header className="hero">
           <div>
             <h1>קישורים</h1>
+            <PageQuip />
           </div>
         </header>
         <div className="links-hub">

@@ -23,6 +23,7 @@
     "@neondatabase/serverless": "^1.2.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
+    "driver.js": "1.8.0",
     "geojson-vt": "^5.0.4",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.13.0",

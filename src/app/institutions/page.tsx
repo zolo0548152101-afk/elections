@@ -9,6 +9,7 @@ import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Contact = {
   id: number;
@@ -279,6 +280,7 @@ export default function InstitutionsPage() {
         <header className="hero">
           <div>
             <h1>מוסדות</h1>
+            <PageQuip />
           </div>
         </header>
 

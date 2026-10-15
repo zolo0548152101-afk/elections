@@ -9,6 +9,7 @@ import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch, normalizeSearch } from "@/lib/text-search";
 import { Quip } from "@/components/Quip";
 import { EMPTY_SEARCH } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type LinkedCluster = { ashkol: string; settlement_name?: string };
 type Institution = {
@@ -389,6 +390,7 @@ export default function UsersPage() {
         <header className="hero">
           <div>
             <h1>משתמשים</h1>
+            <PageQuip />
           </div>
         </header>
 

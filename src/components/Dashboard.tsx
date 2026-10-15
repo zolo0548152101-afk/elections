@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
 import { ClusterTable, type ClusterView } from "./ClusterTable";
 import { downloadClustersCsv } from "@/lib/csv";
+import { PageQuip } from "@/components/PageQuip";
 
 const StreetMap = dynamic(
   () => import("./StreetMap").then((m) => m.StreetMap),
@@ -138,6 +139,7 @@ export function Dashboard() {
       <header className="hero">
         <div>
           <h1>אשכולות לפי הצבעה וימין</h1>
+            <PageQuip />
         </div>
         <div className="stats">
           <div>

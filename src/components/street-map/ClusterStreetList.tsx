@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { streetsLeftQuip } from "@/lib/quips";
 
 export type ClusterStreet = {
   id: string;
@@ -46,6 +47,7 @@ export function ClusterStreetList<T extends ClusterStreet>({
     <>
       <p className="cluster-street-summary">
         {streets.length} רחובות · {houses.toLocaleString("he-IL")} בתים · {done} בוצעו
+        <span className="cluster-street-cheer"> · {streetsLeftQuip(done, streets.length)}</span>
       </p>
       <ul
         className="cluster-street-list"

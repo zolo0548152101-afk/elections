@@ -945,6 +945,7 @@ export function RoutePlanner({
           className="route-icon-btn"
           aria-pressed={mode === "stretch"}
           aria-label="הוספת מסלול"
+          data-tour="route-draw"
           data-tip="הוספת מסלול"
           onClick={() => onMode(mode === "stretch" ? "off" : "stretch")}
         >
@@ -955,6 +956,7 @@ export function RoutePlanner({
           className="route-icon-btn"
           aria-pressed={mode === "point"}
           aria-label="סימון נקודת התחלה/קיבוץ"
+          data-tour="route-point"
           data-tip="סימון נקודת התחלה/קיבוץ"
           onClick={() => onMode(mode === "point" ? "off" : "point")}
         >
@@ -964,6 +966,7 @@ export function RoutePlanner({
           type="button"
           className="route-icon-btn"
           aria-label="הוספת שלב"
+          data-tour="route-stage"
           data-tip="הוספת שלב"
           onClick={() => addStage()}
         >

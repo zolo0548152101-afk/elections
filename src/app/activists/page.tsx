@@ -6,6 +6,7 @@ import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/S
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
 import { EMPTY_ACTIVISTS } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Activist = {
   id: number;
@@ -84,6 +85,7 @@ export default function ActivistsPage() {
         <header className="hero">
           <div>
             <h1>הרשמת פעילים</h1>
+            <PageQuip />
           </div>
         </header>
         {loading ? <p className="lede"><Quip list={LOADING} /></p> : null}

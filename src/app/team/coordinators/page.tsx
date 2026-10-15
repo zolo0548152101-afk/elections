@@ -13,6 +13,7 @@ import { matchesSearch } from "@/lib/text-search";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Coord = {
   id: number;
@@ -90,6 +91,7 @@ export default function TeamCoordinatorsPage() {
         <header className="hero">
           <div>
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
+            <PageQuip />
           </div>
         </header>
         {loading && <p className="lede"><Quip list={LOADING} /></p>}

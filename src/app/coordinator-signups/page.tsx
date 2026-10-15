@@ -7,6 +7,7 @@ import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/S
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
 import { EMPTY_SEARCH, EMPTY_SIGNUPS } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Signup = {
   id: number;
@@ -105,6 +106,7 @@ export default function CoordinatorSignupsPage() {
         <header className="hero">
           <div>
             <h1>הרשמת רכזים</h1>
+            <PageQuip />
           </div>
         </header>
         {loading ? <p className="lede"><Quip list={LOADING} /></p> : null}

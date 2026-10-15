@@ -2461,7 +2461,7 @@ export function StreetMap({
     <div className="street-map-wrap">
       <div className="street-map-toolbar">
         {me != null && me.role !== "coordinator" && (
-        <label className="search-box" ref={searchBoxRef}>
+        <label className="search-box" ref={searchBoxRef} data-tour="search">
           חיפוש עיר או רחוב
           <input
             value={q}
@@ -2536,7 +2536,7 @@ export function StreetMap({
           )}
         </label>
         )}
-        <label>
+        <label data-tour="cluster-select">
           אשכול
           <select
             value={selectedAshkol}
@@ -2564,6 +2564,7 @@ export function StreetMap({
         <button
           type="button"
           className="export"
+          data-tour="cluster-done"
           disabled={!selectedAshkol || selectedDone}
           onClick={() => markClusterStreets(true)}
         >
@@ -2592,7 +2593,7 @@ export function StreetMap({
           selectedAshkol && clusterStreets.length > 0 ? " has-streets" : ""
         }`}
       >
-        <aside className="cluster-card" aria-live="polite">
+        <aside className="cluster-card" aria-live="polite" data-tour="cluster-card">
           {picked ? (
             <>
               <h2>
@@ -2752,7 +2753,7 @@ export function StreetMap({
             null
           )}
         </aside>
-        <aside className="street-card" aria-live="polite">
+        <aside className="street-card" aria-live="polite" data-tour="street-card">
           {selectedAshkol ? (
             <>
               <h2>
@@ -2895,7 +2896,7 @@ export function StreetMap({
           )}
         </aside>
       </div>
-      <div className={mapFull ? "street-map-stage is-full" : "street-map-stage"}>
+      <div className={mapFull ? "street-map-stage is-full" : "street-map-stage"} data-tour="map">
         <button
           type="button"
           className="map-full-btn"
@@ -2911,6 +2912,7 @@ export function StreetMap({
             <button
               type="button"
               className="route-menu-toggle"
+              data-tour="route-toggle"
               aria-expanded={menuOpen}
               aria-label={menuOpen ? "סגור מסלול" : "פתח מסלול"}
               data-tip={menuOpen ? "סוגרים את תפריט המסלול" : "פותחים את תפריט המסלול"}

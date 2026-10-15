@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { HelpCorner } from "./HelpCorner";
 import { usePathname, useRouter } from "next/navigation";
 import { AppNav } from "./AppNav";
 import type { SessionUser } from "@/lib/auth";
@@ -54,6 +55,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     <>
       <AppNav user={user} progress={progress} />
       {children}
+      <Suspense fallback={null}>
+        <HelpCorner role={user.role} />
+      </Suspense>
     </>
   );
 }

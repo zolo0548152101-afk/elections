@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Inst = {
   id: number;
@@ -84,6 +85,7 @@ export default function TeamInstitutionsPage() {
         <header className="hero">
           <div>
             <h1>מוסדות הצוות</h1>
+            <PageQuip />
           </div>
         </header>
         {loading && <p className="lede"><Quip list={LOADING} /></p>}

@@ -9,6 +9,7 @@ import { matchesSearch } from "@/lib/text-search";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type LinkedCluster = {
   ashkol: string;
@@ -185,6 +186,7 @@ export default function InstitutionClustersLinksPage() {
         <header className="hero">
           <div>
             <h1>מוסד ↔ אשכולות</h1>
+            <PageQuip />
           </div>
         </header>
         <LinksNav />

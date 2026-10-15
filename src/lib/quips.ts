@@ -88,3 +88,48 @@ export const SIGNUP_THANKS_COORDINATOR = [
   "נרשמת כרכז! ניצור איתך קשר בקרוב 🇮🇱",
   "יש! עוד רכז בנבחרת. נדבר בקרוב",
 ] as const;
+
+/** One line under each page title. Stays on screen (unlike loading lines). */
+export const PAGE_QUIPS: Record<string, readonly string[]> = {
+  "/": [
+    "המפה שלכם לניצחון 🗺️",
+    "כל יהלום ירוק = עוד קלפי שעבדנו בה עד הסוף",
+    "יוצאים. מצביעים. מצילים את הימין! 🇮🇱",
+  ],
+  "/institutions": [
+    "מכינות, ישיבות ואולפנות – העורף החזק של השטח",
+    "כאן יושבים האנשים שיוצאים לשטח 💪",
+  ],
+  "/team/clusters": [
+    "תסתכלו על הכתומים – הם כמעט שם",
+    "כל אשכול ירוק = עוד קלפי שסגרנו",
+  ],
+  "/activists": [
+    "פעיל אחד בשטח שווה אלף לייקים",
+    "הנבחרת של יום הבחירות נבנית כאן",
+  ],
+  "/coordinator-signups": [
+    "רכזים טובים = יום בחירות שקט",
+    "כל רכז חדש = עוד אשכול שמישהו דואג לו",
+  ],
+  "/users": [
+    "מי עם מי ומי אחראי על מה – הכל כאן",
+    "סדר בצוות = שקט בשטח",
+  ],
+  "/team/coordinators": [
+    "הרכזים – השכבה שמחזיקה את השטח",
+    "רכז מחובר = אשכול שמתקדם",
+  ],
+  "/team/managers": ["רכזי העל – מנצחי התזמורת 🎻", "מכאן רואים את כל הצוות במבט אחד"],
+  "/links": ["מחברים את כל הנקודות", "רכז ← מוסד ← אשכול. פשוט."],
+};
+
+/** Encouragement under the cluster street list, by how many streets are left. */
+export function streetsLeftQuip(done: number, total: number): string {
+  if (total === 0) return "";
+  const left = total - done;
+  if (left === 0) return "האשכול ירוק! כל הכבוד לצוות 🇮🇱";
+  if (done === 0) return "יאללה, הרחוב הראשון מחכה לכם 🚶";
+  if (left === 1) return "רחוב אחד אחרון והאשכול ירוק! 🔥";
+  return `עוד ${left} רחובות והאשכול ירוק 💪`;
+}

@@ -11,6 +11,7 @@ import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/S
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
 import { EMPTY_CLUSTERS, EMPTY_SEARCH } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type Coord = { id: number; full_name: string };
 
@@ -131,6 +132,7 @@ export default function TeamClustersPage() {
         <header className="hero">
           <div>
             <h1>אשכולות</h1>
+            <PageQuip />
           </div>
         </header>
         {loading && <p className="lede"><Quip list={LOADING} /></p>}

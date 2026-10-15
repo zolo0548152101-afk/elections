@@ -6,6 +6,7 @@ import { LinksNav } from "@/components/LinksNav";
 import { ShowMore } from "@/components/ShowMore";
 import { Quip } from "@/components/Quip";
 import { LOADING } from "@/lib/quips";
+import { PageQuip } from "@/components/PageQuip";
 
 type UserRow = {
   id: number;
@@ -171,6 +172,7 @@ export default function ManagersLinksPage() {
         <header className="hero">
           <div>
             <h1>רכז על ↔ רכזים</h1>
+            <PageQuip />
           </div>
         </header>
         <LinksNav />
