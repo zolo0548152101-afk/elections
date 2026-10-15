@@ -62,6 +62,7 @@ export function ClusterStreetList<T extends ClusterStreet>({
           >
             <input
               type="checkbox"
+              data-street-id={s.id}
               checked={s.done}
               aria-label={`סמן ${s.name_he} כבוצע`}
               onChange={(e) => onToggleDone(s, e.target.checked)}

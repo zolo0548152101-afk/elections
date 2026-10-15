@@ -22,6 +22,7 @@ import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/compo
 import { eshkolColorMap } from "@/lib/eshkol-house-colors";
 import { CLUSTER_STAGE_LABEL, clusterStage } from "@/lib/cluster-stage";
 import { CLUSTER_DONE, LOADING_MAP, STREET_DONE, STREET_UNDONE, quip } from "@/lib/quips";
+import { tourBridge } from "@/lib/tour-bridge";
 import {
   OPENFREEMAP_STYLE,
   streetLinePaint,
@@ -1057,7 +1058,9 @@ export function StreetMap({
     });
 
     mapRef.current = map;
+    tourBridge.map = map;
     return () => {
+      tourBridge.map = undefined;
       try {
         map.remove();
       } catch {
@@ -2271,6 +2274,14 @@ export function StreetMap({
   }
 
   const selectedDone = selectedComputedDone;
+
+  // Handles for the guided tour ("do it for me" and undo at the end).
+  tourBridge.selectedAshkol = selectedAshkol;
+  tourBridge.refreshStreets = () => {
+    const a = selectedAshkolRef.current;
+    if (a) void loadClusterStreets(a);
+    void reloadMapState();
+  };
 
   const sidePanel = panel ? (
     <aside className="map-side-panel" aria-live="polite">

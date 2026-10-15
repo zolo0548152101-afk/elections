@@ -1,5 +1,6 @@
 "use client";
 
+import { tourBridge } from "@/lib/tour-bridge";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
 import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
@@ -303,6 +304,16 @@ export function RoutePlanner({
     onActiveRef.current(active);
   }, [active]);
 
+  const [reloadTick, setReloadTick] = useState(0);
+  useEffect(() => {
+    tourBridge.getStages = () => stagesRef.current;
+    tourBridge.reloadRoute = () => setReloadTick((n) => n + 1);
+    return () => {
+      tourBridge.getStages = undefined;
+      tourBridge.reloadRoute = undefined;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const my = ++ticket.current;
@@ -332,7 +343,7 @@ export function RoutePlanner({
       cancelled = true;
       onFeaturesRef.current([]);
     };
-  }, [ashkol]);
+  }, [ashkol, reloadTick]);
 
   function preview(next: RouteStage[]) {
     ticket.current += 1;
@@ -834,6 +845,7 @@ export function RoutePlanner({
       void persist(next);
     },
   };
+  tourBridge.routeApi = bindRef.current;
 
   function nextStageNo() {
     return stagesRef.current.reduce((max, stage) => Math.max(max, Number(stage.stage_no) || 0), 0) + 1;

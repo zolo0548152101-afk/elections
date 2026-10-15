@@ -3058,3 +3058,61 @@ body:has(.register-poster) {
   color: #1d4ed8;
   font-weight: 700;
 }
+
+/* Tour: "do it for me" cursor and task status */
+.tour-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.tour-click {
+  position: fixed;
+  z-index: 2147483646;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 3px solid #1d4ed8;
+  pointer-events: none;
+  animation: tour-click 550ms ease-out forwards;
+}
+
+@keyframes tour-click {
+  from { transform: scale(0.3); opacity: 1; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-cursor { transition: none; }
+  .tour-click { animation: none; opacity: 0; }
+}
+
+.driver-popover.app-tour .tour-task-status {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.driver-popover.app-tour .tour-task-status.is-done {
+  color: #15803d;
+}
+
+.driver-popover.app-tour .driver-popover-footer button.tour-do-it {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.driver-popover.app-tour .driver-popover-footer button.tour-do-it:disabled {
+  opacity: 0.6;
+}
+
+.driver-popover.app-tour .driver-popover-footer {
+  flex-wrap: wrap;
+}

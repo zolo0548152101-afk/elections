@@ -15,7 +15,20 @@ export type TourStep = {
   open?: string;
   /** If this selector exists the menu is already open, so `open` is not clicked. */
   isOpen?: string;
+  /**
+   * A hands-on task: the step waits for the user to do it (or "עשו את זה בשבילי"
+   * performs it with a visible cursor). Everything a task changed is undone when the tour ends.
+   */
+  task?: TaskId;
 };
+
+export type TaskId =
+  | "select-cluster"
+  | "mark-street"
+  | "open-route-menu"
+  | "place-start"
+  | "draw-route"
+  | "add-stage";
 
 export type Guide = {
   id: string;
@@ -42,13 +55,14 @@ export const COORDINATOR_START: Guide = {
   roles: ["coordinator"],
   steps: [
     {
-      title: "ברוכים הבאים לצוות! 🇮🇱",
+      title: "ברוכים הבאים למטה יוצאים. מצביעים. מצילים את הימין! 🇮🇱",
       body: "בשתי דקות תדעו להכין את יום הבחירות שלכם: אשכול, רחובות, נקודת כינוס ומסלול לכל סבב. פחות זמן ממה שלוקח להרכיב קואליציה 😉 אפשר לצאת בכל רגע ולחזור לסיור מכפתור העזרה.",
     },
     {
       element: '[data-tour="cluster-select"]',
       title: "1. בוחרים אשכול",
-      body: "אשכול = כמה רחובות סביב קלפי, עם תמיכה גבוהה בימין והצבעה נמוכה. הקולות שלנו כבר שם – הם פשוט נשארו בבית. ליד כל אשכול רואים את המצב שלו.",
+      body: "אשכול = כמה רחובות סביב קלפי, עם תמיכה גבוהה בימין והצבעה נמוכה. הקולות שלנו כבר שם – הם פשוט נשארו בבית.\n👉 תורכם: בחרו אשכול מהרשימה.",
+      task: "select-cluster",
     },
     {
       element: '[data-tour="map"]',
@@ -58,7 +72,8 @@ export const COORDINATOR_START: Guide = {
     {
       element: '[data-tour="street-card"]',
       title: "3. מסמנים רחובות",
-      body: "הרחובות של האשכול, עם מספר הבתים בכל רחוב. זוג סיים רחוב? מסמנים ✓. בכל כינוס מעדכנים כאן את ההתקדמות, וכשהרחוב האחרון מסומן – האשכול ירוק אוטומטית.",
+      body: "הרחובות של האשכול, עם מספר הבתים בכל רחוב. זוג סיים רחוב? מסמנים ✓. כשהרחוב האחרון מסומן – האשכול ירוק אוטומטית.\n👉 תורכם: סמנו ✓ ליד רחוב אחד (בסוף הסיור נבטל, אל דאגה).",
+      task: "mark-street",
     },
     {
       element: '[data-tour="route-menu"]',
@@ -66,27 +81,31 @@ export const COORDINATOR_START: Guide = {
       isOpen: ".route-map-menu.is-open",
       title: "4. תכנון היום",
       body: "זה תפריט המסלול. כאן קובעים איפה מתכנסים ולאילו רחובות כל זוג יוצא בכל סבב. בלי 'לכו תדפקו' – כל זוג יודע בדיוק לאן הוא הולך ומתי חוזרים.",
+      task: "open-route-menu",
     },
     {
-      element: '[data-tour="route-point"]',
+      element: '[data-tour="map"]',
       open: '[data-tour="route-toggle"]',
       isOpen: ".route-map-menu.is-open",
       title: "5. קודם כל: נקודת הכינוס",
-      body: "לוחצים על האייקון ואז על המקום במפה. בוחרים «נקודת התחלה» למפגש של 15:00, ו«נקודת קיבוץ» למקומות שאליהם חוזרים כל שעה. טיפ: צל, שירותים ומקום לנהגים 🚐",
+      body: "«נקודת התחלה» = המפגש של 15:00, «נקודת קיבוץ» = לאן חוזרים כל שעה. טיפ: צל, שירותים ומקום לנהגים 🚐\n👉 תורכם: לחצו על אייקון הסיכה 📍 בתפריט, ואז על מקום במפה ובחרו «נקודת התחלה».",
+      task: "place-start",
     },
     {
-      element: '[data-tour="route-draw"]',
+      element: '[data-tour="map"]',
       open: '[data-tour="route-toggle"]',
       isOpen: ".route-map-menu.is-open",
       title: "6. מציירים את המסלול",
-      body: "לוחצים על האייקון ומקליקים על המפה לאורך הרחובות לפי סדר ההליכה. לחיצה כפולה מסיימת קטע, וגרירה של נקודה מתקנת. רק הרחובות שבאשכול – שם הקולות מחכים.",
+      body: "רק הרחובות שבאשכול – שם הקולות מחכים. לחיצה כפולה מסיימת קטע, וגרירה של נקודה מתקנת.\n👉 תורכם: לחצו על אייקון המסלול 〰️ בתפריט, הקליקו כמה נקודות לאורך רחוב צבוע, ולחיצה כפולה לסיום.",
+      task: "draw-route",
     },
     {
       element: '[data-tour="route-stage"]',
       open: '[data-tour="route-toggle"]',
       isOpen: ".route-map-menu.is-open",
       title: "7. שלב = סבב של שעה",
-      body: "כל שלב הוא סבב של 40–60 דקות. בסופו כולם חוזרים לכינוס: אוכל, שיר, כוח – ויוצאים לשלב הבא. זו שיטת האקורדיון 🪗 שלב לכל שעה עד 21:00, ואז ספרינט אחרון לדלתות שלא נפתחו.",
+      body: "כל שלב הוא סבב של 40–60 דקות. בסופו כולם חוזרים לכינוס: אוכל, שיר, כוח – ויוצאים לשלב הבא. זו שיטת האקורדיון 🪗 שלב לכל שעה עד 21:00, ואז ספרינט אחרון.\n👉 תורכם: לחצו על + כדי להוסיף שלב.",
+      task: "add-stage",
     },
     {
       element: 'nav a[href="/activists"]',
@@ -96,7 +115,7 @@ export const COORDINATOR_START: Guide = {
     {
       element: '[data-help-corner]',
       title: "זהו, אתם מוכנים! 💪",
-      body: "שכחתם משהו? כאן בפינה יש מדריכים ותשובות. וזכרו: הדלת האחרונה שווה בדיוק כמו הראשונה. בהצלחה בשטח! 🇮🇱",
+      body: "כל מה שעשינו בסיור נמחק עכשיו – המפה חוזרת בדיוק כמו שהייתה 🧹 שכחתם משהו? כאן בפינה יש מדריכים ותשובות. וזכרו: הדלת האחרונה שווה בדיוק כמו הראשונה. בהצלחה בשטח! 🇮🇱",
     },
   ],
 };
