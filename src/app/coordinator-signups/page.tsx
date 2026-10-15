@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { COORDINATOR_SIGNUP_KINDS } from "@/lib/coordinator-signups";
 import { formatMobileDisplay } from "@/lib/activists";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
+import { EMPTY_SEARCH, EMPTY_SIGNUPS } from "@/lib/quips";
 
 type Signup = {
   id: number;
@@ -104,7 +107,7 @@ export default function CoordinatorSignupsPage() {
             <h1>הרשמת רכזים</h1>
           </div>
         </header>
-        {loading ? <p className="lede">טוען…</p> : null}
+        {loading ? <p className="lede"><Quip list={LOADING} /></p> : null}
         {error ? <p className="form-msg form-msg-err">{error}</p> : null}
         {!loading && !error ? (
           <>
@@ -147,7 +150,7 @@ export default function CoordinatorSignupsPage() {
             </div>
             {rows.length === 0 ? (
               <p className="lede">
-                {signups.length === 0 ? "עדיין אין רכזים רשומים." : "אין תוצאות לסינון הזה."}
+                {signups.length === 0 ? <Quip list={EMPTY_SIGNUPS} /> : <Quip list={EMPTY_SEARCH} />}
               </p>
             ) : (
               <div className="table-wrap">

@@ -7,6 +7,8 @@ import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/S
 import { useTimedFlash } from "@/hooks/useTimedFlash";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch, normalizeSearch } from "@/lib/text-search";
+import { Quip } from "@/components/Quip";
+import { EMPTY_SEARCH } from "@/lib/quips";
 
 type LinkedCluster = { ashkol: string; settlement_name?: string };
 type Institution = {
@@ -837,7 +839,7 @@ function InstitutionAddSearch({
         {showList && (
           <ul className="search-hits" id={listId} role="listbox">
             {hits.length === 0 ? (
-              <li className="search-hint">אין תוצאות</li>
+              <li className="search-hint"><Quip list={EMPTY_SEARCH} /></li>
             ) : (
               hits.map((h, i) => (
                 <li key={h.id} role="option" aria-selected={i === active}>

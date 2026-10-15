@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { SHIRT_SIZES } from "@/lib/activists";
+import { Quip } from "@/components/Quip";
+import { SIGNUP_THANKS_ACTIVIST } from "@/lib/quips";
 
 type Hit = { id: number; name: string; settlement_name: string | null; label: string };
 
@@ -104,7 +106,7 @@ export function RegisterPoster() {
         <h1>רישום פעילים</h1>
         {done ? (
           <div className="register-success">
-            <p>ההרשמה נקלטה.</p>
+            <p>ההרשמה נקלטה. <Quip list={SIGNUP_THANKS_ACTIVIST} /></p>
             <p>
               {done.name} · {done.institution} · מידה {done.shirt}
             </p>

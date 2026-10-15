@@ -2785,3 +2785,12 @@ body:has(.register-poster) {
 .map-status:empty {
   display: none;
 }
+
+/* Playful line next to the progress pill: lighter than the numbers. */
+.progress-quip {
+  font-weight: 500;
+  opacity: 0.85;
+}
+@media (max-width: 700px) {
+  .progress-quip { display: none; }
+}

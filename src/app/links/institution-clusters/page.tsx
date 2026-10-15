@@ -7,6 +7,8 @@ import { LinksNav } from "@/components/LinksNav";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 type LinkedCluster = {
   ashkol: string;
@@ -186,7 +188,7 @@ export default function InstitutionClustersLinksPage() {
           </div>
         </header>
         <LinksNav />
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
         {msg && (
           <p className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}>
             {msg}

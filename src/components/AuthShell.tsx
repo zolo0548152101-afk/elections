@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppNav } from "./AppNav";
 import type { SessionUser } from "@/lib/auth";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -42,7 +44,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         <span className="skeleton skeleton-line" />
         <span className="skeleton skeleton-block" />
         <p className="lede" style={{ color: "var(--sand)", margin: 0 }}>
-          טוען…
+          <Quip list={LOADING} />
         </p>
       </main>
     );

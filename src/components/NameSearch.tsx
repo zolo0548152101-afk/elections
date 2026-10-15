@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Quip } from "@/components/Quip";
+import { EMPTY_SEARCH } from "@/lib/quips";
 
 type Hit = { id: number; label: string };
 
@@ -122,7 +124,7 @@ export function NameSearch({
           {busy && hits.length === 0 ? (
             <li className="search-hint">מחפש…</li>
           ) : hits.length === 0 ? (
-            <li className="search-hint">אין תוצאות</li>
+            <li className="search-hint"><Quip list={EMPTY_SEARCH} /></li>
           ) : (
             hits.map((h, i) => (
               <li key={h.id} role="option" aria-selected={i === active}>

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { COORDINATOR_SIGNUP_KINDS } from "@/lib/coordinator-signups";
+import { Quip } from "@/components/Quip";
+import { SIGNUP_THANKS_COORDINATOR } from "@/lib/quips";
 
 type Done = { name: string; institution: string; kind: string };
 
@@ -61,7 +63,7 @@ export function CoordinatorRegisterPoster() {
         <h1>רישום רכזים</h1>
         {done ? (
           <div className="register-success" role="status">
-            <p>ההרשמה נקלטה.</p>
+            <p>ההרשמה נקלטה. <Quip list={SIGNUP_THANKS_COORDINATOR} /></p>
             <p>
               {done.name} · {done.institution} · {done.kind}
             </p>

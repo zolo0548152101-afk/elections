@@ -1,0 +1,90 @@
+/**
+ * Light, playful microcopy (in the spirit of "לעבודה! אתם הולכים להצליח בגדול!").
+ * One line, positive, never about opponents. Pick with `quip(list, seed)` so a
+ * line stays put while the screen is open instead of changing every render.
+ */
+
+export function quip(list: readonly string[], seed: number | string = Date.now()): string {
+  const n =
+    typeof seed === "number"
+      ? Math.abs(Math.floor(seed))
+      : [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7);
+  return list[Math.abs(n) % list.length]!;
+}
+
+export const LOADING = [
+  "טוען… מהר יותר מספירת קולות 😉",
+  "רגע, מצחצחים את הקלפי…",
+  "טוען… שווה לחכות, כמו לתוצאות האמת",
+  "מביאים את הנתונים מהשטח…",
+  "טוען… בינתיים, תשתו מים 💧",
+] as const;
+
+export const LOADING_MAP = [
+  "פורשים את המפה…",
+  "מכינים את השטח…",
+  "מסמנים את הדרך לניצחון…",
+] as const;
+
+/** Next to the progress pill, by percent of clusters done. */
+export function progressQuip(pct: number): string {
+  if (pct <= 0) return "כל מסע מתחיל ברחוב אחד 🚶";
+  if (pct < 15) return "מתחממים. גם קואליציה לא נבנית ביום אחד";
+  if (pct < 35) return "יש תנועה בשטח 💪";
+  if (pct < 55) return "חצי הדרך. ממשיכים בכל הכוח";
+  if (pct < 75) return "מרגישים את זה? ריח של ניצחון";
+  if (pct < 100) return "ישורת אחרונה, לא עוצרים עכשיו!";
+  return "סגרנו את השטח! 🇮🇱";
+}
+
+export const STREET_DONE = [
+  "רחוב בכיס ✓",
+  "עוד רחוב ירוק במפה ✓",
+  "עוד דלת, עוד קול ✓",
+  "יפה! הרחוב הבא כבר מחכה ✓",
+  "סומן. השטח שלנו ✓",
+] as const;
+
+export const STREET_UNDONE = [
+  "הסימון בוטל. קורה לטובים ביותר",
+  "בוטל. חוזרים לרחוב הזה אחר כך",
+] as const;
+
+export const CLUSTER_DONE = [
+  "האשכול הושלם! עוד יהלום ירוק במפה 💎",
+  "אשכול סגור ✓ על זה בונים ממשלה",
+  "כל הרחובות סומנו – כל הכבוד לצוות! 🇮🇱",
+  "האשכול הושלם. נחים 5 דקות וממשיכים 😄",
+] as const;
+
+export const EMPTY_SEARCH = [
+  "חיפשנו מתחת לכל אבן. כלום 🤷",
+  "אין תוצאות. אולי שגיאת כתיב?",
+  "ריק פה. נסו מילה אחרת",
+] as const;
+
+export const EMPTY_CLUSTERS = [
+  "אין אשכולות להצגה. השטח עוד מחכה לכם",
+  "אין פה אשכולות… עדיין 😉",
+] as const;
+
+export const EMPTY_ACTIVISTS = [
+  "עדיין אין פעילים. הראשון שנרשם מקבל כבוד 😎",
+  "השטח מחכה לפעילים הראשונים",
+] as const;
+
+export const EMPTY_SIGNUPS = [
+  "עדיין אין נרשמים. שלחו את הקישור לקבוצות 📲",
+  "שקט פה. זה הזמן להפיץ את הטופס",
+] as const;
+
+export const SIGNUP_THANKS_ACTIVIST = [
+  "ברוכים הבאים לצוות! נתראה בשטח 🇮🇱",
+  "נרשמת! עכשיו כל קול נספר, גם שלך 💪",
+  "מעולה! הצטרפת לנבחרת של יום הבחירות",
+] as const;
+
+export const SIGNUP_THANKS_COORDINATOR = [
+  "נרשמת כרכז! ניצור איתך קשר בקרוב 🇮🇱",
+  "יש! עוד רכז בנבחרת. נדבר בקרוב",
+] as const;

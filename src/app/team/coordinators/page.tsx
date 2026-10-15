@@ -11,6 +11,8 @@ import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 type Coord = {
   id: number;
@@ -90,7 +92,7 @@ export default function TeamCoordinatorsPage() {
             <h1>{meRole === "super_admin" ? "רכזים" : "רכזים שלי"}</h1>
           </div>
         </header>
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
         {!loading && msg && (
           <p
             className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}

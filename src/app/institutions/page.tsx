@@ -7,6 +7,8 @@ import { NameSearch } from "@/components/NameSearch";
 import { ShowMore } from "@/components/ShowMore";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 type Contact = {
   id: number;
@@ -280,7 +282,7 @@ export default function InstitutionsPage() {
           </div>
         </header>
 
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
 
         {!loading && info && (
           <p className="lede" style={{ color: "var(--sand)" }}>

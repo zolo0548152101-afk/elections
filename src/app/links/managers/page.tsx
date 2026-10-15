@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LinksNav } from "@/components/LinksNav";
 import { ShowMore } from "@/components/ShowMore";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 type UserRow = {
   id: number;
@@ -172,7 +174,7 @@ export default function ManagersLinksPage() {
           </div>
         </header>
         <LinksNav />
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading &&
           displayManagers.map((mgr) => {

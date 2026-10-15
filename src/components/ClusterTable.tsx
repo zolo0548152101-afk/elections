@@ -1,6 +1,8 @@
 "use client";
 
 import { ShowMore } from "@/components/ShowMore";
+import { Quip } from "@/components/Quip";
+import { EMPTY_CLUSTERS } from "@/lib/quips";
 
 export type ClusterView = {
   ashkol: string;
@@ -112,7 +114,7 @@ export function ClusterTable({
           ))}
         </tbody>
       </table>
-      {clusters.length === 0 && <p className="empty">אין אשכולות שעומדים בפילטרים.</p>}
+      {clusters.length === 0 && <p className="empty"><Quip list={EMPTY_CLUSTERS} /> · נסו לרכך את הפילטרים</p>}
     </div>
   );
 }

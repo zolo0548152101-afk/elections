@@ -8,6 +8,9 @@ import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
 import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
+import { EMPTY_CLUSTERS, EMPTY_SEARCH } from "@/lib/quips";
 
 type Coord = { id: number; full_name: string };
 
@@ -130,7 +133,7 @@ export default function TeamClustersPage() {
             <h1>אשכולות</h1>
           </div>
         </header>
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
         {!loading && msg && (
           <p
             className={`form-msg ${msgKind === "ok" ? "form-msg-ok" : "form-msg-err"}`}
@@ -317,8 +320,8 @@ export default function TeamClustersPage() {
         {!loading && filtered.length === 0 && (
           <p className="lede">
             {rows.length === 0
-              ? "אין אשכולות להצגה"
-              : "אין תוצאות לפילטר הנוכחי — נסו חיפוש או סטטוס אחר"}
+              ? <Quip list={EMPTY_CLUSTERS} />
+              : <Quip list={EMPTY_SEARCH} />}
           </p>
         )}
       </div>

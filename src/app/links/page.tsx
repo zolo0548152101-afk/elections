@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 const CARDS = [
   {
@@ -45,7 +47,7 @@ export default function LinksHubPage() {
     return (
       <main>
         <div className="dash">
-          <p className="lede">טוען…</p>
+          <p className="lede"><Quip list={LOADING} /></p>
         </div>
       </main>
     );

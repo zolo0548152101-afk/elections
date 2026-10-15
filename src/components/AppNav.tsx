@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/auth";
 import { ShowMore } from "@/components/ShowMore";
+import { progressQuip } from "@/lib/quips";
 
 export function AppNav({
   user,
@@ -94,6 +95,7 @@ export function AppNav({
         {pct != null && (
           <span className="progress-pill">
             התקדמות {progress!.done}/{progress!.total} אשכולות ({pct}%)
+            <span className="progress-quip"> · {progressQuip(pct)}</span>
           </span>
         )}
         <span className="app-nav-who">

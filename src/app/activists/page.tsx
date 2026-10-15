@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatMobileDisplay } from "@/lib/activists";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
+import { EMPTY_ACTIVISTS } from "@/lib/quips";
 
 type Activist = {
   id: number;
@@ -83,7 +86,7 @@ export default function ActivistsPage() {
             <h1>הרשמת פעילים</h1>
           </div>
         </header>
-        {loading ? <p className="lede">טוען…</p> : null}
+        {loading ? <p className="lede"><Quip list={LOADING} /></p> : null}
         {error ? <p className="form-msg form-msg-err">{error}</p> : null}
         {!loading && !error && !hasInstitutions ? (
           <p className="lede">לא שויך מוסד למשתמש זה — פנו למנהל.</p>
@@ -123,7 +126,7 @@ export default function ActivistsPage() {
               </button>
             </div>
             {rows.length === 0 ? (
-              <p className="lede">עדיין אין פעילים רשומים למוסד זה.</p>
+              <p className="lede"><Quip list={EMPTY_ACTIVISTS} /></p>
             ) : (
               <div className="table-wrap">
                 <table>

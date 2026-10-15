@@ -21,6 +21,7 @@ import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 import { eshkolColorMap } from "@/lib/eshkol-house-colors";
 import { CLUSTER_STAGE_LABEL, clusterStage } from "@/lib/cluster-stage";
+import { CLUSTER_DONE, LOADING_MAP, STREET_DONE, STREET_UNDONE, quip } from "@/lib/quips";
 import {
   OPENFREEMAP_STYLE,
   streetLinePaint,
@@ -218,7 +219,7 @@ export function StreetMap({
   const [searchBusy, setSearchBusy] = useState(false);
   const [parsedCity, setParsedCity] = useState<string | null>(null);
   const [activeHit, setActiveHit] = useState(0);
-  const [status, setStatus] = useState("טוען מפה…");
+  const [status, setStatus] = useState<string>(LOADING_MAP[0]);
   const [selectedAshkol, setSelectedAshkol] = useState<string>("");
   const [housePoints, setHousePoints] = useState<EshkolHousePoint[]>([]);
   const [streetLines, setStreetLines] = useState<EshkolStreetLine[]>([]);
@@ -1114,7 +1115,7 @@ export function StreetMap({
     lastDoneRef.current[selectedAshkol] = selectedComputedDone;
     if (prev === undefined || prev === selectedComputedDone) return;
     onClusterDone?.(selectedAshkol, selectedComputedDone);
-    if (selectedComputedDone) setStatus(`כל רחובות אשכול ${selectedAshkol} סומנו — האשכול הושלם ✓`);
+    if (selectedComputedDone) setStatus(`אשכול ${selectedAshkol}: ${quip(CLUSTER_DONE, Math.random() * 1e9)}`);
   }, [selectedAshkol, selectedComputedDone, progressOverride, onClusterDone]);
 
   useEffect(() => {
@@ -1277,7 +1278,9 @@ export function StreetMap({
         delete next[a];
         return next;
       });
-      setStatus(nextDone ? `סומן בוצע: ${street.name_he}` : `הוסר סימון: ${street.name_he}`);
+      setStatus(
+        `${quip(nextDone ? STREET_DONE : STREET_UNDONE, Math.random() * 1e9)} · ${street.name_he}`,
+      );
     };
   });
 
@@ -1346,7 +1349,7 @@ export function StreetMap({
       setPickedStreet({ ...pickedStreet, done });
     }
     setStreetDoneRef.current(street.id, done);
-    setStatus(done ? `סומן בוצע: ${street.name_he}` : `הוסר סימון: ${street.name_he}`);
+    setStatus(`${quip(done ? STREET_DONE : STREET_UNDONE, Math.random() * 1e9)} · ${street.name_he}`);
   }
 
   useEffect(() => {
@@ -2578,7 +2581,7 @@ export function StreetMap({
           הצג הכל
         </button>
         <p
-          className={`map-status${status.includes("סומן כבוצע") ? " link-success-note" : ""}`}
+          className={`map-status${/סומן כבוצע|✓|💎|🇮🇱/.test(status) ? " link-success-note" : ""}`}
           role="status"
         >
           {status}

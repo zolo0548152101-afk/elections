@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { ShowMore } from "@/components/ShowMore";
 import { useRouter } from "next/navigation";
 import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
+import { Quip } from "@/components/Quip";
+import { LOADING } from "@/lib/quips";
 
 type Inst = {
   id: number;
@@ -84,7 +86,7 @@ export default function TeamInstitutionsPage() {
             <h1>מוסדות הצוות</h1>
           </div>
         </header>
-        {loading && <p className="lede">טוען…</p>}
+        {loading && <p className="lede"><Quip list={LOADING} /></p>}
         {!loading && msg && <p className="form-msg">{msg}</p>}
         {!loading && (
           <label className="panel-form search-strip">
