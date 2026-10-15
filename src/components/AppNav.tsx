@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/auth";
 import { ShowMore } from "@/components/ShowMore";
 
@@ -14,7 +14,6 @@ export function AppNav({
   progress?: { done: number; total: number };
 }) {
   const path = usePathname();
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const links = [
@@ -43,8 +42,7 @@ export function AppNav({
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    window.location.assign("/login");
   }
 
   const pct =

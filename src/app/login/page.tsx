@@ -13,14 +13,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const infoFlash = useTimedFlash(5000);
   const [loading, setLoading] = useState(false);
-  const [previewEntry, setPreviewEntry] = useState(false);
+  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [showPreviewPick, setShowPreviewPick] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/preview-entry")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.enabled) setPreviewEntry(true);
+        if (!cancelled && data?.enabled) setPreviewAvailable(true);
       })
       .catch(() => {});
     return () => {
@@ -103,8 +104,8 @@ export default function LoginPage() {
           else void onForgot("whatsapp");
         }}
       >
-        <h1>{previewEntry ? "כניסה לבדיקה" : mode === "login" ? "התחברות" : "סיסמה זמנית"}</h1>
-        {previewEntry ? (
+        <h1>{showPreviewPick ? "כניסה לבדיקה" : mode === "login" ? "התחברות" : "סיסמה זמנית"}</h1>
+        {showPreviewPick ? (
           <>
             <p className="lede">מה אני רוצה להתחבר?</p>
             {error && <FormMsg kind="err">{error}</FormMsg>}
@@ -117,9 +118,21 @@ export default function LoginPage() {
             <button type="button" className="export" disabled={loading} onClick={() => void enterAs("coordinator")}>
               רכז
             </button>
+            <button
+              type="button"
+              className="reset"
+              disabled={loading}
+              onClick={() => {
+                setShowPreviewPick(false);
+                setError(null);
+              }}
+              style={{ marginTop: "0.65rem", width: "100%" }}
+            >
+              חזרה להתחברות
+            </button>
           </>
         ) : null}
-        {!previewEntry ? (
+        {!showPreviewPick ? (
           <>
         <p className="lede">
           {mode === "login"
@@ -188,6 +201,21 @@ export default function LoginPage() {
         >
           {mode === "login" ? "שכחתי סיסמה / כניסה חד-פעמית" : "חזרה להתחברות"}
         </button>
+        {previewAvailable && mode === "login" ? (
+          <button
+            type="button"
+            className="reset"
+            disabled={loading}
+            onClick={() => {
+              setShowPreviewPick(true);
+              setError(null);
+              infoFlash.clear();
+            }}
+            style={{ width: "100%" }}
+          >
+            כניסה לבדיקה
+          </button>
+        ) : null}
           </>
         ) : null}
       </form>
