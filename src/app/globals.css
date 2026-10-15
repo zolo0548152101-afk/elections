@@ -1774,31 +1774,69 @@ tbody tr.cluster-row-selected:hover {
   font-size: 0.85rem;
 }
 
+.cluster-street-summary {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Full card width, as many columns as fit (one on phones). */
 .cluster-street-list {
-  margin: 0.35rem 0 0;
+  grid-column: 1 / -1;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 0.3rem;
-  max-height: 260px;
-  overflow: auto;
-}
-
-.cluster-street-item {
-  display: flex;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: 0.45rem;
-  align-items: center;
-  font-weight: 500;
-  font-size: 0.9rem;
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
-.cluster-street-item input {
-  width: auto;
+.cluster-street-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 48px;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--cluster-color, var(--accent-2));
+  border-radius: 10px;
+  background: #fff;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.cluster-street-row:hover {
+  background: #f5f8ff;
+}
+
+.cluster-street-row.is-picked {
+  border-color: var(--cluster-color, var(--accent-2));
+  box-shadow: 0 0 0 1px var(--cluster-color, var(--accent-2));
+}
+
+.cluster-street-row.is-done {
+  background: #f0fdf4;
+  border-inline-start-color: #16a34a;
+}
+
+.cluster-street-row input {
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  accent-color: var(--accent-2);
+  margin: 0;
+  accent-color: #16a34a;
+  cursor: pointer;
 }
 
 .cluster-street-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 0.05rem;
   border: 0;
   background: transparent;
   font: inherit;
@@ -1808,8 +1846,51 @@ tbody tr.cluster-row-selected:hover {
   padding: 0.15rem 0;
 }
 
-.cluster-street-name:hover {
+/* `.street-card span` styles every span in the card; these win on specificity. */
+.street-card .cluster-street-title {
+  display: block;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.street-card .cluster-street-name:hover .cluster-street-title {
   color: var(--accent-2);
+}
+
+.street-card .cluster-street-row.is-done .cluster-street-title {
+  text-decoration: line-through;
+  text-decoration-color: rgba(22, 101, 52, 0.5);
+}
+
+.street-card .cluster-street-meta {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.street-card .cluster-street-houses {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: center;
+  min-width: 3rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 8px;
+  background: rgba(16, 32, 51, 0.06);
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.street-card .cluster-street-houses strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.street-card .cluster-street-houses small {
+  font-size: 0.68rem;
+  color: var(--muted);
 }
 
 .route-panel {
@@ -2186,9 +2267,11 @@ button.route-more-name[aria-pressed="true"] {
 }
 
 .eshkol-swatch {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50%;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  margin-inline: 0.1rem;
   border: 1px solid #fff;
   box-shadow: 0 0 0 1px rgba(15, 23, 32, 0.25);
   flex: none;
