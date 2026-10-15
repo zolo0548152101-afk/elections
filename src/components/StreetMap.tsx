@@ -24,6 +24,7 @@ import { eshkolColorMap } from "@/lib/eshkol-house-colors";
 import {
   OPENFREEMAP_STYLE,
   streetLinePaint,
+  COLOR_MUTED,
   streetFeature,
   applyStreetState,
   applyStreetFilter,
@@ -1215,6 +1216,10 @@ export function StreetMap({
     const apply = () => applyStreetState(map, mapState, doneIdsRef.current);
     apply();
     if (!map.getLayer("streets-line")) map.once("idle", apply);
+    // Drop a deferred apply from an older render, or it would repaint stale state later.
+    return () => {
+      map.off("idle", apply);
+    };
   }, [mapState]);
 
   useEffect(() => {
@@ -1369,7 +1374,13 @@ export function StreetMap({
       ...(mapState?.linkedAshkols ?? []),
       ...linkedOverride,
     ]);
-    const paint = streetLinePaint([...linked], selectedAshkol || "", pickedStreet?.id || "", clusterColors);
+    const paint = streetLinePaint(
+      [...linked],
+      selectedAshkol || "",
+      pickedStreet?.id || "",
+      clusterColors,
+      clusterStreets.map((s) => s.id),
+    );
     const apply = () => {
       if (!map.getLayer("streets-line")) return;
       map.setPaintProperty("streets-line", "line-color", paint["line-color"] as never);
@@ -1378,7 +1389,11 @@ export function StreetMap({
     };
     apply();
     if (!map.getLayer("streets-line")) map.once("idle", apply);
-  }, [selectedAshkol, pickedStreet?.id, mapState, linkedOverride, clusterColors]);
+    // Drop a deferred apply from an older render, or it would repaint stale state later.
+    return () => {
+      map.off("idle", apply);
+    };
+  }, [selectedAshkol, pickedStreet?.id, mapState, linkedOverride, clusterColors, clusterStreets]);
 
   /** Only streets of clusters on the current list are drawn. */
   useEffect(() => {
@@ -1388,12 +1403,27 @@ export function StreetMap({
     const apply = () => applyStreetFilter(map, ashkols);
     apply();
     if (!map.getLayer("streets-line")) map.once("idle", apply);
+    // Drop a deferred apply from an older render, or it would repaint stale state later.
+    return () => {
+      map.off("idle", apply);
+    };
   }, [clusters]);
 
-  const houseLegend = useMemo(
-    () => [...houseColors.entries()].map(([ashkol, color]) => ({ ashkol, color })),
-    [houseColors],
-  );
+  /** Legend: with a cluster selected, every cluster of that city (in its colour); otherwise the clusters whose houses are drawn. */
+  const houseLegend = useMemo(() => {
+    const town = selectedAshkol
+      ? clusters.find((c) => c.ashkol === selectedAshkol)?.settlement_name
+      : undefined;
+    if (!town) return [...houseColors.entries()].map(([ashkol, color]) => ({ ashkol, color }));
+    return clusters
+      .filter((c) => c.settlement_name === town)
+      .map((c) => c.ashkol)
+      .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
+      .map((ashkol) => ({ ashkol, color: clusterColors.get(ashkol) ?? "#64748b" }));
+  }, [houseColors, selectedAshkol, clusters, clusterColors]);
+  const legendTown = selectedAshkol
+    ? clusters.find((c) => c.ashkol === selectedAshkol)?.settlement_name
+    : undefined;
 
   const clustersRef = useRef(clusters);
   const visibleHousesRef = useRef(visibleHouses);
@@ -1500,6 +1530,10 @@ export function StreetMap({
     };
     apply();
     if (!map.getLayer("eshkol-houses")) map.once("idle", apply);
+    // Drop a deferred apply from an older render, or it would repaint stale state later.
+    return () => {
+      map.off("idle", apply);
+    };
   }, [selectedAshkol]);
 
   useEffect(() => {
@@ -2795,6 +2829,7 @@ export function StreetMap({
         {sidePanel}
         {houseLegend.length > 0 && (
           <div className="eshkol-legend" dir="rtl">
+            {legendTown && <p className="eshkol-legend-town">אשכולות ב{legendTown}</p>}
             {houseLegend.map((item) => (
               <button
                 key={item.ashkol}
@@ -2802,7 +2837,14 @@ export function StreetMap({
                 aria-pressed={selectedAshkol === item.ashkol}
                 onClick={() => selectEshkolRef.current(item.ashkol)}
               >
-                <span className="eshkol-swatch" aria-hidden="true" style={{ background: item.color }} />
+                <span
+                  className="eshkol-swatch"
+                  aria-hidden="true"
+                  style={{
+                    background:
+                      !selectedAshkol || selectedAshkol === item.ashkol ? item.color : COLOR_MUTED,
+                  }}
+                />
                 אשכול <bdi dir="ltr">{item.ashkol}</bdi>
               </button>
             ))}

@@ -2287,6 +2287,12 @@ button.route-more-name[aria-pressed="true"] {
   flex: none;
 }
 
+.eshkol-legend .eshkol-legend-town {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .eshkol-legend p {
   margin: 0.15rem 0.3rem 0.1rem;
   color: var(--muted, #526072);

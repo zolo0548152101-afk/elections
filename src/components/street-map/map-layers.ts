@@ -39,29 +39,38 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
   return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
 }
 
+/** Streets of other clusters while one cluster is selected. */
+export const COLOR_MUTED = "#a3acb9";
+
 export function streetLinePaint(
   linkedAshkols: string[],
   selectedAshkol = "",
   streetId = "",
   colors: Map<string, string> = new Map(),
+  /** Every line of the selected cluster, including lines it shares with a neighbour cluster. */
+  selectedStreetIds: string[] = [],
 ) {
   const done = doneFlag();
   const linked = linkedFlag(linkedAshkols);
   const selectedStreet: Expr = streetId ? ["==", ["get", "id"], streetId] : ["literal", false];
-  const selectedCluster: Expr = selectedAshkol
-    ? ["==", ["get", "ashkol"], selectedAshkol]
-    : ["literal", false];
+  const inCluster: Expr = !selectedAshkol
+    ? ["literal", false]
+    : selectedStreetIds.length > 0
+      ? ["any", ["==", ["get", "ashkol"], selectedAshkol], ["in", ["get", "id"], ["literal", selectedStreetIds]]]
+      : ["==", ["get", "ashkol"], selectedAshkol];
+  if (!selectedAshkol) {
+    return {
+      "line-color": ["case", done, COLOR_DONE, clusterColorExpr(colors)],
+      "line-width": ["case", selectedStreet, 8, done, 5, ["==", linked, 1], 4.5, 4],
+      "line-opacity": 0.9,
+    };
+  }
+  // A cluster is selected: only its streets keep the cluster colour, the rest go soft grey.
+  const color = colors.get(selectedAshkol) ?? COLOR_ASSIGNED;
   return {
-    "line-color": ["case", done, COLOR_DONE, clusterColorExpr(colors)],
-    "line-width": ["case", selectedStreet, 8, selectedCluster, 6.5, done, 5, ["==", linked, 1], 4.5, 4],
-    "line-opacity": [
-      "case",
-      selectedStreet,
-      1,
-      selectedCluster,
-      1,
-      selectedAshkol ? 0.35 : 0.9,
-    ],
+    "line-color": ["case", ["all", inCluster, done], COLOR_DONE, inCluster, color, COLOR_MUTED],
+    "line-width": ["case", selectedStreet, 8, inCluster, 6.5, 3],
+    "line-opacity": ["case", selectedStreet, 1, inCluster, 1, 0.55],
   };
 }
 
@@ -391,8 +400,8 @@ export function houseCirclePaint(selectedAshkol: string) {
       18,
       ["case", chosen, 3, 2],
     ],
-    "circle-color": ["get", "color"],
-    "circle-opacity": ["case", chosen, 0.95, selectedAshkol ? 0.32 : 0.9],
+    "circle-color": selectedAshkol ? ["case", chosen, ["get", "color"], COLOR_MUTED] : ["get", "color"],
+    "circle-opacity": ["case", chosen, 0.95, selectedAshkol ? 0.5 : 0.9],
     "circle-stroke-width": ["case", chosen, 0.5, 0],
     "circle-stroke-color": "#ffffff",
   };
