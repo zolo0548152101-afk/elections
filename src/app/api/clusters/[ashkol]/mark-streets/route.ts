@@ -24,6 +24,8 @@ export async function POST(
 
   const streets = (await sql`
     SELECT id FROM streets WHERE ashkol = ${ashkol}
+    UNION
+    SELECT street_id AS id FROM eshkol_osm_streets WHERE ashkol = ${ashkol}
   `) as { id: string }[];
 
   let updated = 0;

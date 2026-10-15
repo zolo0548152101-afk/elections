@@ -162,7 +162,8 @@ export async function canAccessAshkol(
 
 /**
  * Whether the user may mark this street done.
- * Super admin: yes. Coordinator: assigned OR nearest city in institution cities.
+ * Super admin: yes. Anyone: the street is linked to one of their clusters.
+ * Coordinator: also assigned OR nearest city in institution cities.
  * Area manager: street city in any of their coordinators' institution cities.
  */
 export async function canMarkStreet(
@@ -171,6 +172,23 @@ export async function canMarkStreet(
   streetId: string,
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
+
+  // A street linked to one of the user's clusters can always be marked
+  // (the cluster street list offers exactly these lines).
+  const visible = await visibleClusterAshkols(sql, user);
+  if (visible && visible.length > 0) {
+    const linked = (await sql`
+      SELECT 1 AS ok
+      WHERE EXISTS (
+        SELECT 1 FROM eshkol_osm_streets
+        WHERE street_id = ${streetId} AND ashkol = ANY(${visible})
+      ) OR EXISTS (
+        SELECT 1 FROM streets
+        WHERE id = ${streetId} AND ashkol = ANY(${visible})
+      )
+    `) as { ok: number }[];
+    if (linked.length > 0) return true;
+  }
 
   const loc = await streetNearestCity(sql, streetId);
   if (!loc?.city) return false;

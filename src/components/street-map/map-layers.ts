@@ -41,6 +41,9 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
   return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
 }
 
+/** Opacity of colored street and route lines: strong enough to read the color, light enough to read the name. */
+export const LINE_ALPHA = 0.55;
+
 /** Streets of other clusters while one cluster is selected. */
 export const COLOR_MUTED = "#a3acb9";
 
@@ -63,7 +66,8 @@ export function eshkolLinePaint(selectedAshkol: string, doneIds: string[]) {
       COLOR_MUTED,
     ],
     "line-width": ["case", chosen, 6.5, 3],
-    "line-opacity": ["case", chosen, 1, selectedAshkol ? 0.55 : 0.9],
+    // Translucent so the street name drawn under/over the line stays readable.
+    "line-opacity": ["case", chosen, LINE_ALPHA, selectedAshkol ? 0.35 : LINE_ALPHA],
   };
 }
 
@@ -289,26 +293,37 @@ export function addMapOverlays(map: MapLibreMap) {
       "icon-halo-width": 2.5,
     },
   });
-  map.addLayer({
-    id: "highlight-line",
-    type: "line",
-    source: "highlight",
-    paint: { "line-color": "#2563eb", "line-width": 7, "line-opacity": 0.95 },
-  });
-  map.addLayer({
-    id: "route-casing",
-    type: "line",
-    source: "route",
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": 0.95 },
-  });
-  map.addLayer({
-    id: "route-line",
-    type: "line",
-    source: "route",
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": 1 },
-  });
+  // Route and highlight lines sit under the basemap labels too, translucent,
+  // so the name of the street being drawn on stays visible.
+  map.addLayer(
+    {
+      id: "highlight-line",
+      type: "line",
+      source: "highlight",
+      paint: { "line-color": "#2563eb", "line-width": 7, "line-opacity": LINE_ALPHA },
+    },
+    firstBasemapLabel,
+  );
+  map.addLayer(
+    {
+      id: "route-casing",
+      type: "line",
+      source: "route",
+      filter: ["==", ["geometry-type"], "LineString"],
+      paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": 0.35 },
+    },
+    firstBasemapLabel,
+  );
+  map.addLayer(
+    {
+      id: "route-line",
+      type: "line",
+      source: "route",
+      filter: ["==", ["geometry-type"], "LineString"],
+      paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": LINE_ALPHA + 0.1 },
+    },
+    firstBasemapLabel,
+  );
   map.addLayer({
     id: "proposed-pin",
     type: "symbol",
