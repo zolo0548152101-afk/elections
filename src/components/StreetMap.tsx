@@ -2908,7 +2908,7 @@ export function StreetMap({
           {mapFull ? "חזור" : "מסך מלא"}
         </button>
         {picked ? (
-          <aside className={menuOpen ? "route-map-menu is-open" : "route-map-menu"}>
+          <aside className={menuOpen ? "route-map-menu is-open" : "route-map-menu"} data-tour="route-menu">
             <button
               type="button"
               className="route-menu-toggle"

@@ -20,7 +20,6 @@ function visible(selector: string): Element | null {
  */
 export function runTour(guide: Guide, onDone?: () => void) {
   const steps = guide.steps;
-  const opened = new Set<string>();
 
   const tour = driver({
     showProgress: steps.length > 1,
@@ -47,10 +46,10 @@ export function runTour(guide: Guide, onDone?: () => void) {
         tour.destroy();
         return;
       }
-      const { open, element } = steps[next]!;
-      if (open && !opened.has(open) && !(element && visible(element))) {
+      const { open, isOpen, element } = steps[next]!;
+      const alreadyOpen = isOpen ? Boolean(document.querySelector(isOpen)) : Boolean(element && visible(element));
+      if (open && !alreadyOpen) {
         document.querySelector<HTMLElement>(open)?.click();
-        opened.add(open);
         await wait(350);
       }
       tour.moveNext();
