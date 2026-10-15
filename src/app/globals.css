@@ -2996,19 +2996,19 @@ body:has(.register-poster) {
   text-align: right;
   font-family: "Heebo", sans-serif;
   border-radius: 14px;
-  max-width: 340px;
-  padding: 16px 18px;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 12px 14px;
 }
 
 .driver-popover.app-tour .driver-popover-title {
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 800;
   color: #102033;
 }
 
 .driver-popover.app-tour .driver-popover-description {
-  font-size: 0.93rem;
-  line-height: 1.6;
+  font-size: 0.88rem;
+  line-height: 1.5;
   color: #334155;
 }
 
@@ -3115,4 +3115,144 @@ body:has(.register-poster) {
 
 .driver-popover.app-tour .driver-popover-footer {
   flex-wrap: wrap;
+}
+
+/* Tour card docked away from where the user is working */
+.driver-popover.app-tour.is-docked {
+  position: fixed !important;
+  top: var(--dock-y) !important;
+  left: var(--dock-x) !important;
+  right: auto !important;
+  bottom: auto !important;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.28);
+}
+
+.driver-popover.app-tour.is-docked .driver-popover-arrow {
+  display: none;
+}
+
+.page-quip {
+  transition: opacity 350ms ease;
+}
+
+.page-quip.is-fading {
+  opacity: 0;
+}
+
+/* Task step: "I'll do it" / "do it for me" */
+.driver-popover.app-tour .tour-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.driver-popover.app-tour .tour-task-actions[hidden] {
+  display: none;
+}
+
+.driver-popover.app-tour .tour-task-actions button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.driver-popover.app-tour .tour-mine {
+  background: #1d4ed8;
+  color: #fff;
+  border: 1px solid #1d4ed8;
+}
+
+.driver-popover.app-tour .tour-do-it {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.driver-popover.app-tour .tour-task-status:empty {
+  display: none;
+}
+
+/* While the user works: card and dark overlay step aside */
+body.tour-hands-on .driver-popover,
+body.tour-hands-on .driver-overlay {
+  display: none !important;
+}
+
+.tour-pill {
+  position: fixed;
+  z-index: 2147483640;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 10px 8px 12px;
+  border-radius: 999px;
+  background: #102033;
+  color: #fff;
+  font-family: "Heebo", sans-serif;
+  font-size: 0.88rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
+  animation: tour-pill-in 220ms ease-out;
+}
+
+.tour-pill.at-top {
+  bottom: auto;
+  top: 12px;
+}
+
+.tour-pill-text {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tour-pill button {
+  flex: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 5px 11px;
+  border: 0;
+  background: #fff7ed;
+  color: #c2410c;
+  cursor: pointer;
+}
+
+.tour-pill button.tour-pill-back {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+@keyframes tour-pill-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 520px) {
+  .tour-pill {
+    flex-wrap: wrap;
+    border-radius: 16px;
+    justify-content: center;
+  }
+  .tour-pill-text {
+    white-space: normal;
+    flex-basis: 100%;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-pill { animation: none; }
 }

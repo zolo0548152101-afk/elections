@@ -219,24 +219,33 @@ async function undoAll(undo: Undo) {
   hideCursor();
   // Let the route planner finish saving what the tour did.
   await wait(900);
-  for (const [ashkol, stagesBefore] of undo.routes) {
-    await fetch(`/api/clusters/${encodeURIComponent(ashkol)}/route`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stages: stagesBefore }),
-    }).catch(() => {});
-  }
+  // Street marks and routes go back together (in parallel), so leaving the page right away still undoes them.
+  const jobs: Promise<unknown>[] = [];
   for (const [id, wasDone] of undo.marks) {
     const box = document.querySelector<HTMLInputElement>(
       `.cluster-street-list input[data-street-id="${CSS.escape(id)}"]`,
     );
     if (box && box.checked === wasDone) continue;
-    await fetch(`/api/streets/${encodeURIComponent(id)}/mark`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: wasDone }),
-    }).catch(() => {});
+    jobs.push(
+      fetch(`/api/streets/${encodeURIComponent(id)}/mark`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: wasDone }),
+        keepalive: true,
+      }).catch(() => {}),
+    );
   }
+  for (const [ashkol, stagesBefore] of undo.routes) {
+    jobs.push(
+      fetch(`/api/clusters/${encodeURIComponent(ashkol)}/route`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stages: stagesBefore }),
+        keepalive: true,
+      }).catch(() => {}),
+    );
+  }
+  await Promise.all(jobs);
   if (undo.menuWasOpen === false && document.querySelector(".route-map-menu.is-open")) {
     document.querySelector<HTMLElement>('[data-tour="route-toggle"]')?.click();
   }
@@ -250,6 +259,113 @@ async function undoAll(undo: Undo) {
   tourBridge.refreshStreets?.();
   cursorEl?.remove();
   cursorEl = null;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Keep the tour card off the spot the user is working on              */
+/* ------------------------------------------------------------------ */
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+function boxOf(selector: string): Box | null {
+  const el = visible(selector);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  // Only the part on screen matters.
+  const box = {
+    left: Math.max(0, r.left),
+    top: Math.max(0, r.top),
+    right: Math.min(window.innerWidth, r.right),
+    bottom: Math.min(window.innerHeight, r.bottom),
+  };
+  return box.right > box.left && box.bottom > box.top ? box : null;
+}
+
+/** Screen box around the selected cluster's streets (where the user clicks to place points and draw). */
+function clusterStreetsBox(): Box | null {
+  const map = tourBridge.map;
+  const a = tourBridge.selectedAshkol;
+  if (!map || !a || !map.getSource("eshkol-streets")) return null;
+  const canvas = map.getCanvas().getBoundingClientRect();
+  let box: Box | null = null;
+  for (const f of map.querySourceFeatures("eshkol-streets")) {
+    if (f.properties?.ashkol !== a) continue;
+    const g = f.geometry;
+    const lines = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+    for (const line of lines) {
+      for (const [lng, lat] of line as [number, number][]) {
+        const p = map.project([lng, lat]);
+        const x = canvas.left + p.x;
+        const y = canvas.top + p.y;
+        box = box
+          ? { left: Math.min(box.left, x), top: Math.min(box.top, y), right: Math.max(box.right, x), bottom: Math.max(box.bottom, y) }
+          : { left: x, top: y, right: x, bottom: y };
+      }
+    }
+  }
+  if (!box) return null;
+  const pad = 36;
+  return {
+    left: Math.max(canvas.left, box.left - pad),
+    top: Math.max(canvas.top, box.top - pad),
+    right: Math.min(canvas.right, box.right + pad),
+    bottom: Math.min(canvas.bottom, box.bottom + pad),
+  };
+}
+
+const MENU = '[data-tour="route-menu"]';
+
+/** Where the user's hands are during each task. The card must not cover these. */
+const WORK_AREA: Record<TaskId, () => (Box | null)[]> = {
+  "select-cluster": () => [boxOf('[data-tour="cluster-select"]')],
+  "mark-street": () => [boxOf('[data-tour="street-card"]')],
+  "open-route-menu": () => [boxOf('[data-tour="route-toggle"]'), boxOf(".route-map-menu.is-open")],
+  "place-start": () => [clusterStreetsBox(), boxOf(MENU)],
+  "draw-route": () => [clusterStreetsBox(), boxOf(MENU)],
+  "add-stage": () => [boxOf('[data-tour="route-stage"]'), boxOf(MENU)],
+};
+
+function overlapArea(a: Box, b: Box): number {
+  const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/**
+ * If the card covers the work area, dock it to the screen spot that covers it least
+ * (a corner or an edge).
+ */
+function keepClear(card: HTMLElement, task: TaskId) {
+  const avoid = WORK_AREA[task]().filter((b): b is Box => Boolean(b));
+  if (avoid.length === 0) return;
+  const covered = (b: Box) => avoid.reduce((sum, a) => sum + overlapArea(a, b), 0);
+  const now = card.getBoundingClientRect();
+  if (covered(now) === 0) return;
+
+  const place = () => {
+    const r = card.getBoundingClientRect();
+    const w = r.width;
+    const h = r.height;
+    const m = 12;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const xs = [m, (vw - w) / 2, vw - w - m];
+    const ys = [m + 56, (vh - h) / 2, vh - h - m];
+    let best: { x: number; y: number; score: number } | null = null;
+    for (const x of xs) {
+      for (const y of ys) {
+        const b = { left: x, top: y, right: x + w, bottom: y + h };
+        const score = covered(b) * 1000 + Math.hypot(x - now.left, y - now.top);
+        if (!best || score < best.score) best = { x, y, score };
+      }
+    }
+    card.style.setProperty("--dock-x", `${Math.max(m, best!.x)}px`);
+    card.style.setProperty("--dock-y", `${Math.max(m, best!.y)}px`);
+    card.classList.add("is-docked");
+  };
+
+  place();
 }
 
 /* ------------------------------------------------------------------ */
@@ -286,6 +402,63 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
     }
   }
 
+  /* While the user works, the card and the dark overlay step aside; a small bar stays. */
+  let pill: HTMLDivElement | null = null;
+
+  function placePill(task: TaskId) {
+    if (!pill) return;
+    const avoid = WORK_AREA[task]().filter((b): b is Box => Boolean(b));
+    const r = pill.getBoundingClientRect();
+    const h = r.height;
+    const vh = window.innerHeight;
+    const bottom = { left: r.left, right: r.right, top: vh - h - 16, bottom: vh - 16 };
+    const clash = avoid.some((a) => overlapArea(a, bottom) > 0);
+    pill.classList.toggle("at-top", clash);
+  }
+
+  function enterHandsOn(task: TaskId, text: string, forMe: (() => void) | null) {
+    leaveHandsOn();
+    document.body.classList.add("tour-hands-on");
+    document.body.classList.remove("driver-active");
+    pill = document.createElement("div");
+    pill.className = "tour-pill";
+    pill.dir = "rtl";
+    pill.setAttribute("role", "status");
+    const label = document.createElement("span");
+    label.className = "tour-pill-text";
+    label.textContent = text;
+    pill.append(label);
+    if (forMe) {
+      const me = document.createElement("button");
+      me.type = "button";
+      me.textContent = "🤖 עשו בשבילי";
+      me.addEventListener("click", forMe);
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "tour-pill-back";
+      back.textContent = "📖 המדריך";
+      back.title = "חזרה להסבר ולהמשך המדריך";
+      back.addEventListener("click", () => {
+        leaveHandsOn();
+        tour.refresh();
+      });
+      pill.append(me, back);
+    }
+    document.body.append(pill);
+    placePill(task);
+  }
+
+  function leaveHandsOn() {
+    pill?.remove();
+    pill = null;
+    if (document.body.classList.contains("tour-hands-on")) {
+      document.body.classList.remove("tour-hands-on");
+      if (tourRef?.isActive()) document.body.classList.add("driver-active");
+    }
+  }
+
+  let tourRef: Driver | null = null;
+
   const tour = driver({
     showProgress: steps.length > 1,
     progressText: "{{current}} מתוך {{total}}",
@@ -306,54 +479,80 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
     ),
     onPopoverRender: (popover, { state }) => {
       stopPoll();
+      leaveHandsOn();
       const i = state.activeIndex ?? 0;
       const step = steps[i];
+      popover.wrapper.classList.remove("is-docked");
       if (!step?.task) return;
-      const task = TASKS[step.task];
+      const taskId = step.task;
+      const task = TASKS[taskId];
       void prepare(step);
       const base = task.base();
+      const doLine = (step.body.split("\n").find((l) => l.startsWith("👉")) ?? "👉 תורכם!")
+        .replace(/^👉\s*תורכם:\s*/, "👉 ");
 
       const status = document.createElement("div");
       status.className = "tour-task-status";
       popover.description.after(status);
 
+      // "I'll do it" hides the card; a small bar stays with the instruction.
+      const mine = document.createElement("button");
+      mine.type = "button";
+      mine.className = "tour-mine";
+      mine.textContent = "👉 יאללה, אני עושה";
       const doIt = document.createElement("button");
       doIt.type = "button";
       doIt.className = "tour-do-it";
-      doIt.textContent = "🤖 עשו את זה בשבילי";
-      popover.footerButtons.prepend(doIt);
+      doIt.textContent = "🤖 עשו בשבילי";
+      const actions = document.createElement("div");
+      actions.className = "tour-task-actions";
+      actions.append(mine, doIt);
+      status.after(actions);
 
+      let finished = false;
       const markDone = () => {
+        finished = true;
         status.textContent = "✓ מעולה! אפשר להמשיך";
         status.classList.add("is-done");
-        doIt.disabled = true;
-        doIt.textContent = "✓ בוצע";
+        actions.hidden = true;
       };
       if (task.done(base)) markDone();
 
-      doIt.addEventListener("click", async () => {
-        if (busy) return;
+      const runForMe = async () => {
+        if (busy || finished) return;
         busy = true;
-        doIt.disabled = true;
-        doIt.textContent = "רגע, אני עושה…";
+        enterHandsOn(taskId, "🤖 רגע, אני עושה את זה בשבילכם…", null);
         try {
           await prepare(step);
           await task.run();
         } finally {
           busy = false;
           hideCursor();
+          await wait(500);
           if (task.done(base)) markDone();
-          else {
-            doIt.disabled = false;
-            doIt.textContent = "🤖 עשו את זה בשבילי";
-          }
+          leaveHandsOn();
           tour.refresh();
         }
-      });
+      };
 
-      // Notice when the user did it themselves.
+      mine.addEventListener("click", () => enterHandsOn(taskId, doLine, runForMe));
+      doIt.addEventListener("click", () => void runForMe());
+
+      // driver.js places the card first; then move it off the work area if needed.
+      const card = popover.wrapper;
+      requestAnimationFrame(() => requestAnimationFrame(() => keepClear(card, taskId)));
+
+      // Notice when the user did it themselves: the bar goes away and the card comes back with ✓.
       poll = window.setInterval(() => {
-        if (!busy && task.done(base) && !status.classList.contains("is-done")) markDone();
+        if (!busy && !finished && task.done(base)) {
+          markDone();
+          window.setTimeout(() => {
+            leaveHandsOn();
+            tour.refresh();
+          }, 700);
+        }
+        if (pill) placePill(taskId);
+        else keepClear(card, taskId);
       }, 500);
     },
     onNextClick: async () => {
@@ -373,10 +572,12 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
     },
     onDestroyed: () => {
       stopPoll();
+      leaveHandsOn();
       if (hasTasks) void undoAll(undo);
       onDone?.();
     },
   });
+  tourRef = tour;
   tour.drive();
   return tour;
 }
