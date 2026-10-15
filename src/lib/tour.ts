@@ -51,14 +51,34 @@ async function tap(x: number, y: number) {
   await wait(250);
 }
 
+/** Scroll the page so that `el` sits in the middle of the screen (the screen follows the cursor). */
+async function centerOnScreen(el: Element) {
+  el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+  await wait(550);
+}
+
 async function tapElement(el: HTMLElement | null) {
   if (!el) return;
-  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  await wait(250);
+  await centerOnScreen(el);
   const r = el.getBoundingClientRect();
   await tap(r.left + r.width / 2, r.top + r.height / 2);
   el.click();
   await wait(300);
+}
+
+/**
+ * Tap a spot on the map with the cursor kept in the middle of the screen:
+ * the page centers the map, and the map pans so the spot comes to its middle.
+ */
+async function tapMap(lng: number, lat: number, zoom?: number) {
+  const map = tourBridge.map;
+  if (!map) return;
+  await centerOnScreen(map.getContainer());
+  map.easeTo({ center: [lng, lat], zoom: zoom ?? map.getZoom(), duration: 500 });
+  await wait(560);
+  const p = map.project([lng, lat]);
+  const box = map.getCanvas().getBoundingClientRect();
+  await tap(box.left + p.x, box.top + p.y);
 }
 
 function hideCursor() {
@@ -77,6 +97,8 @@ type Undo = {
   /** Street id → done state before the tour. */
   marks: Map<string, boolean>;
   menuWasOpen?: boolean;
+  /** Map view before the tour (the cursor pans the map). */
+  camera?: { center: [number, number]; zoom: number; bearing: number; pitch: number };
 };
 
 const checkedStreets = () =>
@@ -174,9 +196,7 @@ const TASKS: Record<TaskId, Task> = {
       if (!map || !line) return;
       await tapElement(document.querySelector('[data-tour="route-point"]'));
       const [lng, lat] = line[0]!;
-      const p = map.project([lng, lat]);
-      const box = map.getCanvas().getBoundingClientRect();
-      await tap(box.left + p.x, box.top + p.y);
+      await tapMap(lng, lat, Math.max(map.getZoom(), 16));
       tourBridge.routeApi?.addStartPoint(lat, lng);
       await wait(900);
     },
@@ -189,14 +209,13 @@ const TASKS: Record<TaskId, Task> = {
       const line = clusterLine();
       if (!map || !line || line.length < 2) return;
       await tapElement(document.querySelector('[data-tour="route-draw"]'));
-      const box = map.getCanvas().getBoundingClientRect();
       const n = Math.min(4, line.length);
       const pts = Array.from({ length: n }, (_, i) => line[Math.round((i * (line.length - 1)) / (n - 1))]!);
+      const zoom = Math.max(map.getZoom(), 16);
       for (const [lng, lat] of pts) {
-        const p = map.project([lng, lat]);
-        await tap(box.left + p.x, box.top + p.y);
+        await tapMap(lng, lat, zoom);
         tourBridge.routeApi?.stretchPoint(lng, lat);
-        await wait(250);
+        await wait(200);
       }
       tourBridge.routeApi?.finishStretch();
       // Leave drawing mode.
@@ -255,6 +274,7 @@ async function undoAll(undo: Undo) {
     setter.call(select, undo.ashkol);
     select.dispatchEvent(new Event("change", { bubbles: true }));
   }
+  if (undo.camera && tourBridge.map) tourBridge.map.easeTo({ ...undo.camera, duration: 600 });
   tourBridge.reloadRoute?.();
   tourBridge.refreshStreets?.();
   cursorEl?.remove();
@@ -386,6 +406,11 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
     marks: new Map(),
     menuWasOpen: Boolean(document.querySelector(".route-map-menu.is-open")),
   };
+  const map = tourBridge.map;
+  if (map) {
+    const c = map.getCenter();
+    undo.camera = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+  }
   let poll: number | null = null;
   let busy = false;
 
