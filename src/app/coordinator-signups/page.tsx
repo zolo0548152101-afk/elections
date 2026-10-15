@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { COORDINATOR_SIGNUP_KINDS } from "@/lib/coordinator-signups";
+import { formatMobileDisplay } from "@/lib/activists";
 
 type Signup = {
   id: number;
   first_name: string;
   last_name: string;
+  mobile: string;
   institution_name: string;
   institution_kind: string;
   created_at: string;
@@ -50,15 +52,16 @@ export default function CoordinatorSignupsPage() {
       (row) =>
         (kind === "all" || row.institution_kind === kind) &&
         (!q ||
-          `${row.first_name} ${row.last_name} ${row.institution_name}`.includes(q)),
+          `${row.first_name} ${row.last_name} ${row.institution_name} ${row.mobile}`.includes(q)),
     );
   }, [signups, kind, query]);
 
   const tally = useMemo(
     () =>
-      COORDINATOR_SIGNUP_KINDS.map(
-        (k) => `${k} ${signups.filter((row) => row.institution_kind === k).length}`,
-      ).join(" · "),
+      COORDINATOR_SIGNUP_KINDS.map((k) => [k, signups.filter((row) => row.institution_kind === k).length] as const)
+        .filter(([, n]) => n > 0)
+        .map(([k, n]) => `${k} ${n}`)
+        .join(" · "),
     [signups],
   );
 
@@ -66,9 +69,9 @@ export default function CoordinatorSignupsPage() {
 
   function exportCsv() {
     const lines = [
-      ["שם פרטי", "שם משפחה", "שם המוסד", "סוג מוסד", "נרשם"].join(","),
+      ["שם פרטי", "שם משפחה", "נייד", "סוג מוסד", "שם המוסד", "נרשם"].join(","),
       ...rows.map((row) =>
-        [row.first_name, row.last_name, row.institution_name, row.institution_kind, when(row.created_at)]
+        [row.first_name, row.last_name, row.mobile, row.institution_kind, row.institution_name, when(row.created_at)]
           .map(csvCell)
           .join(","),
       ),
@@ -115,11 +118,11 @@ export default function CoordinatorSignupsPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="שם או מוסד"
+                  placeholder="שם, נייד או מוסד"
                 />
               </label>
               <p>
-                {signups.length} נרשמו · {tally}
+                {signups.length} נרשמו{tally ? ` · ${tally}` : ""}
               </p>
               <button
                 type="button"
@@ -146,8 +149,9 @@ export default function CoordinatorSignupsPage() {
                     <tr>
                       <th>שם פרטי</th>
                       <th>שם משפחה</th>
-                      <th>שם המוסד</th>
+                      <th>נייד</th>
                       <th>סוג מוסד</th>
+                      <th>שם המוסד</th>
                       <th>נרשם</th>
                     </tr>
                   </thead>
@@ -156,8 +160,11 @@ export default function CoordinatorSignupsPage() {
                       <tr key={row.id}>
                         <td>{row.first_name}</td>
                         <td>{row.last_name}</td>
-                        <td>{row.institution_name}</td>
+                        <td>
+                          <a href={`tel:${row.mobile}`}>{formatMobileDisplay(row.mobile)}</a>
+                        </td>
                         <td>{row.institution_kind}</td>
+                        <td>{row.institution_name}</td>
                         <td>
                           {when(row.created_at)}
                           {new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 1000

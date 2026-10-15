@@ -1,5 +1,14 @@
-/** Institution types a coordinator can pick on the public sign-up page. */
-export const COORDINATOR_SIGNUP_KINDS = ["מכינה", "ישיבה גבוהה", "ישיבת הסדר"] as const;
+/** Institution types a coordinator can pick on the public sign-up page (same list as the institutions page). */
+export const COORDINATOR_SIGNUP_KINDS = [
+  "ישיבת הסדר",
+  "ישיבה גבוהה",
+  "מכינה",
+  "ישיבה תיכונית",
+  "גרעין",
+  "מדרשה",
+  "אולפנה",
+  "מוסד חינוך",
+] as const;
 
 export type CoordinatorSignupKind = (typeof COORDINATOR_SIGNUP_KINDS)[number];
 

@@ -9,6 +9,7 @@ type Done = { name: string; institution: string; kind: string };
 export function CoordinatorRegisterPoster() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [mobile, setMobile] = useState("");
   const [institution, setInstitution] = useState("");
   const [kind, setKind] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export function CoordinatorRegisterPoster() {
         body: JSON.stringify({
           first_name: firstName,
           last_name: lastName,
+          mobile,
           institution_name: institution,
           institution_kind: kind,
         }),
@@ -91,15 +93,16 @@ export function CoordinatorRegisterPoster() {
               />
             </label>
             <label>
-              שם המוסד
+              נייד
               <input
-                value={institution}
+                value={mobile}
                 onChange={(event) => {
-                  setInstitution(event.target.value);
+                  setMobile(event.target.value);
                   setError(null);
                 }}
-                placeholder="למשל: מכינת עלי"
-                autoComplete="organization"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="05XXXXXXXX"
                 required
               />
             </label>
@@ -116,6 +119,19 @@ export function CoordinatorRegisterPoster() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              שם המוסד
+              <input
+                value={institution}
+                onChange={(event) => {
+                  setInstitution(event.target.value);
+                  setError(null);
+                }}
+                placeholder="למשל: מכינת עלי"
+                autoComplete="organization"
+                required
+              />
             </label>
             {error ? (
               <p className="register-error" role="alert">

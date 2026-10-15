@@ -12,7 +12,7 @@ export async function GET() {
 
   const sql = getSql();
   const signups = await sql`
-    SELECT id, first_name, last_name, institution_name, institution_kind, created_at, updated_at
+    SELECT id, first_name, last_name, mobile, institution_name, institution_kind, created_at, updated_at
     FROM coordinator_signups
     ORDER BY created_at DESC
     LIMIT 2000
