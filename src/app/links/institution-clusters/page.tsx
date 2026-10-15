@@ -6,6 +6,7 @@ import { AshkolSearch } from "@/components/AshkolSearch";
 import { LinksNav } from "@/components/LinksNav";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type LinkedCluster = {
   ashkol: string;
@@ -47,7 +48,17 @@ function parseContacts(
   return value;
 }
 
+const APP_LINKS_INSTITUTION_CLUSTERS_SORT: SortGetters<LinkedCluster, "ashkol" | "city" | "right" | "turnout" | "bzb" | "status"> = {
+  ashkol: (r) => r.ashkol,
+  city: (r) => r.settlement_name,
+  right: (r) => Number(r.right_pct),
+  turnout: (r) => Number(r.turnout_pct),
+  bzb: (r) => Number(r.bzb),
+  status: (r) => r.done ? 2 : (r.street_done ?? 0) > 0 ? 1 : 0,
+};
+
 export default function InstitutionClustersLinksPage() {
+  const tsort = useSortState<"ashkol" | "city" | "right" | "turnout" | "bzb" | "status">();
   const router = useRouter();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [q, setQ] = useState("");
@@ -250,17 +261,17 @@ export default function InstitutionClustersLinksPage() {
                     <table>
                       <thead>
                         <tr>
-                          <th>אשכול</th>
-                          <th>יישוב</th>
-                          <th>% ימין</th>
-                          <th>הצבעה</th>
-                          <th>בז״ב</th>
-                          <th>סטטוס</th>
+                          <SortTh k="ashkol" sort={tsort.sort} onSort={tsort.toggle}>אשכול</SortTh>
+                          <SortTh k="city" sort={tsort.sort} onSort={tsort.toggle}>יישוב</SortTh>
+                          <SortTh k="right" sort={tsort.sort} onSort={tsort.toggle}>% ימין</SortTh>
+                          <SortTh k="turnout" sort={tsort.sort} onSort={tsort.toggle}>הצבעה</SortTh>
+                          <SortTh k="bzb" sort={tsort.sort} onSort={tsort.toggle}>בז״ב</SortTh>
+                          <SortTh k="status" sort={tsort.sort} onSort={tsort.toggle}>סטטוס</SortTh>
                           <th></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {clusters.map((c) => (
+                        {sortRows(clusters, APP_LINKS_INSTITUTION_CLUSTERS_SORT, tsort.sort).map((c) => (
                           <tr key={c.ashkol}>
                             <td className="mono">{c.ashkol}</td>
                             <td>

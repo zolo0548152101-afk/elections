@@ -158,6 +158,7 @@ export async function GET(req: NextRequest) {
       done: clusterIsDone(st?.done ?? false, opsDone, c.ashkol),
       street_total: st?.street_total ?? 0,
       street_done: st?.street_done ?? 0,
+      ops_done: opsDone.has(c.ashkol),
     };
     if (c.lat == null || c.lng == null) {
       return { ...c, map_lat: null, map_lng: null, ...status };

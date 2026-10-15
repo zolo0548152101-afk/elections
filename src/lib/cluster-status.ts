@@ -9,6 +9,11 @@ export type AshkolStreetStats = {
   done: boolean;
 };
 
+/**
+ * A cluster's streets are its linked OSM lines (eshkol_osm_streets) plus any line
+ * whose streets.ashkol points at it — the same set the cluster street list shows.
+ */
+
 /** Street completion for ashkols: a street is done if any user marked it done. */
 export async function ashkolStreetStats(
   sql: Sql,
@@ -17,17 +22,21 @@ export async function ashkolStreetStats(
   const out = new Map<string, AshkolStreetStats>();
   if (ashkols.length === 0) return out;
   const rows = (await sql`
-    SELECT s.ashkol,
+    WITH lines AS (
+      SELECT ashkol, id AS street_id FROM streets WHERE ashkol = ANY(${ashkols})
+      UNION
+      SELECT ashkol, street_id FROM eshkol_osm_streets WHERE ashkol = ANY(${ashkols})
+    )
+    SELECT l.ashkol,
            count(*)::int AS street_total,
            count(*) FILTER (
              WHERE EXISTS (
                SELECT 1 FROM street_marks m
-               WHERE m.street_id = s.id AND m.done
+               WHERE m.street_id = l.street_id AND m.done
              )
            )::int AS street_done
-    FROM streets s
-    WHERE s.ashkol = ANY(${ashkols})
-    GROUP BY s.ashkol
+    FROM lines l
+    GROUP BY l.ashkol
   `) as { ashkol: string; street_total: number; street_done: number }[];
   for (const r of rows) {
     out.set(r.ashkol, {
@@ -49,14 +58,18 @@ export async function ashkolStreetStatsForUser(
   const out = new Map<string, AshkolStreetStats>();
   if (ashkols.length === 0) return out;
   const rows = (await sql`
-    SELECT s.ashkol,
+    WITH lines AS (
+      SELECT ashkol, id AS street_id FROM streets WHERE ashkol = ANY(${ashkols})
+      UNION
+      SELECT ashkol, street_id FROM eshkol_osm_streets WHERE ashkol = ANY(${ashkols})
+    )
+    SELECT l.ashkol,
            count(*)::int AS street_total,
            count(m.street_id) FILTER (WHERE m.done)::int AS street_done
-    FROM streets s
+    FROM lines l
     LEFT JOIN street_marks m
-      ON m.street_id = s.id AND m.user_id = ${userId} AND m.done
-    WHERE s.ashkol = ANY(${ashkols})
-    GROUP BY s.ashkol
+      ON m.street_id = l.street_id AND m.user_id = ${userId} AND m.done
+    GROUP BY l.ashkol
   `) as { ashkol: string; street_total: number; street_done: number }[];
   for (const r of rows) {
     out.set(r.ashkol, {
@@ -115,18 +128,22 @@ export async function clusterProgress(
   const [row] =
     ashkols === null
       ? ((await sql`
-          WITH street AS (
-            SELECT s.ashkol,
+          WITH lines AS (
+            SELECT ashkol, id AS street_id FROM streets WHERE ashkol IS NOT NULL
+            UNION
+            SELECT ashkol, street_id FROM eshkol_osm_streets
+          ),
+          street AS (
+            SELECT l.ashkol,
                    count(*)::int AS total,
                    count(*) FILTER (
                      WHERE EXISTS (
                        SELECT 1 FROM street_marks m
-                       WHERE m.street_id = s.id AND m.done
+                       WHERE m.street_id = l.street_id AND m.done
                      )
                    )::int AS done
-            FROM streets s
-            WHERE s.ashkol IS NOT NULL
-            GROUP BY s.ashkol
+            FROM lines l
+            GROUP BY l.ashkol
           )
           SELECT
             count(*)::int AS total,
@@ -144,18 +161,22 @@ export async function clusterProgress(
             FROM clusters cl
             WHERE cl.ashkol = ANY(${ashkols})
           ),
+          lines AS (
+            SELECT ashkol, id AS street_id FROM streets WHERE ashkol IN (SELECT ashkol FROM scope)
+            UNION
+            SELECT ashkol, street_id FROM eshkol_osm_streets WHERE ashkol IN (SELECT ashkol FROM scope)
+          ),
           street AS (
-            SELECT s.ashkol,
+            SELECT l.ashkol,
                    count(*)::int AS total,
                    count(*) FILTER (
                      WHERE EXISTS (
                        SELECT 1 FROM street_marks m
-                       WHERE m.street_id = s.id AND m.done
+                       WHERE m.street_id = l.street_id AND m.done
                      )
                    )::int AS done
-            FROM streets s
-            WHERE s.ashkol IN (SELECT ashkol FROM scope)
-            GROUP BY s.ashkol
+            FROM lines l
+            GROUP BY l.ashkol
           )
           SELECT
             (SELECT count(*)::int FROM scope) AS total,
@@ -173,3 +194,4 @@ export async function clusterProgress(
   const pct = total > 0 ? Math.round((100 * done) / total) : 0;
   return { done, total, pct };
 }
+

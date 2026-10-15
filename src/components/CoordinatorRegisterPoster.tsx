@@ -128,7 +128,6 @@ export function CoordinatorRegisterPoster() {
                   setInstitution(event.target.value);
                   setError(null);
                 }}
-                placeholder="למשל: מכינת עלי"
                 autoComplete="organization"
                 required
               />

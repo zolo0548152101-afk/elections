@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
 import { ClusterTable, type ClusterView } from "./ClusterTable";
 import { downloadClustersCsv } from "@/lib/csv";
 
@@ -35,6 +36,7 @@ export function Dashboard() {
   const [maxTurnout, setMaxTurnout] = useState(100);
   const [minBzb, setMinBzb] = useState(0);
   const [minLikud, setMinLikud] = useState(0);
+  const [stageFilter, setStageFilter] = useState<"any" | ClusterStage>("any");
   const [sort, setSort] = useState<SortKey>("right_pct");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [clusters, setClusters] = useState<ClusterView[]>([]);
@@ -113,10 +115,13 @@ export function Dashboard() {
     }
   }
 
-  const openClusters = useMemo(
-    () => (isCoordinator ? clusters.filter((c) => !c.done) : clusters),
-    [clusters, isCoordinator],
-  );
+  const openClusters = useMemo(() => {
+    if (isCoordinator) return clusters.filter((c) => !c.done);
+    if (stageFilter === "any") return clusters;
+    return clusters.filter(
+      (c) => clusterStage(Boolean(c.done), c.street_done ?? 0) === stageFilter,
+    );
+  }, [clusters, isCoordinator, stageFilter]);
 
   function onClusterDone(ashkol: string, done: boolean) {
     setClusters((prev) =>
@@ -231,6 +236,18 @@ export function Dashboard() {
               onChange={(e) => setMinLikud(Number(e.target.value))}
             />
           </label>
+          <label>
+            מצב ביצוע
+            <select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value as "any" | ClusterStage)}
+            >
+              <option value="any">הכל</option>
+              <option value="pending">{CLUSTER_STAGE_LABEL.pending} — אף רחוב לא סומן</option>
+              <option value="partial">{CLUSTER_STAGE_LABEL.partial} — חלק מהרחובות סומנו</option>
+              <option value="done">{CLUSTER_STAGE_LABEL.done} — כל הרחובות סומנו</option>
+            </select>
+          </label>
           <div className="filter-actions">
             <button
               type="button"
@@ -240,6 +257,7 @@ export function Dashboard() {
                 setMaxTurnout(100);
                 setMinBzb(0);
                 setMinLikud(0);
+                setStageFilter("any");
               }}
             >
               הצג את כל האשכולות

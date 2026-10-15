@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShowMore } from "@/components/ShowMore";
 import { useRouter } from "next/navigation";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Inst = {
   id: number;
@@ -23,7 +24,17 @@ function parseCoords(
   return value;
 }
 
+const APP_TEAM_INSTITUTIONS_SORT: SortGetters<Inst, "name" | "kind" | "city" | "district" | "coords" | "clusters"> = {
+  name: (r) => r.name,
+  kind: (r) => r.kind,
+  city: (r) => r.settlement_name,
+  district: (r) => r.district,
+  coords: (r) => ((r.coordinators as { full_name: string }[]) ?? []).map((c) => c.full_name).join(" · "),
+  clusters: (r) => Number(r.cluster_count ?? 0),
+};
+
 export default function TeamInstitutionsPage() {
+  const tsort = useSortState<"name" | "kind" | "city" | "district" | "coords" | "clusters">();
   const router = useRouter();
   const [rows, setRows] = useState<Inst[]>([]);
   const [q, setQ] = useState("");
@@ -94,16 +105,16 @@ export default function TeamInstitutionsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>שם</th>
-                  <th>סוג</th>
-                  <th>יישוב</th>
-                  <th>מחוז</th>
-                  <th>רכזים</th>
-                  <th>אשכולות</th>
+                  <SortTh k="name" sort={tsort.sort} onSort={tsort.toggle}>שם</SortTh>
+                  <SortTh k="kind" sort={tsort.sort} onSort={tsort.toggle}>סוג</SortTh>
+                  <SortTh k="city" sort={tsort.sort} onSort={tsort.toggle}>יישוב</SortTh>
+                  <SortTh k="district" sort={tsort.sort} onSort={tsort.toggle}>מחוז</SortTh>
+                  <SortTh k="coords" sort={tsort.sort} onSort={tsort.toggle}>רכזים</SortTh>
+                  <SortTh k="clusters" sort={tsort.sort} onSort={tsort.toggle}>אשכולות</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((i) => {
+                {sortRows(filtered, APP_TEAM_INSTITUTIONS_SORT, tsort.sort).map((i) => {
                   const coords = (i.coordinators as { id: number; full_name: string }[]) ?? [];
                   return (
                     <tr key={i.id}>

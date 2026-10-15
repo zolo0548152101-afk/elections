@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { COORDINATOR_SIGNUP_KINDS } from "@/lib/coordinator-signups";
 import { formatMobileDisplay } from "@/lib/activists";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Signup = {
   id: number;
@@ -27,7 +28,17 @@ function csvCell(value: string) {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+const APP_COORDINATOR_SIGNUPS_SORT: SortGetters<Signup, "first" | "last" | "mobile" | "kind" | "inst" | "created"> = {
+  first: (r) => r.first_name,
+  last: (r) => r.last_name,
+  mobile: (r) => r.mobile,
+  kind: (r) => r.institution_kind,
+  inst: (r) => r.institution_name,
+  created: (r) => new Date(r.created_at),
+};
+
 export default function CoordinatorSignupsPage() {
+  const tsort = useSortState<"first" | "last" | "mobile" | "kind" | "inst" | "created">();
   const [signups, setSignups] = useState<Signup[]>([]);
   const [kind, setKind] = useState<string>("all");
   const [query, setQuery] = useState("");
@@ -90,8 +101,8 @@ export default function CoordinatorSignupsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">רישום רכזים</p>
-            <h1>רכזים שנרשמו</h1>
+            <p className="eyebrow">רכזים שנרשמו בטופס</p>
+            <h1>הרשמת רכזים</h1>
             <p className="lede">
               כל מי שמילא את טופס רישום הרכזים. שם המוסד נכתב חופשי, כפי שהנרשם הקליד.
             </p>
@@ -147,16 +158,16 @@ export default function CoordinatorSignupsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>שם פרטי</th>
-                      <th>שם משפחה</th>
-                      <th>נייד</th>
-                      <th>סוג מוסד</th>
-                      <th>שם המוסד</th>
-                      <th>נרשם</th>
+                      <SortTh k="first" sort={tsort.sort} onSort={tsort.toggle}>שם פרטי</SortTh>
+                      <SortTh k="last" sort={tsort.sort} onSort={tsort.toggle}>שם משפחה</SortTh>
+                      <SortTh k="mobile" sort={tsort.sort} onSort={tsort.toggle}>נייד</SortTh>
+                      <SortTh k="kind" sort={tsort.sort} onSort={tsort.toggle}>סוג מוסד</SortTh>
+                      <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>שם המוסד</SortTh>
+                      <SortTh k="created" sort={tsort.sort} onSort={tsort.toggle}>נרשם</SortTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {sortRows(rows, APP_COORDINATOR_SIGNUPS_SORT, tsort.sort).map((row) => (
                       <tr key={row.id}>
                         <td>{row.first_name}</td>
                         <td>{row.last_name}</td>

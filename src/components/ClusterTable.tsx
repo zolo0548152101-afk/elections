@@ -20,6 +20,11 @@ export type ClusterView = {
   linked?: boolean;
   /** All streets in the ashkol marked done for the current user. */
   done?: boolean;
+  /** Linked street lines in the cluster, and how many are marked done. */
+  street_total?: number;
+  street_done?: number;
+  /** An admin marked the whole cluster done. */
+  ops_done?: boolean;
 };
 
 type SortKey =

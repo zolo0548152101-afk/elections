@@ -10,6 +10,8 @@ export const COLOR_ASSIGNED = "#c45c26";
 export const COLOR_DONE = "#16a34a";
 export const COLOR_FILTERED = "#2563eb";
 export const COLOR_SEARCH = "#22d3ee";
+/** Cluster with some streets done (בתהליך). Pending is COLOR_FILTERED (blue), done is COLOR_DONE (green). */
+export const COLOR_PARTIAL = "#f97316";
 
 export const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
 
@@ -246,20 +248,22 @@ export function addMapOverlays(map: MapLibreMap) {
       "icon-ignore-placement": true,
     },
     paint: {
+      // stage: 0 טרם התחיל (blue), 1 בתהליך (orange), 2 הושלם (green).
       "icon-color": [
-        "case",
-        ["==", ["get", "done"], 1],
+        "match",
+        ["get", "stage"],
+        2,
         COLOR_DONE,
-        ["==", ["get", "searched"], 1],
-        COLOR_SEARCH,
-        COLOR_FILTERED,
+        1,
+        COLOR_PARTIAL,
+        ["case", ["==", ["get", "searched"], 1], COLOR_SEARCH, COLOR_FILTERED],
       ],
       "icon-halo-color": "#ffffff",
       "icon-halo-width": 1.5,
     },
   });
   // The selected cluster: same source, switched by setFilter (no GeoJSON rebuild on click).
-  // Larger, still blue, with a dark ring so it stands out from the other diamonds.
+  // Larger, in its stage color, with a dark ring so it stands out from the other diamonds.
   map.addLayer({
     id: "clusters-selected",
     type: "symbol",
@@ -272,7 +276,15 @@ export function addMapOverlays(map: MapLibreMap) {
       "icon-ignore-placement": true,
     },
     paint: {
-      "icon-color": COLOR_FILTERED,
+      "icon-color": [
+        "match",
+        ["get", "stage"],
+        2,
+        COLOR_DONE,
+        1,
+        COLOR_PARTIAL,
+        ["case", ["==", ["get", "searched"], 1], COLOR_SEARCH, COLOR_FILTERED],
+      ],
       "icon-halo-color": "#111827",
       "icon-halo-width": 2.5,
     },

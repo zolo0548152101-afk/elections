@@ -10,6 +10,7 @@ import {
 import { formatAshkolLabels } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Coord = {
   id: number;
@@ -32,7 +33,16 @@ type Manager = {
   coordinators: Coord[];
 };
 
+const APP_TEAM_MANAGERS_SORT: SortGetters<Coord, "name" | "insts" | "ashkols" | "progress" | "count"> = {
+  name: (r) => r.full_name,
+  insts: (r) => (r.institutions ?? []).map((i) => i.name).join(" · "),
+  ashkols: (r) => formatAshkolLabels(r.clusters ?? []) || r.ashkols || "",
+  progress: (r) => r.progress?.pct ?? 0,
+  count: (r) => r.cluster_count ?? (r.clusters ?? []).length,
+};
+
 export default function TeamManagersPage() {
+  const tsort = useSortState<"name" | "insts" | "ashkols" | "progress" | "count">();
   const router = useRouter();
   const [rows, setRows] = useState<Manager[]>([]);
   const [q, setQ] = useState("");
@@ -133,16 +143,16 @@ export default function TeamManagersPage() {
                   <table>
                     <thead>
                       <tr>
-                        <th>שם</th>
-                        <th>מוסדות</th>
-                        <th>אשכולות</th>
-                        <th>התקדמות</th>
-                        <th>כמות אשכולות</th>
+                        <SortTh k="name" sort={tsort.sort} onSort={tsort.toggle}>שם</SortTh>
+                        <SortTh k="insts" sort={tsort.sort} onSort={tsort.toggle}>מוסדות</SortTh>
+                        <SortTh k="ashkols" sort={tsort.sort} onSort={tsort.toggle}>אשכולות</SortTh>
+                        <SortTh k="progress" sort={tsort.sort} onSort={tsort.toggle}>התקדמות</SortTh>
+                        <SortTh k="count" sort={tsort.sort} onSort={tsort.toggle}>כמות אשכולות</SortTh>
                         <th>פעולות</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {m.coordinators.map((c) => {
+                      {sortRows(m.coordinators, APP_TEAM_MANAGERS_SORT, tsort.sort).map((c) => {
                         const clusters = c.clusters ?? [];
                         const institutions = c.institutions ?? [];
                         const ashkolText =

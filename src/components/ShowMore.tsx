@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-const LIMIT = 25;
+// Fits "אליהוא רוזנבאום מכינת איתן מבואות יריחו" (39) plus 5.
+const LIMIT = 44;
 
-/** Collapse name fields longer than 25 characters behind "הצג עוד". */
+/** Collapse name fields longer than 44 characters behind "הצג עוד". */
 export function ShowMore({
   text,
   limit = LIMIT,

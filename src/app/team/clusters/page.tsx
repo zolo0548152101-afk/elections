@@ -6,6 +6,8 @@ import { ClusterRowLinks, FirstClusterLink } from "@/components/ClusterLinks";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
 import { ShowMore } from "@/components/ShowMore";
 import { matchesSearch } from "@/lib/text-search";
+import { CLUSTER_STAGE_LABEL, clusterStage, type ClusterStage } from "@/lib/cluster-stage";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Coord = { id: number; full_name: string };
 
@@ -17,15 +19,27 @@ type Row = {
   coordinator_names: string;
   coordinators: Coord[];
   done: boolean;
+  street_total: number;
+  street_done: number;
 };
 
-type StatusFilter = "linked" | "all" | "open" | "done";
+type ScopeFilter = "linked" | "all";
+type StageFilter = "any" | ClusterStage;
+
+const APP_TEAM_CLUSTERS_SORT: SortGetters<Row, "ashkol" | "inst" | "coord" | "stage"> = {
+  ashkol: (r) => formatAshkolLabel(r.ashkol, r.settlement_name),
+  inst: (r) => r.institution_name,
+  coord: (r) => r.coordinator_names,
+  stage: (r) => clusterStage(r.done, r.street_done) === "done" ? 2 : r.street_done > 0 ? 1 + r.street_done / Math.max(1, r.street_total) : 0,
+};
 
 export default function TeamClustersPage() {
+  const tsort = useSortState<"ashkol" | "inst" | "coord" | "stage">();
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("linked");
+  const [status, setStatus] = useState<ScopeFilter>("linked");
+  const [stageFilter, setStageFilter] = useState<StageFilter>("any");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok");
@@ -61,8 +75,7 @@ export default function TeamClustersPage() {
   }, [load]);
 
   const filtered = rows.filter((r) => {
-    if (status === "done" && !r.done) return false;
-    if (status === "open" && r.done) return false;
+    if (stageFilter !== "any" && clusterStage(r.done, r.street_done) !== stageFilter) return false;
     const needle = q.trim();
     if (!needle) return true;
     const hay = [
@@ -71,7 +84,7 @@ export default function TeamClustersPage() {
       r.institution_name,
       r.coordinator_names,
       formatAshkolLabel(r.ashkol, r.settlement_name),
-      r.done ? "בוצע" : "לא בוצע",
+      CLUSTER_STAGE_LABEL[clusterStage(r.done, r.street_done)],
     ]
       .filter(Boolean)
       .join(" ");
@@ -139,18 +152,31 @@ export default function TeamClustersPage() {
               />
             </label>
             <label>
-              סטטוס
+              אשכולות
               <select
                 value={status}
                 onChange={(e) => {
                   setEditKey(null);
-                  setStatus(e.target.value as StatusFilter);
+                  setStatus(e.target.value as ScopeFilter);
                 }}
               >
-                <option value="linked">קושרו</option>
+                <option value="linked">שקושרו למוסד</option>
                 <option value="all">כולם</option>
-                <option value="open">לא בוצע</option>
-                <option value="done">בוצע</option>
+              </select>
+            </label>
+            <label>
+              מצב ביצוע
+              <select
+                value={stageFilter}
+                onChange={(e) => {
+                  setEditKey(null);
+                  setStageFilter(e.target.value as StageFilter);
+                }}
+              >
+                <option value="any">הכל</option>
+                <option value="pending">{CLUSTER_STAGE_LABEL.pending} — אף רחוב לא סומן</option>
+                <option value="partial">{CLUSTER_STAGE_LABEL.partial} — חלק מהרחובות סומנו</option>
+                <option value="done">{CLUSTER_STAGE_LABEL.done} — כל הרחובות סומנו</option>
               </select>
             </label>
           </div>
@@ -169,15 +195,15 @@ export default function TeamClustersPage() {
             <table>
               <thead>
                 <tr>
-                  <th>אשכול</th>
-                  <th>מוסד</th>
-                  <th>רכז</th>
-                  <th>סטטוס</th>
+                  <SortTh k="ashkol" sort={tsort.sort} onSort={tsort.toggle}>אשכול</SortTh>
+                  <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>מוסד</SortTh>
+                  <SortTh k="coord" sort={tsort.sort} onSort={tsort.toggle}>רכז</SortTh>
+                  <SortTh k="stage" sort={tsort.sort} onSort={tsort.toggle}>סטטוס</SortTh>
                   <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => {
+                {sortRows(filtered, APP_TEAM_CLUSTERS_SORT, tsort.sort).map((r) => {
                   const key = `${r.ashkol}:${r.institution_id ?? "none"}`;
                   const open = editKey === key;
                   const institutions = [
@@ -216,7 +242,21 @@ export default function TeamClustersPage() {
                         <span className="muted-cell">—</span>
                       )}
                     </td>
-                    <td>{r.done ? "בוצע ✓" : "לא בוצע"}</td>
+                    <td>
+                      {(() => {
+                        const stage = clusterStage(r.done, r.street_done);
+                        return (
+                          <span className={`stage-badge is-${stage}`}>
+                            {CLUSTER_STAGE_LABEL[stage]}
+                            {r.street_total > 0 && (
+                              <small dir="ltr">
+                                {r.street_done}/{r.street_total}
+                              </small>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="actions-cell">
                       <button
                         type="button"

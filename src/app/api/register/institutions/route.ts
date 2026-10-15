@@ -4,12 +4,17 @@ import { sanitizeSearchInput } from "@/lib/search-query";
 
 export const runtime = "nodejs";
 
-/** Public institution picker for activist sign-up. Names and settlements only. */
+/** Public institution picker for activist sign-up. Names and settlements only. Empty q lists all. */
 export async function GET(req: NextRequest) {
   const q = sanitizeSearchInput(req.nextUrl.searchParams.get("q") ?? "");
-  if (q.length < 2) return NextResponse.json({ hits: [] });
-
   const sql = getSql();
+  if (!q) {
+    const all = (await sql`
+      SELECT id, name, settlement_name FROM institutions ORDER BY name LIMIT 500
+    `) as { id: number; name: string; settlement_name: string | null }[];
+    return NextResponse.json({ hits: all.map((row) => ({ ...row, label: [row.name, row.settlement_name].filter(Boolean).join(" · ") })) });
+  }
+
   const like = `%${q}%`;
   const prefix = `${q}%`;
   const rows = (await sql`
@@ -23,7 +28,7 @@ export async function GET(req: NextRequest) {
         ELSE 1
       END,
       name
-    LIMIT 12
+    LIMIT 50
   `) as { id: number; name: string; settlement_name: string | null }[];
 
   return NextResponse.json({

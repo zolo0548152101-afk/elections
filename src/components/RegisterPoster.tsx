@@ -45,18 +45,16 @@ export function RegisterPoster() {
       setHits([]);
       return;
     }
-    if (query.trim().length < 2) {
-      setHits([]);
-      return;
-    }
+    // Empty box: list every institution; typing narrows it down.
+    if (!open) return;
     const handle = window.setTimeout(() => {
       fetch(`/api/register/institutions?q=${encodeURIComponent(query.trim())}`)
         .then((res) => res.json())
         .then((data) => setHits(data.hits ?? []))
         .catch(() => setHits([]));
-    }, 180);
+    }, query.trim() ? 180 : 0);
     return () => window.clearTimeout(handle);
-  }, [query, institution]);
+  }, [query, institution, open]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();

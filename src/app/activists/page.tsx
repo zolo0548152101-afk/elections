@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatMobileDisplay } from "@/lib/activists";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Activist = {
   id: number;
@@ -25,7 +26,16 @@ function when(value: string) {
   });
 }
 
+const APP_ACTIVISTS_SORT: SortGetters<Activist, "name" | "mobile" | "size" | "inst" | "created"> = {
+  name: (r) => r.full_name,
+  mobile: (r) => r.mobile,
+  size: (r) => ["XS","S","M","L","XL","XXL","3XL"].indexOf(r.shirt_size),
+  inst: (r) => r.institution_name,
+  created: (r) => new Date(r.created_at),
+};
+
 export default function ActivistsPage() {
+  const tsort = useSortState<"name" | "mobile" | "size" | "inst" | "created">();
   const [activists, setActivists] = useState<Activist[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [filter, setFilter] = useState<number | "all">("all");
@@ -70,8 +80,8 @@ export default function ActivistsPage() {
       <div className="dash">
         <header className="hero">
           <div>
-            <p className="eyebrow">רישום פעילים</p>
-            <h1>פעילים</h1>
+            <p className="eyebrow">פעילים שנרשמו בטופס</p>
+            <h1>הרשמת פעילים</h1>
             <p className="lede">
               {scope === "admin"
                 ? "כל הפעילים שנרשמו. הסינון מציג רק מוסדות שכבר נרשמו אליהם."
@@ -127,15 +137,15 @@ export default function ActivistsPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>שם</th>
-                      <th>נייד</th>
-                      <th>מידה</th>
-                      <th>מוסד</th>
-                      <th>נרשם</th>
+                      <SortTh k="name" sort={tsort.sort} onSort={tsort.toggle}>שם</SortTh>
+                      <SortTh k="mobile" sort={tsort.sort} onSort={tsort.toggle}>נייד</SortTh>
+                      <SortTh k="size" sort={tsort.sort} onSort={tsort.toggle}>מידה</SortTh>
+                      <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>מוסד</SortTh>
+                      <SortTh k="created" sort={tsort.sort} onSort={tsort.toggle}>נרשם</SortTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {sortRows(rows, APP_ACTIVISTS_SORT, tsort.sort).map((row) => (
                       <tr key={row.id}>
                         <td>{row.full_name}</td>
                         <td>

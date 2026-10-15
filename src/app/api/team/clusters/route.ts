@@ -59,6 +59,8 @@ export async function GET(req: NextRequest) {
     coordinator_names: r.coordinator_names ?? "",
     coordinators: parseCoords(r.coordinators),
     done: r.ops_done === true || (stats.get(r.ashkol)?.done ?? false),
+    street_total: stats.get(r.ashkol)?.street_total ?? 0,
+    street_done: stats.get(r.ashkol)?.street_done ?? 0,
   }));
 
   return NextResponse.json({ clusters, scope });

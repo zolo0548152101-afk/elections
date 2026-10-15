@@ -16,25 +16,28 @@ export function AppNav({
   const path = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const links = [
-    { href: "/", label: "מפה" },
-    {
-      href: "/institutions",
-      label: user.role === "coordinator" ? "המוסד שלי" : "מוסדות",
-    },
-  ];
-  const institutionIndex = links.findIndex((link) => link.href === "/institutions");
-  links.splice(institutionIndex + 1, 0, { href: "/activists", label: "פעילים" });
-  if (user.role === "super_admin" || user.role === "area_manager") {
-    links.splice(1, 0, { href: "/users", label: "משתמשים" });
-    links.push({ href: "/team/clusters", label: "אשכולות" });
-    links.push({ href: "/team/coordinators", label: "רכזים" });
-    if (user.role === "super_admin") {
-      links.push({ href: "/team/managers", label: "רכזי על" });
-      links.push({ href: "/coordinator-signups", label: "רכזים שנרשמו" });
-    }
-    links.push({ href: "/links", label: "קישורים" });
-  }
+  // RTL: the first link is the rightmost.
+  const institutionsLink = {
+    href: "/institutions",
+    label: user.role === "coordinator" ? "המוסד שלי" : "מוסדות",
+  };
+  const activistsLink = { href: "/activists", label: "הרשמת פעילים" };
+  const links: { href: string; label: string }[] =
+    user.role === "super_admin" || user.role === "area_manager"
+      ? [
+          { href: "/users", label: "משתמשים" },
+          activistsLink,
+          ...(user.role === "super_admin"
+            ? [{ href: "/coordinator-signups", label: "הרשמת רכזים" }]
+            : []),
+          { href: "/", label: "מפה" },
+          institutionsLink,
+          { href: "/team/clusters", label: "אשכולות" },
+          { href: "/team/coordinators", label: "רכזים" },
+          ...(user.role === "super_admin" ? [{ href: "/team/managers", label: "רכזי על" }] : []),
+          { href: "/links", label: "קישורים" },
+        ]
+      : [{ href: "/", label: "מפה" }, institutionsLink, activistsLink];
 
   useEffect(() => {
     setMenuOpen(false);

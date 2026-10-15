@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FormMsg } from "@/components/FormMsg";
 import { ShowMore } from "@/components/ShowMore";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 import { useTimedFlash } from "@/hooks/useTimedFlash";
 import { formatAshkolLabel, formatAshkolLabels } from "@/lib/ashkol-label";
 import { matchesSearch, normalizeSearch } from "@/lib/text-search";
@@ -107,7 +108,15 @@ const roleHe: Record<string, string> = {
   coordinator: "רכז",
 };
 
+type UserSortKey = "name" | "mobile" | "role";
+const USER_SORT: SortGetters<UserRow, UserSortKey> = {
+  name: (u) => u.full_name,
+  mobile: (u) => u.mobile,
+  role: (u) => roleHe[u.role] ?? u.role,
+};
+
 export default function UsersPage() {
+  const userSort = useSortState<UserSortKey>();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [meRole, setMeRole] = useState<string>("");
@@ -634,14 +643,14 @@ export default function UsersPage() {
           <table>
             <thead>
               <tr>
-                <th>שם</th>
-                <th>נייד</th>
-                <th>תפקיד</th>
+                <SortTh k="name" sort={userSort.sort} onSort={userSort.toggle}>שם</SortTh>
+                <SortTh k="mobile" sort={userSort.sort} onSort={userSort.toggle}>נייד</SortTh>
+                <SortTh k="role" sort={userSort.sort} onSort={userSort.toggle}>תפקיד</SortTh>
                 {canManage && <th>פעולות</th>}
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((u) => (
+              {sortRows(filteredUsers, USER_SORT, userSort.sort).map((u) => (
                 <tr key={u.id} className={editId === u.id ? "row-editing" : undefined}>
                   <td>
                     <ShowMore text={u.full_name} />

@@ -134,7 +134,7 @@ h1 {
 
 .filters {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr minmax(10rem, 0.9fr) auto;
   gap: 0.55rem;
   align-items: end;
   background: var(--card);
@@ -152,6 +152,16 @@ h1 {
 
 .filters input[type="range"] {
   width: 100%;
+}
+
+.filters select {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-weight: 500;
+  background: #fff;
 }
 
 .filters input[type="number"] {
@@ -353,6 +363,23 @@ th {
   cursor: pointer;
   color: inherit;
   padding: 0;
+}
+
+.th-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: start;
+}
+
+.th-sort-icon {
+  font-size: 0.7em;
+  opacity: 0.35;
+}
+
+.th-btn.is-sorted .th-sort-icon,
+.th-btn:hover .th-sort-icon {
+  opacity: 0.9;
 }
 
 .mono {
@@ -2617,7 +2644,9 @@ body:has(.register-poster) {
   padding: 0;
   border: 1px solid #d5e0f0;
   border-radius: 12px;
-  overflow: hidden;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #fff;
 }
 
@@ -2718,3 +2747,29 @@ body:has(.register-poster) {
     font-size: 1.35rem;
   }
 }
+
+/* Cluster stage note in the cluster card and stage badges in tables. */
+.cluster-stage-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.cluster-stage-note.is-done { color: #15803d; }
+.cluster-stage-note.is-partial { color: #c2410c; }
+.cluster-stage-note.is-pending { color: #1d4ed8; }
+
+.stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.stage-badge.is-done { background: #dcfce7; color: #166534; }
+.stage-badge.is-partial { background: #ffedd5; color: #9a3412; }
+.stage-badge.is-pending { background: #dbeafe; color: #1e40af; }
+.stage-badge small { font-weight: 500; opacity: 0.85; }

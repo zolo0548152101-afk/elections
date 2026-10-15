@@ -6,6 +6,7 @@ import { LinkGroup } from "@/components/LinkGroup";
 import { NameSearch } from "@/components/NameSearch";
 import { ShowMore } from "@/components/ShowMore";
 import { formatAshkolLabel } from "@/lib/ashkol-label";
+import { SortTh, sortRows, useSortState, type SortGetters } from "@/components/SortTh";
 
 type Contact = {
   id: number;
@@ -51,7 +52,28 @@ function parseJsonField<T>(value: T[] | string | undefined): T[] {
   return value;
 }
 
+const LINKED_CLUSTER_SORT: SortGetters<LinkedCluster, "ashkol" | "city" | "right" | "turnout" | "bzb" | "done"> = {
+  ashkol: (r) => r.ashkol,
+  city: (r) => r.settlement_name,
+  right: (r) => Number(r.right_pct),
+  turnout: (r) => Number(r.turnout_pct),
+  bzb: (r) => Number(r.bzb),
+  done: (r) => Boolean(r.done),
+};
+
+const APP_INSTITUTIONS_SORT: SortGetters<Institution, "name" | "kind" | "city" | "district" | "people" | "clusters" | "coords"> = {
+  name: (r) => r.name,
+  kind: (r) => r.kind,
+  city: (r) => r.settlement_name,
+  district: (r) => r.district,
+  people: (r) => ((r.contacts as Contact[]) ?? []).map((c) => c.full_name).join(" · ") || r.key_people_raw,
+  clusters: (r) => ((r.linked_clusters as LinkedCluster[]) ?? []).length,
+  coords: (r) => ((r.coordinators as Coord[]) ?? []).map((c) => c.full_name).join(" · "),
+};
+
 export default function InstitutionsPage() {
+  const csort = useSortState<"ashkol" | "city" | "right" | "turnout" | "bzb" | "done">();
+  const tsort = useSortState<"name" | "kind" | "city" | "district" | "people" | "clusters" | "coords">();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [availableCoords, setAvailableCoords] = useState<Coord[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
@@ -430,16 +452,16 @@ export default function InstitutionsPage() {
                     <table>
                       <thead>
                         <tr>
-                          <th>אשכול</th>
-                          <th>יישוב</th>
-                          <th>% ימין</th>
-                          <th>הצבעה</th>
-                          <th>בז״ב</th>
-                          <th>סטטוס</th>
+                          <SortTh k="ashkol" sort={csort.sort} onSort={csort.toggle}>אשכול</SortTh>
+                          <SortTh k="city" sort={csort.sort} onSort={csort.toggle}>יישוב</SortTh>
+                          <SortTh k="right" sort={csort.sort} onSort={csort.toggle}>% ימין</SortTh>
+                          <SortTh k="turnout" sort={csort.sort} onSort={csort.toggle}>הצבעה</SortTh>
+                          <SortTh k="bzb" sort={csort.sort} onSort={csort.toggle}>בז״ב</SortTh>
+                          <SortTh k="done" sort={csort.sort} onSort={csort.toggle}>סטטוס</SortTh>
                         </tr>
                       </thead>
                       <tbody>
-                        {clusters.map((c) => (
+                        {sortRows(clusters, LINKED_CLUSTER_SORT, csort.sort).map((c) => (
                           <tr key={c.ashkol}>
                             <td>{c.ashkol}</td>
                             <td>
@@ -464,18 +486,18 @@ export default function InstitutionsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>שם</th>
-                  <th>סוג</th>
-                  <th>יישוב</th>
-                  <th>מחוז</th>
-                  <th>אנשי מפתח</th>
-                  <th>אשכולות</th>
-                  <th>רכזים</th>
+                  <SortTh k="name" sort={tsort.sort} onSort={tsort.toggle}>שם</SortTh>
+                  <SortTh k="kind" sort={tsort.sort} onSort={tsort.toggle}>סוג</SortTh>
+                  <SortTh k="city" sort={tsort.sort} onSort={tsort.toggle}>יישוב</SortTh>
+                  <SortTh k="district" sort={tsort.sort} onSort={tsort.toggle}>מחוז</SortTh>
+                  <SortTh k="people" sort={tsort.sort} onSort={tsort.toggle}>אנשי מפתח</SortTh>
+                  <SortTh k="clusters" sort={tsort.sort} onSort={tsort.toggle}>אשכולות</SortTh>
+                  <SortTh k="coords" sort={tsort.sort} onSort={tsort.toggle}>רכזים</SortTh>
                   <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((i) => {
+                {sortRows(filtered, APP_INSTITUTIONS_SORT, tsort.sort).map((i) => {
                   const contacts = (i.contacts as Contact[]) ?? [];
                   const clusters = (i.linked_clusters as LinkedCluster[]) ?? [];
                   const coords = (i.coordinators as Coord[]) ?? [];

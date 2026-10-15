@@ -20,6 +20,7 @@ import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 import { eshkolColorMap } from "@/lib/eshkol-house-colors";
+import { CLUSTER_STAGE_LABEL, clusterStage } from "@/lib/cluster-stage";
 import {
   OPENFREEMAP_STYLE,
   streetLinePaint,
@@ -247,7 +248,12 @@ export function StreetMap({
   >({});
   const [linkedOverride, setLinkedOverride] = useState<Set<string>>(() => new Set());
   const [mapState, setMapState] = useState<MapState | null>(null);
+  /** Manual "סמן אשכול כבוצע" result, until a street in that cluster is toggled again. */
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
+  /** Live street counts of a cluster whose street list was loaded here. */
+  const [progressOverride, setProgressOverride] = useState<
+    Record<string, { done: number; total: number }>
+  >({});
   const [clusterStreets, setClusterStreets] = useState<SearchStreet[]>([]);
   const [clusterStreetsLoading, setClusterStreetsLoading] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
@@ -1075,6 +1081,42 @@ export function StreetMap({
     return colors;
   }, [clusters]);
 
+  /** הושלם when every linked street is marked (or an admin marked the cluster); בתהליך once one is. */
+  const clusterProgressOf = (c: ClusterView) => {
+    const live = progressOverride[c.ashkol];
+    const streetDone = live?.done ?? c.street_done ?? 0;
+    const allStreets = live ? live.total > 0 && live.done === live.total : null;
+    const done =
+      doneOverride[c.ashkol] ??
+      (allStreets === null ? Boolean(c.done) : allStreets || Boolean(c.ops_done));
+    return { done, stage: clusterStage(done, streetDone) };
+  };
+
+  // Keep live counts for the selected cluster as its streets are marked.
+  useEffect(() => {
+    if (!selectedAshkol || clusterStreetsLoading) return;
+    const total = clusterStreets.length;
+    const done = clusterStreets.filter((s) => s.done).length;
+    setProgressOverride((prev) => {
+      const cur = prev[selectedAshkol];
+      if (cur && cur.done === done && cur.total === total) return prev;
+      return { ...prev, [selectedAshkol]: { done, total } };
+    });
+  }, [selectedAshkol, clusterStreets, clusterStreetsLoading]);
+
+  // Marking the last street completes the cluster (and unmarking one reopens it).
+  const lastDoneRef = useRef<Record<string, boolean>>({});
+  const selectedCluster = clusters.find((c) => c.ashkol === selectedAshkol);
+  const selectedComputedDone = selectedCluster ? clusterProgressOf(selectedCluster).done : false;
+  useEffect(() => {
+    if (!selectedAshkol || !progressOverride[selectedAshkol]) return;
+    const prev = lastDoneRef.current[selectedAshkol];
+    lastDoneRef.current[selectedAshkol] = selectedComputedDone;
+    if (prev === undefined || prev === selectedComputedDone) return;
+    onClusterDone?.(selectedAshkol, selectedComputedDone);
+    if (selectedComputedDone) setStatus(`כל רחובות אשכול ${selectedAshkol} סומנו — האשכול הושלם ✓`);
+  }, [selectedAshkol, selectedComputedDone, progressOverride, onClusterDone]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -1082,10 +1124,7 @@ export function StreetMap({
       .filter((c) => c.map_lat != null && c.map_lng != null)
       .map((c) => {
         const linked = Boolean(c.linked) || linkedOverride.has(c.ashkol);
-        const done =
-          doneOverride[c.ashkol] !== undefined
-            ? doneOverride[c.ashkol]
-            : Boolean(c.done);
+        const { done, stage } = clusterProgressOf(c);
         return {
           type: "Feature" as const,
           properties: {
@@ -1102,6 +1141,7 @@ export function StreetMap({
             likud_pct: c.likud_pct ?? 0,
             linked: linked ? 1 : 0,
             done: done ? 1 : 0,
+            stage: stage === "done" ? 2 : stage === "partial" ? 1 : 0,
             color: clusterColors.get(c.ashkol) ?? "#64748b",
             searched:
               searchPlace !== "" && c.settlement_name === searchPlace ? 1 : 0,
@@ -1125,7 +1165,8 @@ export function StreetMap({
       cancelled = true;
       map.off("load", apply);
     };
-  }, [clusters, clusterColors, linkedOverride, doneOverride, searchPlace]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clusterProgressOf reads these states
+  }, [clusters, clusterColors, linkedOverride, doneOverride, progressOverride, searchPlace]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1229,6 +1270,13 @@ export function StreetMap({
       setClusterStreets((list) =>
         list.map((s) => (s.id === street.id ? { ...s, done: nextDone } : s)),
       );
+      setDoneOverride((prev) => {
+        const a = selectedAshkolRef.current;
+        if (!a || !(a in prev)) return prev;
+        const next = { ...prev };
+        delete next[a];
+        return next;
+      });
       setStatus(nextDone ? `סומן בוצע: ${street.name_he}` : `הוסר סימון: ${street.name_he}`);
     };
   });
@@ -1286,6 +1334,14 @@ export function StreetMap({
     setClusterStreets((list) =>
       list.map((s) => (s.id === street.id ? { ...s, done } : s)),
     );
+    if (selectedAshkol) {
+      setDoneOverride((prev) => {
+        if (!(selectedAshkol in prev)) return prev;
+        const next = { ...prev };
+        delete next[selectedAshkol];
+        return next;
+      });
+    }
     if (pickedStreet?.id === street.id) {
       setPickedStreet({ ...pickedStreet, done });
     }
@@ -2211,12 +2267,7 @@ export function StreetMap({
     setPanel(null);
   }
 
-  const selectedDone = selectedAshkol
-    ? Boolean(
-        doneOverride[selectedAshkol] ??
-          clusters.find((c) => c.ashkol === selectedAshkol)?.done,
-      )
-    : false;
+  const selectedDone = selectedComputedDone;
 
   const sidePanel = panel ? (
     <aside className="map-side-panel" aria-live="polite">
@@ -2502,7 +2553,7 @@ export function StreetMap({
             {clusters.map((c) => (
               <option key={c.ashkol} value={c.ashkol}>
                 {c.settlement_name} · {c.ashkol}
-                {(doneOverride[c.ashkol] ?? c.done) ? " · בוצע" : ""}
+                {` · ${CLUSTER_STAGE_LABEL[clusterProgressOf(c).stage]}`}
               </option>
             ))}
           </select>
@@ -2684,9 +2735,15 @@ export function StreetMap({
                   </button>
                 </div>
               )}
-              {(doneOverride[picked.ashkol] ?? picked.done) && (
-                <p className="link-success-note">אשכול בוצע</p>
-              )}
+              {(() => {
+                const pc = clusters.find((c) => c.ashkol === picked.ashkol);
+                const stage = pc ? clusterProgressOf(pc).stage : picked.done ? "done" : "pending";
+                return (
+                  <p className={`cluster-stage-note is-${stage}`}>
+                    {stage === "done" ? "אשכול הושלם ✓" : CLUSTER_STAGE_LABEL[stage]}
+                  </p>
+                );
+              })()}
             </>
           ) : (
             <p>לחצו על נקודת אשכול כדי לראות כאן את בז״ב, המצביעים, ההצבעה והימין, לצד הרחובות.</p>
@@ -2925,6 +2982,11 @@ export function StreetMap({
               שמוקם · <span aria-hidden="true">━</span> רחוב
             </p>
             <p className="eshkol-legend-key">רק רחובות שזוהו במפה</p>
+            <p className="eshkol-legend-key eshkol-stage-key">
+              <span style={{ color: "#2563eb" }} aria-hidden="true">◆</span> טרם התחיל ·{" "}
+              <span style={{ color: "#f97316" }} aria-hidden="true">◆</span> בתהליך ·{" "}
+              <span style={{ color: "#16a34a" }} aria-hidden="true">◆</span> הושלם
+            </p>
           </div>
         )}
         {mapFailed ? (
