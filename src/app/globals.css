@@ -3256,3 +3256,21 @@ body.tour-hands-on .driver-overlay {
 @media (prefers-reduced-motion: reduce) {
   .tour-pill { animation: none; }
 }
+
+/* Login: a playful line, and the "connecting" line while signing in */
+.login-quip {
+  margin: -0.35rem 0 0.6rem;
+  color: #c45c26;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.login-connecting {
+  margin: 0 0 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  text-align: center;
+}

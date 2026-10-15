@@ -121,6 +121,17 @@ export const SIGNUP_THANKS_COORDINATOR = [
   "נרשמת! מכאן זה רק עולה – עד בלפור 🏠",
 ] as const;
 
+/** Login screen, under the title. */
+export const LOGIN_LINES = [
+  "יוצאים. מצביעים. מצילים את הימין! 🇮🇱",
+  "נכנסים, ויוצאים לשטח 💪",
+  "הסיסמה הכי חזקה: 64 מנדטים 😉",
+  "בלי מעטפה כפולה – רק נייד וסיסמה",
+  "בבקשה לא לשכוח את הסיסמה. גם לא בליל שבועות 📖",
+  "מכאן הדרך לבלפור עוברת דרך כל דלת 🏠",
+  "ממשלת ימין מתחילה בכניסה אחת",
+] as const;
+
 /** Lines under each page title. Rotate slowly while the page is open (PageQuip). */
 export const PAGE_QUIPS: Record<string, readonly string[]> = {
   "/": [
