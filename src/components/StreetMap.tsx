@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   Map as MapLibreMap,
   NavigationControl,
@@ -18,10 +18,23 @@ import { ShowMore } from "@/components/ShowMore";
 import type { Feature } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
-import { streetsTilePath } from "@/lib/tiles-version";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
 import { eshkolColorMap } from "@/lib/eshkol-house-colors";
+import {
+  OPENFREEMAP_STYLE,
+  streetLinePaint,
+  streetFeature,
+  applyStreetState,
+  applyStreetFilter,
+  ROUTE_ARROW_PX,
+  addMapOverlays,
+  houseCirclePaint,
+  fitHousePoints,
+  escapeHtml,
+  type MapState,
+} from "@/components/street-map/map-layers";
+import { ClusterStreetList } from "@/components/street-map/ClusterStreetList";
 
 type SearchStreet = {
   id: string;
@@ -157,399 +170,6 @@ function clusterFromProps(p: Record<string, unknown>): ClusterView {
     linked: Number(p.linked ?? 0) === 1 || p.linked === true,
     done: Number(p.done ?? 0) === 1 || p.done === true,
   };
-}
-
-/** Street status. Cluster dots from the filter use a separate gold. */
-const COLOR_ASSIGNED = "#c45c26";
-const COLOR_DONE = "#16a34a";
-const COLOR_FILTERED = "#f5b942";
-const COLOR_SEARCH = "#22d3ee";
-
-const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
-
-type MapState = {
-  doneStreetIds: string[];
-  visibleAshkols: string[] | null;
-  scopeActive: boolean;
-  linkedAshkols: string[];
-};
-
-type Expr = unknown[];
-
-function doneFlag(): Expr {
-  return ["boolean", ["feature-state", "done"], false];
-}
-
-function linkedFlag(linkedAshkols: string[]): Expr {
-  if (linkedAshkols.length === 0) return ["literal", 0];
-  return ["match", ["get", "ashkol"], linkedAshkols, 1, 0];
-}
-
-/** Each street is drawn in its cluster's colour (the same colour as that cluster's house dots). */
-function clusterColorExpr(colors: Map<string, string>): Expr {
-  if (colors.size === 0) return ["literal", COLOR_ASSIGNED];
-  const pairs: string[] = [];
-  for (const [ashkol, color] of colors) pairs.push(ashkol, color);
-  return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
-}
-
-function streetLinePaint(
-  linkedAshkols: string[],
-  selectedAshkol = "",
-  streetId = "",
-  colors: Map<string, string> = new Map(),
-) {
-  const done = doneFlag();
-  const linked = linkedFlag(linkedAshkols);
-  const selectedStreet: Expr = streetId ? ["==", ["get", "id"], streetId] : ["literal", false];
-  const selectedCluster: Expr = selectedAshkol
-    ? ["==", ["get", "ashkol"], selectedAshkol]
-    : ["literal", false];
-  return {
-    "line-color": ["case", done, COLOR_DONE, clusterColorExpr(colors)],
-    "line-width": ["case", selectedStreet, 8, selectedCluster, 6.5, done, 5, ["==", linked, 1], 4.5, 4],
-    "line-opacity": [
-      "case",
-      selectedStreet,
-      1,
-      selectedCluster,
-      1,
-      selectedAshkol ? 0.35 : 0.9,
-    ],
-  };
-}
-
-/** Show only streets that belong to a cluster on the list (the list already respects the user's scope and filters). */
-function clusterStreetFilter(ashkols: string[]): Expr {
-  if (ashkols.length === 0) return ["literal", false];
-  return ["match", ["get", "ashkol"], ashkols, true, false];
-}
-
-function streetFeature(id: string) {
-  return { source: "streets", sourceLayer: "streets", id };
-}
-
-function applyStreetState(map: MapLibreMap, state: MapState, doneIds: Set<string>) {
-  if (!map.getLayer("streets-line")) return;
-  for (const id of doneIds) map.removeFeatureState(streetFeature(id));
-  doneIds.clear();
-  for (const id of state.doneStreetIds) {
-    map.setFeatureState(streetFeature(id), { done: true });
-    doneIds.add(id);
-  }
-}
-
-function applyStreetFilter(map: MapLibreMap, ashkols: string[]) {
-  const filter = clusterStreetFilter(ashkols);
-  for (const layer of ["streets-line", "streets-label"]) {
-    if (!map.getLayer(layer)) continue;
-    map.setFilter(layer, filter as never);
-  }
-}
-
-const ROUTE_LINE_PX = 4.5 * 0.9;
-const ROUTE_CASING_PX = 7 * 0.9;
-const ROUTE_ARROW_PX = 24;
-
-function addMapOverlays(map: MapLibreMap) {
-  if (map.getSource("streets")) return;
-  map.addSource("streets", {
-    type: "vector",
-    tiles: [`${window.location.origin}${streetsTilePath()}`],
-    minzoom: 10,
-    maxzoom: 16,
-    promoteId: { streets: "id" },
-  });
-  map.addSource("clusters", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addSource("highlight", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addSource("route", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addSource("arrows", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addSource("pin", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  map.addSource("eshkol-houses", {
-    type: "geojson",
-    data: { type: "FeatureCollection", features: [] },
-  });
-  const hidden: Expr = ["literal", false];
-  // Colored street lines go under the basemap's labels (place names stay readable);
-  // our own street names, houses and clusters are added above everything.
-  const firstBasemapLabel = map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
-  map.addLayer(
-    {
-      id: "streets-line",
-      type: "line",
-      source: "streets",
-      "source-layer": "streets",
-      filter: hidden as never,
-      layout: { visibility: "visible", "line-cap": "round", "line-join": "round" },
-      paint: streetLinePaint([]) as never,
-    },
-    firstBasemapLabel,
-  );
-  map.addLayer({
-    id: "streets-label",
-    type: "symbol",
-    source: "streets",
-    "source-layer": "streets",
-    filter: hidden as never,
-    layout: {
-      visibility: "visible",
-      "symbol-placement": "line",
-      "text-field": ["get", "name_he"],
-      "text-size": 12,
-      "text-font": ["Noto Sans Regular"],
-    },
-    paint: {
-      "text-color": "#111827",
-      "text-halo-color": "rgba(255, 255, 255, 0.85)",
-      "text-halo-width": 1.2,
-    },
-    minzoom: 13,
-  });
-  map.addLayer({
-    id: "eshkol-houses",
-    type: "circle",
-    source: "eshkol-houses",
-    paint: houseCirclePaint("") as never,
-  });
-  // Clusters are diamonds so they never read as a house (houses are circles).
-  // The id stays "clusters-circle" because the click/hover handlers use it.
-  map.addLayer({
-    id: "clusters-circle",
-    type: "symbol",
-    source: "clusters",
-    layout: {
-      "icon-image": "cluster-diamond",
-      "icon-size": ["case", ["==", ["get", "selected"], 1], 1.35, 0.9],
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-      "symbol-sort-key": ["case", ["==", ["get", "selected"], 1], 2, 1],
-    },
-    paint: {
-      "icon-color": [
-        "case",
-        ["==", ["get", "selected"], 1],
-        ["get", "color"],
-        ["==", ["get", "done"], 1],
-        COLOR_DONE,
-        ["==", ["get", "searched"], 1],
-        COLOR_SEARCH,
-        COLOR_FILTERED,
-      ],
-      "icon-halo-color": ["case", ["==", ["get", "selected"], 1], "#111827", "#ffffff"],
-      "icon-halo-width": ["case", ["==", ["get", "selected"], 1], 2.5, 1.5],
-    },
-  });
-  map.addLayer({
-    id: "highlight-line",
-    type: "line",
-    source: "highlight",
-    paint: { "line-color": "#2563eb", "line-width": 7, "line-opacity": 0.95 },
-  });
-  map.addLayer({
-    id: "route-casing",
-    type: "line",
-    source: "route",
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": 0.95 },
-  });
-  map.addLayer({
-    id: "route-line",
-    type: "line",
-    source: "route",
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": 1 },
-  });
-  map.addLayer({
-    id: "proposed-pin",
-    type: "symbol",
-    source: "pin",
-    layout: {
-      "icon-image": "place-pin",
-      "icon-size": 0.25,
-      "icon-anchor": "bottom",
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-    },
-  });
-  map.addLayer({
-    id: "route-point",
-    type: "circle",
-    source: "route",
-    filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "point"]],
-    paint: {
-      "circle-radius": 11,
-      "circle-color": ["get", "color"],
-      "circle-stroke-width": 2,
-      "circle-stroke-color": "#ffffff",
-    },
-  });
-  map.addLayer({
-    id: "route-point-label",
-    type: "symbol",
-    source: "route",
-    filter: ["==", ["get", "kind"], "point"],
-    layout: {
-      "text-field": ["coalesce", ["get", "label"], ["to-string", ["get", "stage"]]],
-      "text-size": 12,
-      "text-font": ["Noto Sans Regular"],
-      "text-offset": [0, -1.3],
-    },
-    paint: {
-      "text-color": "#102033",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.2,
-    },
-  });
-  map.addLayer({
-    id: "draw-handle",
-    type: "circle",
-    source: "route",
-    filter: ["==", ["get", "kind"], "handle"],
-    paint: {
-      "circle-radius": 7,
-      "circle-color": "#ffffff",
-      "circle-stroke-width": 3,
-      "circle-stroke-color": ["get", "color"],
-    },
-  });
-  map.addLayer({
-    id: "draw-number",
-    type: "symbol",
-    source: "route",
-    filter: ["==", ["get", "kind"], "stretch-no"],
-    layout: {
-      "text-field": ["get", "label"],
-      "text-size": ["case", ["==", ["get", "selected"], 1], 22, 16],
-      "text-font": ["Noto Sans Regular"],
-      "text-offset": [0, -1.5],
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": "#111111",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 2,
-    },
-  });
-  map.addLayer({
-    id: "draw-end-label",
-    type: "symbol",
-    source: "route",
-    filter: ["in", ["get", "label"], ["literal", ["A", "B"]]],
-    layout: {
-      "text-field": ["get", "label"],
-      "text-size": 13,
-      "text-font": ["Noto Sans Regular"],
-      "text-anchor": "center",
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": "#111111",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.2,
-    },
-  });
-  map.addLayer({
-    id: "draw-meter",
-    type: "symbol",
-    source: "route",
-    filter: ["==", ["get", "kind"], "meter"],
-    layout: {
-      "text-field": ["get", "label"],
-      "text-size": 13,
-      "text-font": ["Noto Sans Regular"],
-      "text-offset": [0, 1.45],
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": "#102033",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 2,
-    },
-  });
-  map.addLayer({
-    id: "route-arrows",
-    type: "symbol",
-    source: "route",
-    filter: ["==", ["get", "kind"], "arrow"],
-    layout: {
-      "icon-image": "route-dir",
-      "icon-size": ROUTE_LINE_PX / ROUTE_ARROW_PX,
-      "icon-allow-overlap": true,
-      "icon-ignore-placement": true,
-      "icon-keep-upright": false,
-      "icon-rotate": ["get", "bearing"],
-      "icon-rotation-alignment": "map",
-      "icon-pitch-alignment": "viewport",
-    },
-  });
-}
-
-function houseCirclePaint(selectedAshkol: string) {
-  const chosen: Expr = selectedAshkol
-    ? ["==", ["get", "ashkol"], selectedAshkol]
-    : ["literal", false];
-  return {
-    // 20% of the old 7 / 4.5 px, growing only at street-level zoom.
-    "circle-radius": [
-      "interpolate",
-      ["linear"],
-      ["zoom"],
-      14,
-      ["case", chosen, 1.4, 0.9],
-      18,
-      ["case", chosen, 3, 2],
-    ],
-    "circle-color": ["get", "color"],
-    "circle-opacity": ["case", chosen, 0.95, selectedAshkol ? 0.32 : 0.9],
-    "circle-stroke-width": ["case", chosen, 0.5, 0],
-    "circle-stroke-color": "#ffffff",
-  };
-}
-
-function fitHousePoints(map: MapLibreMap, points: { lat: number; lng: number }[]) {
-  if (points.length === 0) return false;
-  if (points.length === 1) {
-    map.flyTo({ center: [points[0].lng, points[0].lat], zoom: 16 });
-    return true;
-  }
-  const lngs = points.map((p) => p.lng);
-  const lats = points.map((p) => p.lat);
-  map.fitBounds(
-    [
-      [Math.min(...lngs), Math.min(...lats)],
-      [Math.max(...lngs), Math.max(...lats)],
-    ],
-    { padding: 64, maxZoom: 15 },
-  );
-  return true;
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (ch) => {
-    if (ch === "&") return "&amp;";
-    if (ch === "<") return "&lt;";
-    if (ch === ">") return "&gt;";
-    if (ch === '"') return "&quot;";
-    return "&#39;";
-  });
 }
 
 export function StreetMap({
@@ -1180,7 +800,14 @@ export function StreetMap({
       );
     }
 
-    map.on("click", "eshkol-houses", (e) => {
+    map.on("click", "eshkol-houses-hit", (e) => {
+      // A cluster diamond drawn over a house wins the click.
+      if (
+        map.getLayer("clusters-circle") &&
+        map.queryRenderedFeatures(e.point, { layers: ["clusters-circle"] }).length > 0
+      ) {
+        return;
+      }
       const props = e.features?.[0]?.properties;
       if (!props) return;
       const street = escapeHtml(String(props.street ?? ""));
@@ -1195,10 +822,10 @@ export function StreetMap({
         )
         .addTo(map);
     });
-    map.on("mouseenter", "eshkol-houses", () => {
+    map.on("mouseenter", "eshkol-houses-hit", () => {
       map.getCanvas().style.cursor = "pointer";
     });
-    map.on("mouseleave", "eshkol-houses", () => {
+    map.on("mouseleave", "eshkol-houses-hit", () => {
       map.getCanvas().style.cursor = "";
     });
 
@@ -1229,7 +856,7 @@ export function StreetMap({
           stretchMoved = false;
           return;
         }
-        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point", "eshkol-houses"].filter((id) =>
+        const layers = ["draw-handle", "route-line", "clusters-circle", "route-point", "eshkol-houses-hit"].filter((id) =>
           map.getLayer(id),
         );
         const blocked = map.queryRenderedFeatures(e.point, { layers }).some((feature) => {
@@ -1240,7 +867,7 @@ export function StreetMap({
             kind === "handle" ||
             kind === "point" ||
             layer === "clusters-circle" ||
-            layer === "eshkol-houses"
+            layer === "eshkol-houses-hit"
           );
         });
         if (blocked) return;
@@ -1254,7 +881,7 @@ export function StreetMap({
         return;
       }
       if (routeModeRef.current !== "off") return;
-      if (map.queryRenderedFeatures(e.point, { layers: ["streets-line", "route-line", "clusters-circle", "eshkol-houses"].filter((id) => map.getLayer(id)) }).length > 0) {
+      if (map.queryRenderedFeatures(e.point, { layers: ["streets-line", "route-line", "clusters-circle", "eshkol-houses-hit"].filter((id) => map.getLayer(id)) }).length > 0) {
         return;
       }
       const street = streetUnder(e.point);
@@ -1331,8 +958,8 @@ export function StreetMap({
     }
 
     function hitsHouse(point: { x: number; y: number }) {
-      if (!map.getLayer("eshkol-houses")) return false;
-      return map.queryRenderedFeatures([point.x, point.y], { layers: ["eshkol-houses"] }).length > 0;
+      if (!map.getLayer("eshkol-houses-hit")) return false;
+      return map.queryRenderedFeatures([point.x, point.y], { layers: ["eshkol-houses-hit"] }).length > 0;
     }
 
     function occupied(point: { x: number; y: number }) {
@@ -1499,7 +1126,6 @@ export function StreetMap({
             likud_pct: c.likud_pct ?? 0,
             linked: linked ? 1 : 0,
             done: done ? 1 : 0,
-            selected: selectedAshkol === c.ashkol ? 1 : 0,
             color: clusterColors.get(c.ashkol) ?? "#64748b",
             searched:
               searchPlace !== "" && c.settlement_name === searchPlace ? 1 : 0,
@@ -1523,7 +1149,21 @@ export function StreetMap({
       cancelled = true;
       map.off("load", apply);
     };
-  }, [clusters, clusterColors, selectedAshkol, linkedOverride, doneOverride, searchPlace]);
+  }, [clusters, clusterColors, linkedOverride, doneOverride, searchPlace]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer("clusters-selected")) return;
+      map.setFilter("clusters-selected", ["==", ["get", "ashkol"], selectedAshkol]);
+    };
+    apply();
+    map.on("load", apply);
+    return () => {
+      map.off("load", apply);
+    };
+  }, [selectedAshkol]);
 
   useEffect(() => {
     if (!picked) return;
@@ -2787,7 +2427,11 @@ export function StreetMap({
           {status}
         </p>
       </div>
-      <div className="map-side-cards">
+      <div
+        className={`map-side-cards${
+          selectedAshkol && clusterStreets.length > 0 ? " has-streets" : ""
+        }`}
+      >
         <aside className="cluster-card" aria-live="polite">
           {picked ? (
             <>
@@ -2948,78 +2592,18 @@ export function StreetMap({
               <h2>
                 רחובות באשכול <bdi dir="ltr">{selectedAshkol}</bdi>
               </h2>
-              {clusterStreetsLoading ? (
-                <p className="assign-empty">טוען רחובות…</p>
-              ) : clusterStreets.length === 0 ? (
-                <p className="assign-empty">
-                  אין רחובות מקושרים לאשכול (ממתינים לקובץ קישור). כשיופיעו — ניתן
-                  לסמן בוצע ליד כל שם.
-                </p>
-              ) : (
-                <>
-                  <p className="cluster-street-summary">
-                    {clusterStreets.length} רחובות ·{" "}
-                    {clusterStreets
-                      .reduce((n, s) => n + (s.address_count ?? 0), 0)
-                      .toLocaleString("he-IL")}{" "}
-                    בתים ·{" "}
-                    {clusterStreets.filter((s) => s.done).length} בוצעו
-                  </p>
-                  <ul
-                    className="cluster-street-list"
-                    style={
-                      {
-                        "--cluster-color":
-                          clusterColors.get(selectedAshkol) ?? "#64748b",
-                      } as CSSProperties
-                    }
-                  >
-                    {clusterStreets.map((s) => (
-                      <li
-                        key={s.id}
-                        className={`cluster-street-row${s.done ? " is-done" : ""}${
-                          pickedStreet?.id === s.id ? " is-picked" : ""
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={s.done}
-                          aria-label={`סמן ${s.name_he} כבוצע`}
-                          onChange={(e) =>
-                            void toggleStreetDone(s, e.target.checked)
-                          }
-                        />
-                        <button
-                          type="button"
-                          className="cluster-street-name"
-                          onClick={() => {
-                            setPickedStreet(s);
-                            void loadStreetAssign(s.id);
-                            mapRef.current?.flyTo({
-                              center: [s.lng, s.lat],
-                              zoom: 16,
-                            });
-                          }}
-                        >
-                          <span className="cluster-street-title">{s.name_he}</span>
-                          <span className="cluster-street-meta">
-                            {(s.voter_count ?? 0) > 0
-                              ? `${s.door_count ?? 0} דירות · ${s.voter_count} בוחרים`
-                              : "אין נתוני בתים"}
-                          </span>
-                        </button>
-                        <span
-                          className="cluster-street-houses"
-                          title="מספר הבתים (כתובות) ברחוב באשכול"
-                        >
-                          <strong>{s.address_count ?? 0}</strong>
-                          <small>בתים</small>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+              <ClusterStreetList
+                streets={clusterStreets}
+                loading={clusterStreetsLoading}
+                color={clusterColors.get(selectedAshkol) ?? "#64748b"}
+                pickedId={pickedStreet?.id}
+                onToggleDone={(s, done) => void toggleStreetDone(s, done)}
+                onPick={(s) => {
+                  setPickedStreet(s);
+                  void loadStreetAssign(s.id);
+                  mapRef.current?.flyTo({ center: [s.lng, s.lat], zoom: 16 });
+                }}
+              />
               {pickedStreet && (
                 <div className="assign-block" style={{ marginTop: "0.85rem" }}>
                   <span>
