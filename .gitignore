@@ -48,4 +48,5 @@ next-env.d.ts
 data/streets.ndjson
 data/streets_index.json
 data/street_batches/
+data/.cache/
 .env.local
