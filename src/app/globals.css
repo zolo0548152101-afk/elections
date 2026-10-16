@@ -3902,3 +3902,27 @@ body.sheet-capturing .sheet-map {
   aspect-ratio: auto;
   max-width: none;
 }
+
+/* Sheet map: back to the default view after moving / zooming. Not printed. */
+.sheet-map-reset {
+  position: absolute;
+  z-index: 800;
+  top: 10px;
+  inset-inline-start: 10px;
+  border: 1px solid #94a3b8;
+  background: #fff;
+  color: #102033;
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+
+@media print {
+  .sheet-map-reset {
+    display: none !important;
+  }
+}

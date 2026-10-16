@@ -218,11 +218,17 @@ function Frame({
   routePoints,
   onReady,
   onPicture,
+  onUserView,
+  resetViewRef,
 }: {
   houses: LatLng[];
   paths: LatLng[][];
   routePoints: LatLng[];
   onReady: () => void;
+  /** Called with true once the user moves or zooms, false after a reset. */
+  onUserView: (moved: boolean) => void;
+  /** Set by Frame: puts the map back on its default view. */
+  resetViewRef: { current: (() => void) | null };
   onPicture: (url: string | null) => void;
 }) {
   const map = useMap();
@@ -230,6 +236,9 @@ function Frame({
   readyRef.current = onReady;
   const pictureRef = useRef(onPicture);
   pictureRef.current = onPicture;
+  const onUserViewRef = useRef(onUserView);
+  onUserViewRef.current = onUserView;
+  const resetRef = useRef<((moved: boolean) => void) | null>(null);
 
   useEffect(() => {
     // Frame on the houses and the planned route (points and lines), at least ~350 m across.
@@ -249,15 +258,42 @@ function Frame({
       coreBounds(core ? [...houses, ...routePts] : paths.flat(), core ? 0.02 : 0.15),
       0.0032,
     );
-    const frame = () => {
-      map.invalidateSize({ animate: false });
-      if (!bounds) {
-        map.setView([31.5, 34.75], 8, { animate: false });
-      } else {
-        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 18, animate: false });
+    // The default view. Once the user moves or zooms, their view wins (print included).
+    let ours = false; // moves made by this code, not by the user
+    let userView = false;
+    const ourMove = (fn: () => void) => {
+      ours = true;
+      try {
+        fn();
+      } finally {
+        ours = false;
       }
     };
+    const frame = () =>
+      ourMove(() => {
+        map.invalidateSize({ animate: false });
+        if (!bounds) {
+          map.setView([31.5, 34.75], 8, { animate: false });
+        } else {
+          map.fitBounds(bounds, { padding: [28, 28], maxZoom: 18, animate: false });
+        }
+      });
     frame();
+    const markUser = () => {
+      if (ours) return;
+      if (!userView) {
+        userView = true;
+        resetRef.current?.(true);
+      }
+    };
+    map.on("dragstart", markUser);
+    map.on("zoomstart", markUser);
+    /** Show the same area in a resized map (the user's view, or the default one). */
+    const keepArea = (area: ReturnType<typeof map.getBounds>) =>
+      ourMove(() => {
+        map.invalidateSize({ animate: false });
+        map.fitBounds(area, { padding: [0, 0], animate: false });
+      });
 
     // Wait until the tiles of the current view have loaded (or give up after 4s).
     const settle = () =>
@@ -292,14 +328,19 @@ function Frame({
     };
     // While a paper-size picture is being taken, and just after, map moves are ours.
     let quietUntil = 0;
+    let screenArea: ReturnType<typeof map.getBounds> | null = null;
     const entry = {
       captureForPaper: async () => {
         quietUntil = Number.POSITIVE_INFINITY;
-        frame();
+        // The area on screen right now (the user's view if they moved the map).
+        screenArea = map.getBounds();
+        if (userView) keepArea(screenArea);
+        else frame();
         await capture();
       },
       restore: () => {
-        frame();
+        if (userView && screenArea) keepArea(screenArea);
+        else frame();
         // Keep the paper picture: ignore the moves caused by resizing back.
         quietUntil = performance.now() + 1500;
       },
@@ -327,7 +368,18 @@ function Frame({
     let resizeTimer: number | undefined;
     const onResize = () => {
       window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(frame, 200);
+      resizeTimer = window.setTimeout(() => {
+        if (userView) {
+          ourMove(() => map.invalidateSize({ animate: false }));
+        } else frame();
+      }, 200);
+    };
+    // "Back to the original view".
+    resetRef.current = (moved) => onUserViewRef.current(moved);
+    resetViewRef.current = () => {
+      userView = false;
+      frame();
+      onUserViewRef.current(false);
     };
     window.addEventListener("resize", onResize);
 
@@ -335,6 +387,8 @@ function Frame({
       finished = true;
       sheetMaps.delete(entry);
       map.off("moveend", recapture);
+      map.off("dragstart", markUser);
+      map.off("zoomstart", markUser);
       map.off("zoomend", recapture);
       window.clearTimeout(timer);
       window.clearTimeout(resizeTimer);
@@ -366,13 +420,24 @@ export function SheetMap({
   const allPaths = streets.flatMap((s) => s.paths);
   const start: LatLng = houses[0] ?? allPaths[0]?.[0] ?? [31.5, 34.75];
   const [picture, setPicture] = useState<string | null>(null);
+  const [moved, setMoved] = useState(false);
+  const resetViewRef = useRef<(() => void) | null>(null);
 
   return (
     <div className={picture ? "sheet-map has-picture" : "sheet-map"}>
+      {moved ? (
+        <button type="button" className="sheet-map-reset" onClick={() => resetViewRef.current?.()}>
+          חזרה לתצוגה המקורית
+        </button>
+      ) : null}
       <MapContainer
         center={start}
         zoom={16}
-        scrollWheelZoom={false}
+        scrollWheelZoom
+        // Fractional zoom: on paper the map keeps exactly the area chosen on screen.
+        zoomSnap={0.1}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={120}
         trackResize={false}
         fadeAnimation={false}
         zoomAnimation={false}
@@ -393,6 +458,8 @@ export function SheetMap({
           ])}
           onReady={onReady}
           onPicture={setPicture}
+          onUserView={setMoved}
+          resetViewRef={resetViewRef}
         />
         {/* The cluster's streets and houses, as on the main map. */}
         {streets.flatMap((street, i) =>
