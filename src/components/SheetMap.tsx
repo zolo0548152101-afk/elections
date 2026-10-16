@@ -131,12 +131,24 @@ function LabelLayer({ labels }: { labels: MapLabel[] }) {
   return null;
 }
 
-/** Every sheet map on the page, so the print button can wait for fresh pictures. */
-const sheetMaps = new Set<{ capture: () => Promise<void> }>();
+/** Route points farther than this from the cluster are left out of the frame. */
+const NEAR_ROUTE_M = 1500;
 
-/** Make sure every map has an up-to-date picture before printing. */
+/** Every sheet map on the page, so the print button can take paper-size pictures. */
+const sheetMaps = new Set<{ captureForPaper: () => Promise<void>; restore: () => void }>();
+
+/**
+ * Before printing: take each map's picture at the paper's size (194 x 180 mm), then give the
+ * screen its map back. Otherwise a phone's small map is blown up on paper (huge dots, blurry).
+ */
 export async function prepareSheetPrint() {
-  await Promise.all([...sheetMaps].map((m) => m.capture()));
+  document.body.classList.add("sheet-capturing");
+  try {
+    await Promise.all([...sheetMaps].map((m) => m.captureForPaper()));
+  } finally {
+    document.body.classList.remove("sheet-capturing");
+    for (const m of sheetMaps) m.restore();
+  }
 }
 
 /** Bounds of the middle of the points (trimming `trim` at each end), so a stray point does not zoom out. */
@@ -222,7 +234,16 @@ function Frame({
   useEffect(() => {
     // Frame on the houses and the planned route (points and lines), at least ~350 m across.
     // Without either, on the middle of the streets (a long road must not zoom it out).
-    const routePts = [...routePoints];
+    // Route points count only near the cluster: a point placed by mistake far away
+    // must not zoom the sheet out to half the country.
+    const center = (() => {
+      const b = coreBounds(houses.length > 0 ? houses : paths.flat(), 0.02);
+      return b ? ([(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2] as LatLng) : null;
+    })();
+    const near = (p: LatLng) =>
+      !center ||
+      Math.hypot((p[0] - center[0]) * 111_000, (p[1] - center[1]) * 94_000) <= NEAR_ROUTE_M;
+    const routePts = routePoints.filter(near);
     const core = houses.length > 0 || routePts.length > 0;
     const bounds = withMinSpan(
       coreBounds(core ? [...houses, ...routePts] : paths.flat(), core ? 0.02 : 0.15),
@@ -269,12 +290,26 @@ function Frame({
       await settle();
       pictureRef.current(snapshot(map.getContainer()));
     };
-    const entry = { capture };
+    // While a paper-size picture is being taken, and just after, map moves are ours.
+    let quietUntil = 0;
+    const entry = {
+      captureForPaper: async () => {
+        quietUntil = Number.POSITIVE_INFINITY;
+        frame();
+        await capture();
+      },
+      restore: () => {
+        frame();
+        // Keep the paper picture: ignore the moves caused by resizing back.
+        quietUntil = performance.now() + 1500;
+      },
+    };
     sheetMaps.add(entry);
 
-    // A new picture whenever the map moves and settles.
+    // A new picture whenever the user moves the map and it settles.
     let timer: number | undefined;
     const recapture = () => {
+      if (performance.now() < quietUntil) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void capture(), 300);
     };

@@ -2217,22 +2217,6 @@ export function StreetMap({
     });
   }, [panel]);
 
-  function showAllClusters() {
-    const map = mapRef.current;
-    if (!map) return;
-    const pts = clusters.filter((c) => c.map_lat != null && c.map_lng != null);
-    if (pts.length === 0) return;
-    const lngs = pts.map((c) => c.map_lng!);
-    const lats = pts.map((c) => c.map_lat!);
-    map.fitBounds(
-      [
-        [Math.min(...lngs), Math.min(...lats)],
-        [Math.max(...lngs), Math.max(...lats)],
-      ],
-      { padding: 40, maxZoom: 11 },
-    );
-  }
-
   function saveStartPoint() {
     if (panel?.kind !== "start") return;
     if (!routeApiRef.current) {
@@ -2601,9 +2585,6 @@ export function StreetMap({
             ביטול סימון ביצוע
           </button>
         ) : null}
-        <button type="button" className="map-quiet-btn" onClick={showAllClusters}>
-          ⤢ כל האשכולות במפה
-        </button>
         <p
           className={`map-status${/סומן כבוצע|✓|💎|🇮🇱/.test(status) ? " link-success-note" : ""}`}
           role="status"

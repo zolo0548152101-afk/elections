@@ -35,10 +35,10 @@ function sectionPaths(section: Section) {
   return section.streets.flatMap((s) => s.paths);
 }
 
-/** Streets with the most voters first: that is where to start knocking. */
-function byVoters(section: Section) {
+/** Streets with the most apartments first: that is where to start knocking. */
+function byDoors(section: Section) {
   return [...section.streets].sort(
-    (a, b) => b.voter_count - a.voter_count || a.name_he.localeCompare(b.name_he, "he"),
+    (a, b) => b.door_count - a.door_count || a.name_he.localeCompare(b.name_he, "he"),
   );
 }
 
@@ -144,9 +144,8 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
         sheet.sections.map((section) => {
           const hasMap =
             section.houses.length > 0 || section.marker != null || sectionPaths(section).length > 0;
-          const streets = byVoters(section);
+          const streets = byDoors(section);
           const doors = section.streets.reduce((n, s) => n + s.door_count, 0);
-          const streetVoters = section.streets.reduce((n, s) => n + s.voter_count, 0);
           const people = section.coordinators.length > 0 ? section.coordinators : coordinators;
           return (
             <section className="sheet-section" key={section.cluster.ashkol}>
@@ -231,7 +230,7 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                             ) : null}
                             {stage.point ? (
                               <span className="sheet-route-len">
-                                {" "}· {stage.stage_no === 1 ? "נקודת התחלה" : "נקודת קיבוץ"}
+                                {" "}· {stage.stage_no === 1 ? "התחלה" : "קיבוץ"}
                               </span>
                             ) : null}
                           </li>
@@ -250,8 +249,7 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                   <div className="sheet-streets-head">
                     <h3>רחובות</h3>
                     <span>
-                      לפי מספר בוחרים · סה״כ <bdi dir="ltr">{fmtInt(streetVoters)}</bdi> בוחרים ·{" "}
-                      <bdi dir="ltr">{fmtInt(doors)}</bdi> דירות
+                      לפי מספר דירות · סה״כ <bdi dir="ltr">{fmtInt(doors)}</bdi> דירות
                     </span>
                   </div>
                   {streets.length === 0 ? (
@@ -265,14 +263,9 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                           </span>
                           <span className="sheet-street-name">{s.name_he}</span>
                           <span className="sheet-street-num">
-                            {s.voter_count > 0 ? (
+                            {s.door_count > 0 ? (
                               <>
-                                <bdi dir="ltr">{fmtInt(s.voter_count)}</bdi> בוחרים
-                                {s.door_count > 0 ? (
-                                  <>
-                                    {" "}· <bdi dir="ltr">{fmtInt(s.door_count)}</bdi> דירות
-                                  </>
-                                ) : null}
+                                <bdi dir="ltr">{fmtInt(s.door_count)}</bdi> דירות
                               </>
                             ) : (
                               "—"

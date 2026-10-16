@@ -2449,7 +2449,7 @@ button.route-more-name[aria-pressed="true"] {
 .sheet-map {
   position: relative;
   width: 100%;
-  aspect-ratio: 194 / 180;
+  aspect-ratio: 194 / 170;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -2677,10 +2677,10 @@ li.is-done .sheet-check {
     font-size: 15pt;
   }
 
-  /* A4 minus margins is about 281mm tall: ~180mm map, the rest for the info. */
+  /* A4 minus margins is about 281mm tall: ~170mm map (two thirds), the rest for the info. */
   .sheet-map {
     width: 194mm;
-    height: 180mm;
+    height: 170mm;
     aspect-ratio: auto;
     min-height: 0;
     break-inside: avoid;
@@ -2706,7 +2706,7 @@ li.is-done .sheet-check {
   }
 
   .sheet-info {
-    grid-template-columns: 62mm 1fr;
+    grid-template-columns: 62mm 1fr !important;
     gap: 3mm 5mm;
     margin-top: 3mm;
   }
@@ -2715,9 +2715,39 @@ li.is-done .sheet-check {
     padding: 1mm 1.5mm;
   }
 
+  .sheet-street-list {
+    column-count: 2 !important;
+    column-gap: 5mm;
+  }
+
   .sheet-street-list li {
-    font-size: 8.5pt;
-    padding: 0.6mm 0;
+    font-size: 8pt;
+    padding: 0.3mm 0;
+    line-height: 1.2;
+  }
+
+  .sheet-check {
+    width: 3mm;
+    height: 3mm;
+  }
+
+  .sheet-route ol,
+  .sheet-person,
+  .sheet-legend {
+    font-size: 8pt;
+  }
+
+  .sheet-route li {
+    white-space: nowrap;
+  }
+
+  .sheet-facts h2 {
+    font-size: 11pt;
+    margin-bottom: 1.5mm;
+  }
+
+  .sheet-stats dd {
+    font-size: 10pt;
   }
 
   .leaflet-control-container {
@@ -3845,4 +3875,30 @@ tr.is-editing {
   color: var(--muted);
   font-weight: 600;
   font-size: 0.8rem;
+}
+
+/* Phone: the cluster picker and its done button share one row. */
+@media (max-width: 720px) {
+  .street-map-toolbar > .search-box {
+    flex-basis: 100%;
+  }
+
+  .street-map-toolbar > .cluster-picker-field {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .street-map-toolbar > .export,
+  .street-map-toolbar > .map-quiet-btn {
+    flex: none;
+    padding-inline: 0.8rem;
+  }
+}
+
+/* While the print button takes the map's picture: the map at its paper size. */
+body.sheet-capturing .sheet-map {
+  width: 194mm !important;
+  height: 170mm !important;
+  aspect-ratio: auto;
+  max-width: none;
 }
