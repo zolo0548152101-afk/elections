@@ -68,6 +68,12 @@ export const MAP_STYLE = {
   jointStrokeAlpha: 0.35,
   /** Meeting / collection point. */
   pointRadius: 11,
+  /**
+   * The work sheet (on screen and in the PDF) is read on paper, with the whole cluster in
+   * view: route lines at half the map's width, lighter, and without the white casing.
+   */
+  sheetRouteLinePx: 4.05 / 2,
+  sheetRouteLineAlpha: 0.45,
 } as const;
 
 /**

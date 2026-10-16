@@ -381,16 +381,7 @@ export function SheetMap({
             pathOptions={{ color: "#ffffff", weight: 1.5, fillColor: color, fillOpacity: 1 }}
           />
         ))}
-        {/* The route, with the map's widths and transparency: casing, line, joints, points. */}
-        {route.flatMap((stage) =>
-          stage.lines.map((line, i) => (
-            <Polyline
-              key={`rc-${stage.stage_no}-${i}`}
-              positions={line.coords}
-              pathOptions={{ color: "#ffffff", weight: MAP_STYLE.routeCasingPx, opacity: MAP_STYLE.routeCasingAlpha }}
-            />
-          )),
-        )}
+        {/* The route (sheet widths from MAP_STYLE): line, joints, points. */}
         {route.flatMap((stage) =>
           stage.lines.map((line, i) => (
             <Polyline
@@ -398,8 +389,8 @@ export function SheetMap({
               positions={line.coords}
               pathOptions={{
                 color: line.done ? MAP_COLOR.streetDone : stage.color,
-                weight: MAP_STYLE.routeLinePx,
-                opacity: MAP_STYLE.routeLineAlpha,
+                weight: MAP_STYLE.sheetRouteLinePx,
+                opacity: MAP_STYLE.sheetRouteLineAlpha,
               }}
             />
           )),
