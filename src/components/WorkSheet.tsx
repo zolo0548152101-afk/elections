@@ -21,6 +21,10 @@ function fmtInt(n: number) {
   return Math.round(n).toLocaleString("he-IL");
 }
 
+function fmtMeters(m: number) {
+  return m >= 1000 ? `${(m / 1000).toFixed(2)} ק״מ` : `${Math.round(m)} מ׳`;
+}
+
 function fmtPct(n: number) {
   return `${n.toFixed(1)}%`;
 }
@@ -132,6 +136,7 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                   houses={section.houses}
                   streets={section.streets}
                   color={section.color}
+                  route={section.route}
                   onReady={() => setReadyMaps((n) => n + 1)}
                 />
               ) : (
@@ -190,6 +195,31 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                       </>
                     ) : null}
                   </div>
+                  {section.route.length > 0 ? (
+                    <div className="sheet-route">
+                      <span className="sheet-k">מסלול</span>
+                      <ol>
+                        {section.route.map((stage) => (
+                          <li key={stage.stage_no}>
+                            <span className="sheet-route-no" style={{ background: stage.color }}>
+                              {stage.stage_no}
+                            </span>
+                            שלב {stage.stage_no}
+                            {stage.meters > 0 ? (
+                              <span className="sheet-route-len">
+                                {" "}· <bdi dir="ltr">{fmtMeters(stage.meters)}</bdi>
+                              </span>
+                            ) : null}
+                            {stage.point ? (
+                              <span className="sheet-route-len">
+                                {" "}· {stage.stage_no === 1 ? "נקודת התחלה" : "נקודת קיבוץ"}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
                   <p className="sheet-legend">
                     <span className="sheet-swatch" style={{ background: section.color }} /> לא בוצע
                     <span className="sheet-swatch" style={{ background: MAP_COLOR.streetDone }} /> בוצע

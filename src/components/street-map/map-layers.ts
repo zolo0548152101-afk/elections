@@ -42,8 +42,13 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
   return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
 }
 
-/** Opacity of colored street and route lines: strong enough to read the color, light enough to read the name. */
+/** Opacity of route lines: strong enough to read the color, light enough to read the name. */
 export const LINE_ALPHA = 0.55;
+
+/** Opacity of a cluster's colored streets (both street layers): light, so the map and the route show through. */
+export const STREET_ALPHA = 0.4;
+/** Opacity of other clusters' streets while one is selected. */
+export const STREET_MUTED_ALPHA = 0.25;
 
 /** Streets of other clusters while one cluster is selected. */
 export const COLOR_MUTED = MAP_COLOR.muted;
@@ -68,7 +73,7 @@ export function eshkolLinePaint(selectedAshkol: string, doneIds: string[]) {
     ],
     "line-width": ["case", chosen, 6.5, 3],
     // Translucent so the street name drawn under/over the line stays readable.
-    "line-opacity": ["case", chosen, LINE_ALPHA, selectedAshkol ? 0.35 : LINE_ALPHA],
+    "line-opacity": ["case", chosen, STREET_ALPHA, selectedAshkol ? STREET_MUTED_ALPHA : STREET_ALPHA],
   };
 }
 
@@ -106,7 +111,7 @@ export function streetLinePaint(
     return {
       "line-color": ["case", done, COLOR_DONE, clusterColorExpr(colors)],
       "line-width": ["case", selectedStreet, 8, done, 5, ["==", linked, 1], 4.5, 4],
-      "line-opacity": 0.9,
+      "line-opacity": ["case", selectedStreet, 0.9, STREET_ALPHA],
     };
   }
   // A cluster is selected: only its streets keep the cluster colour, the rest go soft grey.
@@ -114,7 +119,7 @@ export function streetLinePaint(
   return {
     "line-color": ["case", ["all", inCluster, done], COLOR_DONE, inCluster, color, COLOR_MUTED],
     "line-width": ["case", selectedStreet, 8, inCluster, 6.5, 3],
-    "line-opacity": ["case", selectedStreet, 1, inCluster, 1, 0.55],
+    "line-opacity": ["case", selectedStreet, 0.9, inCluster, STREET_ALPHA, STREET_MUTED_ALPHA],
   };
 }
 
@@ -359,16 +364,32 @@ export function addMapOverlays(map: MapLibreMap) {
       "text-halo-width": 1.2,
     },
   });
+  // Route joints. "draw-handle" is the grab area (invisible, full size, so dragging stays easy);
+  // "draw-handle-dot" is what you see: half size and very faint.
   map.addLayer({
     id: "draw-handle",
     type: "circle",
     source: "route",
     filter: ["==", ["get", "kind"], "handle"],
     paint: {
-      "circle-radius": 7,
+      "circle-radius": 9,
       "circle-color": "#ffffff",
-      "circle-stroke-width": 3,
+      "circle-opacity": 0,
+      "circle-stroke-width": 0,
+    },
+  });
+  map.addLayer({
+    id: "draw-handle-dot",
+    type: "circle",
+    source: "route",
+    filter: ["==", ["get", "kind"], "handle"],
+    paint: {
+      "circle-radius": 3.5,
+      "circle-color": "#ffffff",
+      "circle-opacity": 0.3,
+      "circle-stroke-width": 1.5,
       "circle-stroke-color": ["get", "color"],
+      "circle-stroke-opacity": 0.35,
     },
   });
   map.addLayer({

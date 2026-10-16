@@ -3801,3 +3801,66 @@ tr.is-editing {
   color: #64748b;
   font-size: 0.9rem;
 }
+
+/* Route on the work sheet */
+.sheet-map-label {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font: 800 12px "Heebo", sans-serif;
+}
+
+.sheet-map-label::before {
+  display: none;
+}
+
+.sheet-map-label.is-round {
+  color: #fff;
+}
+
+.sheet-map-label span {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+
+.sheet-route {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  align-items: start;
+  margin: 0 0 0.45rem;
+}
+
+.sheet-route ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.sheet-route-no {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-inline-end: 0.35rem;
+  vertical-align: middle;
+}
+
+.sheet-route-len {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+}

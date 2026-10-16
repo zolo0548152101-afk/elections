@@ -1,7 +1,9 @@
 import type { getSql } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
 import { canAccessAshkol } from "@/lib/streets-access";
-import { clusterColors, MAP_COLOR } from "@/lib/map-colors";
+import { clusterColors, MAP_COLOR, routeStageColor } from "@/lib/map-colors";
+import { readClusterRoute } from "@/lib/cluster-route";
+import { lineLengthMeters } from "@/lib/street-span";
 
 type Sql = ReturnType<typeof getSql>;
 
@@ -40,6 +42,16 @@ export type SheetCoordinator = {
   mobile: string | null;
 };
 
+/** One hourly round of the route, ready to draw on the sheet. */
+export type SheetRouteStage = {
+  stage_no: number;
+  color: string;
+  /** Meeting point (stage 1) or collection point, as [lat, lng]. */
+  point: [number, number] | null;
+  lines: { coords: [number, number][]; done: boolean }[];
+  meters: number;
+};
+
 export type SheetSection = {
   institutions: SheetInstitution[];
   cluster: SheetCluster;
@@ -49,6 +61,8 @@ export type SheetSection = {
   houses: [number, number][];
   /** The cluster's color on the map (its streets and houses). */
   color: string;
+  /** The planned route, by stage (empty when none). */
+  route: SheetRouteStage[];
   streets: SheetStreet[];
   street_total: number;
   streets_truncated: boolean;
@@ -282,6 +296,7 @@ async function sectionsFor(
       marker,
       houses: housesByAshkol.get(ashkol) ?? [],
       color: colors.get(ashkol) ?? MAP_COLOR.unknownCluster,
+      route: [],
       streets: streetsByAshkol.get(ashkol) ?? [],
       street_total: total,
       streets_truncated: total > STREET_CAP,
@@ -292,6 +307,49 @@ async function sectionsFor(
     a.cluster.ashkol.localeCompare(b.cluster.ashkol, "he"),
   );
   return sections;
+}
+
+
+/** Attach each section's planned route (the same data the map's route menu shows). */
+async function attachRoutes(sql: Sql, viewer: SessionUser, sections: SheetSection[]) {
+  for (const section of sections) {
+    const result = await readClusterRoute(sql, viewer, section.cluster.ashkol);
+    if ("error" in result) continue;
+    section.route = result.route.stages
+      .map((stage) => {
+        const lines: SheetRouteStage["lines"] = [];
+        let meters = 0;
+        for (const draw of stage.draws) {
+          if (draw.coordinates.length < 2) continue;
+          meters += lineLengthMeters(draw.coordinates);
+          lines.push({
+            coords: draw.coordinates.map(([lng, lat]) => [lat!, lng!] as [number, number]),
+            done: draw.done,
+          });
+        }
+        for (const street of stage.streets) {
+          const g = street.geometry;
+          if (!g) continue;
+          const parts = g.type === "LineString" ? [g.coordinates] : g.coordinates;
+          for (const part of parts) {
+            if (part.length < 2) continue;
+            meters += lineLengthMeters(part);
+            lines.push({
+              coords: part.map(([lng, lat]) => [lat!, lng!] as [number, number]),
+              done: street.done,
+            });
+          }
+        }
+        return {
+          stage_no: stage.stage_no,
+          color: routeStageColor(stage.stage_no),
+          point: stage.point ? ([stage.point.lat, stage.point.lng] as [number, number]) : null,
+          lines,
+          meters: Math.round(meters),
+        };
+      })
+      .filter((stage) => stage.lines.length > 0 || stage.point);
+  }
 }
 
 async function coordinatorsForAshkols(
@@ -402,6 +460,7 @@ export async function coordinatorWorkSheet(
     mobile: coord.mobile?.trim() || null,
   };
   for (const section of sections) section.coordinators = [person];
+  await attachRoutes(sql, viewer, sections);
 
   return {
     sheet: {
@@ -473,6 +532,7 @@ export async function clusterWorkSheet(
   for (const section of sections) {
     section.coordinators = people.get(section.cluster.ashkol) ?? [];
   }
+  await attachRoutes(sql, viewer, sections);
 
   return {
     sheet: {

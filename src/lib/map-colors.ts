@@ -47,6 +47,16 @@ export const CLUSTER_PALETTE = [
   "#1e3a8a", // navy
 ] as const;
 
+/**
+ * Route stages (hourly rounds). Off blue, green, gold, cyan, orange, red and near-black,
+ * so a route never reads as a status or a cluster.
+ */
+export const ROUTE_STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"] as const;
+
+export function routeStageColor(stageNo: number): string {
+  return ROUTE_STAGE_COLORS[(Math.max(stageNo, 1) - 1) % ROUTE_STAGE_COLORS.length]!;
+}
+
 export function clusterColorByRank(rank: number | null | undefined): string {
   if (rank == null || !Number.isFinite(rank) || rank < 0) return MAP_COLOR.unknownCluster;
   return CLUSTER_PALETTE[Math.floor(rank) % CLUSTER_PALETTE.length]!;

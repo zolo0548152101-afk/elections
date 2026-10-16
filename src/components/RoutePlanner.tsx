@@ -1,20 +1,19 @@
 "use client";
 
+import { MAP_COLOR, routeStageColor } from "@/lib/map-colors";
 import { tourBridge } from "@/lib/tour-bridge";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, LineString } from "geojson";
 import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
 import { arrowMarksEvery, formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
 
-/** Stage colors stay off blue, green, gold, cyan, orange, red, and near-black. */
-const STAGE_COLORS = ["#7c3aed", "#db2777", "#d946ef", "#c084fc", "#f472b6", "#e879f9"];
 
 function pointName(stageNo: number) {
   return stageNo === 1 ? "נקודת התחלה" : "נקודת קיבוץ";
 }
 
 export function stageColor(stageNo: number) {
-  return STAGE_COLORS[(Math.max(stageNo, 1) - 1) % STAGE_COLORS.length]!;
+  return routeStageColor(stageNo);
 }
 
 function RouteMark() {
@@ -101,7 +100,7 @@ function toFeatures(
     const color = stageColor(stage.stage_no);
     for (const [index, draw] of asDraws(stage.draws).entries()) {
       const coordinates = draw.coordinates ?? [];
-      const color = draw.done ? "#16a34a" : stageColor(stage.stage_no);
+      const color = draw.done ? MAP_COLOR.streetDone : stageColor(stage.stage_no);
       if (coordinates.length >= 2) {
         features.push({
           type: "Feature",
