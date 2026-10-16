@@ -4,7 +4,7 @@
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { streetsTilePath } from "@/lib/tiles-version";
-import { MAP_COLOR, STAGE_COLOR } from "@/lib/map-colors";
+import { MAP_COLOR, MAP_STYLE, STAGE_COLOR } from "@/lib/map-colors";
 
 /** Street status. Cluster diamonds are blue. */
 export const COLOR_ASSIGNED = MAP_COLOR.assigned;
@@ -42,13 +42,13 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
   return ["match", ["get", "ashkol"], ...pairs, COLOR_ASSIGNED];
 }
 
-/** Opacity of route lines: strong enough to read the color, light enough to read the name. */
+/** Opacity of highlight lines. Route and street values live in MAP_STYLE (lib/map-colors). */
 export const LINE_ALPHA = 0.55;
 
 /** Opacity of a cluster's colored streets (both street layers): light, so the map and the route show through. */
-export const STREET_ALPHA = 0.4;
+export const STREET_ALPHA = MAP_STYLE.streetAlpha;
 /** Opacity of other clusters' streets while one is selected. */
-export const STREET_MUTED_ALPHA = 0.25;
+export const STREET_MUTED_ALPHA = MAP_STYLE.streetMutedAlpha;
 
 /** Streets of other clusters while one cluster is selected. */
 export const COLOR_MUTED = MAP_COLOR.muted;
@@ -151,8 +151,8 @@ export function applyStreetFilter(map: MapLibreMap, ashkols: string[]) {
   }
 }
 
-export const ROUTE_LINE_PX = 4.5 * 0.9;
-export const ROUTE_CASING_PX = 7 * 0.9;
+export const ROUTE_LINE_PX = MAP_STYLE.routeLinePx;
+export const ROUTE_CASING_PX = MAP_STYLE.routeCasingPx;
 export const ROUTE_ARROW_PX = 24;
 
 export function addMapOverlays(map: MapLibreMap) {
@@ -309,7 +309,7 @@ export function addMapOverlays(map: MapLibreMap) {
       type: "line",
       source: "route",
       filter: ["==", ["geometry-type"], "LineString"],
-      paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": 0.35 },
+      paint: { "line-color": "#ffffff", "line-width": ROUTE_CASING_PX, "line-opacity": MAP_STYLE.routeCasingAlpha },
     },
     firstBasemapLabel,
   );
@@ -319,7 +319,7 @@ export function addMapOverlays(map: MapLibreMap) {
       type: "line",
       source: "route",
       filter: ["==", ["geometry-type"], "LineString"],
-      paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": LINE_ALPHA + 0.1 },
+      paint: { "line-color": ["get", "color"], "line-width": ROUTE_LINE_PX, "line-opacity": MAP_STYLE.routeLineAlpha },
     },
     firstBasemapLabel,
   );
@@ -341,7 +341,7 @@ export function addMapOverlays(map: MapLibreMap) {
     source: "route",
     filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "point"]],
     paint: {
-      "circle-radius": 11,
+      "circle-radius": MAP_STYLE.pointRadius,
       "circle-color": ["get", "color"],
       "circle-stroke-width": 2,
       "circle-stroke-color": "#ffffff",
@@ -384,12 +384,12 @@ export function addMapOverlays(map: MapLibreMap) {
     source: "route",
     filter: ["==", ["get", "kind"], "handle"],
     paint: {
-      "circle-radius": 3.5,
+      "circle-radius": MAP_STYLE.jointRadius,
       "circle-color": "#ffffff",
-      "circle-opacity": 0.3,
+      "circle-opacity": MAP_STYLE.jointFillAlpha,
       "circle-stroke-width": 1.5,
       "circle-stroke-color": ["get", "color"],
-      "circle-stroke-opacity": 0.35,
+      "circle-stroke-opacity": MAP_STYLE.jointStrokeAlpha,
     },
   });
   map.addLayer({

@@ -75,6 +75,25 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
   );
   const mapsReady = mapCount === 0 || readyMaps >= mapCount;
 
+  // The saved PDF is named after the page title: cluster number, city and coordinator.
+  useEffect(() => {
+    if (!sheet || sheet.sections.length === 0) return;
+    const names = [
+      ...new Set(sheet.sections.flatMap((s) => s.coordinators.map((c) => c.full_name.trim()))),
+    ].filter(Boolean);
+    const who = names.length > 0 ? names.join(" ו") : "ללא רכז";
+    const title =
+      sheet.kind === "cluster"
+        ? `${sheet.sections[0]!.cluster.ashkol} ${sheet.sections[0]!.cluster.settlement_name} - ${who}`
+        : `${who} - ${sheet.sections.map((s) => `${s.cluster.ashkol} ${s.cluster.settlement_name}`).join(", ")}`;
+    const previous = document.title;
+    // Characters a file name cannot hold.
+    document.title = title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+    return () => {
+      document.title = previous;
+    };
+  }, [sheet]);
+
   if (error) {
     return (
       <main className="sheet-doc">

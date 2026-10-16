@@ -48,7 +48,8 @@ export type SheetRouteStage = {
   color: string;
   /** Meeting point (stage 1) or collection point, as [lat, lng]. */
   point: [number, number] | null;
-  lines: { coords: [number, number][]; done: boolean }[];
+  /** `draw` lines have joints (A … B) like on the map; street sections do not. */
+  lines: { coords: [number, number][]; done: boolean; draw: boolean; finished: boolean }[];
   meters: number;
 };
 
@@ -325,6 +326,8 @@ async function attachRoutes(sql: Sql, viewer: SessionUser, sections: SheetSectio
           lines.push({
             coords: draw.coordinates.map(([lng, lat]) => [lat!, lng!] as [number, number]),
             done: draw.done,
+            draw: true,
+            finished: draw.finished,
           });
         }
         for (const street of stage.streets) {
@@ -337,6 +340,8 @@ async function attachRoutes(sql: Sql, viewer: SessionUser, sections: SheetSectio
             lines.push({
               coords: part.map(([lng, lat]) => [lat!, lng!] as [number, number]),
               done: street.done,
+              draw: false,
+              finished: false,
             });
           }
         }

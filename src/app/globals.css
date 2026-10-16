@@ -3803,29 +3803,11 @@ tr.is-editing {
 }
 
 /* Route on the work sheet */
-.sheet-map-label {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-  font: 800 12px "Heebo", sans-serif;
-}
-
-.sheet-map-label::before {
-  display: none;
-}
-
-.sheet-map-label.is-round {
-  color: #fff;
-}
-
-.sheet-map-label span {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1.5px solid;
-  border-radius: 999px;
-  padding: 0 6px;
-  line-height: 18px;
+.sheet-map-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 450;
+  pointer-events: none;
 }
 
 .sheet-route {

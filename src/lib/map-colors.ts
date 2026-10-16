@@ -48,6 +48,29 @@ export const CLUSTER_PALETTE = [
 ] as const;
 
 /**
+ * How lines and points look. The map (map-layers) and the work sheet (SheetMap) both use
+ * these numbers, so a route looks the same on screen and on paper.
+ */
+export const MAP_STYLE = {
+  /** A cluster's colored streets. */
+  streetAlpha: 0.4,
+  /** Other clusters' streets while one is selected. */
+  streetMutedAlpha: 0.25,
+  /** Route lines: strong enough to read the color, light enough to read the street name. */
+  routeLineAlpha: 0.65,
+  routeLinePx: 4.05,
+  /** White casing under route lines. */
+  routeCasingAlpha: 0.35,
+  routeCasingPx: 6.3,
+  /** Route joints: small and faint. */
+  jointRadius: 3.5,
+  jointFillAlpha: 0.3,
+  jointStrokeAlpha: 0.35,
+  /** Meeting / collection point. */
+  pointRadius: 11,
+} as const;
+
+/**
  * Route stages (hourly rounds). Off blue, green, gold, cyan, orange, red and near-black,
  * so a route never reads as a status or a cluster.
  */
