@@ -155,15 +155,16 @@ type Task = {
 /** Pick a cluster with streets (the tour needs one), and wait for its streets to load. */
 async function ensureCluster() {
   if (!tourBridge.selectedAshkol) {
-    const select = document.querySelector<HTMLSelectElement>('[data-tour="cluster-select"] select');
-    if (!select) return;
-    await tapElement(select);
-    const want =
-      tourBridge.tourAshkol?.() ?? [...select.options].find((o) => o.value)?.value;
+    const field = document.querySelector<HTMLElement>('[data-tour="cluster-select"] input');
+    if (!field) return;
+    // Show the tap on the picker, then pick a cluster with streets.
+    field.scrollIntoView({ block: "center", behavior: "smooth" });
+    await wait(450);
+    const r = field.getBoundingClientRect();
+    await tap(r.left + r.width / 2, r.top + r.height / 2);
+    const want = tourBridge.tourAshkol?.();
     if (!want) return;
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-    setter.call(select, want);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    tourBridge.selectAshkol?.(want);
   }
   for (let i = 0; i < 20 && !clusterLine(); i++) await wait(250);
 }
@@ -292,11 +293,8 @@ async function undoAll(undo: Undo) {
   if (undo.menuWasOpen === false && document.querySelector(".route-map-menu.is-open")) {
     document.querySelector<HTMLElement>('[data-tour="route-toggle"]')?.click();
   }
-  const select = document.querySelector<HTMLSelectElement>('[data-tour="cluster-select"] select');
-  if (select && undo.ashkol !== undefined && select.value !== undo.ashkol) {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-    setter.call(select, undo.ashkol);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+  if (undo.ashkol !== undefined && (tourBridge.selectedAshkol ?? "") !== undo.ashkol) {
+    tourBridge.selectAshkol?.(undo.ashkol);
   }
   if (undo.camera && tourBridge.map) tourBridge.map.easeTo({ ...undo.camera, duration: 600 });
   tourBridge.reloadRoute?.();

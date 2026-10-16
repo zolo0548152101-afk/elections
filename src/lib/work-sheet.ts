@@ -1,5 +1,7 @@
 import type { getSql } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
+import { canAccessAshkol } from "@/lib/streets-access";
+import { clusterColors, MAP_COLOR } from "@/lib/map-colors";
 
 type Sql = ReturnType<typeof getSql>;
 
@@ -45,6 +47,8 @@ export type SheetSection = {
   marker: { lat: number; lng: number } | null;
   /** The cluster's houses as [lat, lng]; the sheet map is framed on these. */
   houses: [number, number][];
+  /** The cluster's color on the map (its streets and houses). */
+  color: string;
   streets: SheetStreet[];
   street_total: number;
   streets_truncated: boolean;
@@ -221,6 +225,7 @@ async function sectionsFor(
     WHERE ashkol = ANY(${ashkols}) AND lat IS NOT NULL AND lng IS NOT NULL
     LIMIT 5000
   `) as { ashkol: string; lat: number; lng: number }[];
+  const colors = await clusterColors(sql, ashkols);
   const housesByAshkol = new Map<string, [number, number][]>();
   for (const h of houseRows) {
     const list = housesByAshkol.get(h.ashkol) ?? [];
@@ -276,6 +281,7 @@ async function sectionsFor(
       },
       marker,
       houses: housesByAshkol.get(ashkol) ?? [],
+      color: colors.get(ashkol) ?? MAP_COLOR.unknownCluster,
       streets: streetsByAshkol.get(ashkol) ?? [],
       street_total: total,
       streets_truncated: total > STREET_CAP,
@@ -414,8 +420,12 @@ export async function clusterWorkSheet(
 ): Promise<{ sheet: WorkSheet } | { error: string; status: number }> {
   const id = ashkol.trim();
   if (!id) return { error: "אשכול חסר", status: 400 };
-  if (viewer.role !== "super_admin" && viewer.role !== "area_manager") {
+  if (viewer.role !== "super_admin" && viewer.role !== "area_manager" && viewer.role !== "coordinator") {
     return { error: "אין הרשאה", status: 403 };
+  }
+  // A coordinator gets the sheet of a cluster linked to one of their institutions.
+  if (viewer.role === "coordinator" && !(await canAccessAshkol(sql, viewer, id))) {
+    return { error: "אין הרשאה לאשכול זה", status: 403 };
   }
 
   const [cluster] = (await sql`

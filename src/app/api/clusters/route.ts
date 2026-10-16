@@ -8,6 +8,7 @@ import {
   linkedAshkolSet,
   opsDoneAshkols,
 } from "@/lib/cluster-status";
+import { clusterColors } from "@/lib/map-colors";
 
 export const runtime = "nodejs";
 
@@ -150,6 +151,7 @@ export async function GET(req: NextRequest) {
   const linked = await linkedAshkolSet(sql);
   const doneStats = await ashkolStreetStatsForUser(sql, ids, user.id);
   const opsDone = await opsDoneAshkols(sql, ids);
+  const colors = await clusterColors(sql, ids);
 
   const withMap = sorted.map((c) => {
     const st = doneStats.get(c.ashkol);
@@ -159,6 +161,7 @@ export async function GET(req: NextRequest) {
       street_total: st?.street_total ?? 0,
       street_done: st?.street_done ?? 0,
       ops_done: opsDone.has(c.ashkol),
+      color: colors.get(c.ashkol),
     };
     if (c.lat == null || c.lng == null) {
       return { ...c, map_lat: null, map_lng: null, ...status };

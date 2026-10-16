@@ -16,6 +16,8 @@ export const tourBridge: {
   reloadRoute?: () => void;
   /** Reload the street list and street marks. */
   refreshStreets?: () => void;
+  /** Select a cluster (or "" for none), as the cluster picker does. */
+  selectAshkol?: (ashkol: string) => void;
   /** A cluster worth showing in the tour: one with the most linked streets. */
   tourAshkol?: () => string | undefined;
 } = {};

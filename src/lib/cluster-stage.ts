@@ -1,3 +1,5 @@
+import { STAGE_COLOR } from "@/lib/map-colors";
+
 /** Cluster progress stage, shared by the map, the clusters page and filters. */
 export type ClusterStage = "pending" | "partial" | "done";
 
@@ -16,12 +18,8 @@ export const CLUSTER_STAGE_FILTER_LABEL: Record<ClusterStage, string> = {
 
 export const CLUSTER_STAGES: readonly ClusterStage[] = ["pending", "partial", "done"];
 
-/** Same colors as the diamonds on the map. */
-export const CLUSTER_STAGE_COLOR: Record<ClusterStage, string> = {
-  pending: "#2563eb",
-  partial: "#f97316",
-  done: "#16a34a",
-};
+/** Same colors as the diamonds on the map (defined once, in map-colors). */
+export const CLUSTER_STAGE_COLOR: Record<ClusterStage, string> = STAGE_COLOR;
 
 /** בוצע when done; בתהליך once at least one street is marked; otherwise ממתין. */
 export function clusterStage(done: boolean, streetDone: number): ClusterStage {

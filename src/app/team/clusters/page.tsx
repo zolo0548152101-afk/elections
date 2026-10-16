@@ -198,7 +198,7 @@ export default function TeamClustersPage() {
                   <SortTh k="inst" sort={tsort.sort} onSort={tsort.toggle}>מוסד</SortTh>
                   <SortTh k="coord" sort={tsort.sort} onSort={tsort.toggle}>רכז</SortTh>
                   <SortTh k="stage" sort={tsort.sort} onSort={tsort.toggle}>סטטוס</SortTh>
-                  {!isCoordinator && <th>פעולות</th>}
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,37 +256,45 @@ export default function TeamClustersPage() {
                         );
                       })()}
                     </td>
-                    {!isCoordinator && (
                     <td className="actions-cell">
-                      <button
-                        type="button"
-                        className="export"
-                        disabled={busyAshkol === r.ashkol || r.done}
-                        onClick={() => void setDone(r.ashkol, true)}
+                      {!isCoordinator && !r.done ? (
+                        <button
+                          type="button"
+                          className="export"
+                          disabled={busyAshkol === r.ashkol}
+                          onClick={() => void setDone(r.ashkol, true)}
+                        >
+                          {busyAshkol === r.ashkol ? "…" : "סמן בוצע"}
+                        </button>
+                      ) : null}
+                      {!isCoordinator && r.done ? (
+                        <button
+                          type="button"
+                          className="row-btn"
+                          disabled={busyAshkol === r.ashkol}
+                          onClick={() => void setDone(r.ashkol, false)}
+                        >
+                          {busyAshkol === r.ashkol ? "…" : "ביטול ביצוע"}
+                        </button>
+                      ) : null}
+                      <a
+                        className="row-btn"
+                        href={`/team/clusters/${encodeURIComponent(r.ashkol)}/sheet`}
+                        target="_blank"
+                        rel="noreferrer"
                       >
-                        {busyAshkol === r.ashkol && !r.done
-                          ? "…"
-                          : "סמן בוצע"}
-                      </button>
-                      <button
-                        type="button"
-                        className="reset"
-                        disabled={busyAshkol === r.ashkol || !r.done}
-                        onClick={() => void setDone(r.ashkol, false)}
-                      >
-                        {busyAshkol === r.ashkol && r.done
-                          ? "…"
-                          : "לא בוצע"}
-                      </button>
-                      <button
-                        type="button"
-                        className="export"
-                        onClick={() => setEditKey((cur) => (cur === key ? null : key))}
-                      >
-                        {open ? "סגור" : "קשרים"}
-                      </button>
+                        PDF
+                      </a>
+                      {!isCoordinator ? (
+                        <button
+                          type="button"
+                          className="row-btn"
+                          onClick={() => setEditKey((cur) => (cur === key ? null : key))}
+                        >
+                          {open ? "סגור" : "קשרים"}
+                        </button>
+                      ) : null}
                     </td>
-                    )}
                   </tr>
                   {open && !isCoordinator && (
                     <tr className="edit-detail-row">

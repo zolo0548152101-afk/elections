@@ -11,7 +11,7 @@ export async function GET(
 ) {
   const user = await getSessionUser();
   try {
-    requireRole(user, ["super_admin", "area_manager"]);
+    requireRole(user, ["super_admin", "area_manager", "coordinator"]);
   } catch {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

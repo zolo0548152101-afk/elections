@@ -4,14 +4,15 @@
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { streetsTilePath } from "@/lib/tiles-version";
+import { MAP_COLOR, STAGE_COLOR } from "@/lib/map-colors";
 
 /** Street status. Cluster diamonds are blue. */
-export const COLOR_ASSIGNED = "#c45c26";
-export const COLOR_DONE = "#16a34a";
-export const COLOR_FILTERED = "#2563eb";
-export const COLOR_SEARCH = "#22d3ee";
+export const COLOR_ASSIGNED = MAP_COLOR.assigned;
+export const COLOR_DONE = MAP_COLOR.streetDone;
+export const COLOR_FILTERED = STAGE_COLOR.pending;
+export const COLOR_SEARCH = MAP_COLOR.search;
 /** Cluster with some streets done (בתהליך). Pending is COLOR_FILTERED (blue), done is COLOR_DONE (green). */
-export const COLOR_PARTIAL = "#f97316";
+export const COLOR_PARTIAL = STAGE_COLOR.partial;
 
 export const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
 
@@ -45,7 +46,7 @@ export function clusterColorExpr(colors: Map<string, string>): Expr {
 export const LINE_ALPHA = 0.55;
 
 /** Streets of other clusters while one cluster is selected. */
-export const COLOR_MUTED = "#a3acb9";
+export const COLOR_MUTED = MAP_COLOR.muted;
 
 /** City-matched lines. The selected eshkol keeps its color; every other line goes grey. */
 export function eshkolLinePaint(selectedAshkol: string, doneIds: string[]) {
@@ -267,7 +268,7 @@ export function addMapOverlays(map: MapLibreMap) {
     },
   });
   // The selected cluster: same source, switched by setFilter (no GeoJSON rebuild on click).
-  // Larger, in its stage color, with a dark ring so it stands out from the other diamonds.
+  // Larger, in its streets' color, with a dark ring so it stands out from the other diamonds.
   map.addLayer({
     id: "clusters-selected",
     type: "symbol",
@@ -280,15 +281,8 @@ export function addMapOverlays(map: MapLibreMap) {
       "icon-ignore-placement": true,
     },
     paint: {
-      "icon-color": [
-        "match",
-        ["get", "stage"],
-        2,
-        COLOR_DONE,
-        1,
-        COLOR_PARTIAL,
-        ["case", ["==", ["get", "searched"], 1], COLOR_SEARCH, COLOR_FILTERED],
-      ],
+      // Selected: takes the color of its streets, so the diamond and its streets read as one.
+      "icon-color": ["coalesce", ["get", "color"], COLOR_FILTERED],
       "icon-halo-color": "#111827",
       "icon-halo-width": 2.5,
     },
@@ -300,7 +294,7 @@ export function addMapOverlays(map: MapLibreMap) {
       id: "highlight-line",
       type: "line",
       source: "highlight",
-      paint: { "line-color": "#2563eb", "line-width": 7, "line-opacity": LINE_ALPHA },
+      paint: { "line-color": MAP_COLOR.highlight, "line-width": 7, "line-opacity": LINE_ALPHA },
     },
     firstBasemapLabel,
   );

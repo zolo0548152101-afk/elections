@@ -3,13 +3,13 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import type { WorkSheet as WorkSheetData } from "@/lib/work-sheet";
+import { MAP_COLOR } from "@/lib/map-colors";
 
 async function printSheet() {
-  // Loaded with the map; resizes the maps to paper size before printing.
-  const { prepareSheetPrint, endSheetPrint } = await import("@/components/SheetMap");
+  // Loaded with the map; makes sure each map has a fresh picture to print.
+  const { prepareSheetPrint } = await import("@/components/SheetMap");
   await prepareSheetPrint();
   window.print();
-  endSheetPrint();
 }
 
 const SheetMap = dynamic(
@@ -131,6 +131,7 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                 <SheetMap
                   houses={section.houses}
                   streets={section.streets}
+                  color={section.color}
                   onReady={() => setReadyMaps((n) => n + 1)}
                 />
               ) : (
@@ -190,9 +191,9 @@ export function WorkSheet({ endpoint }: { endpoint: string }) {
                     ) : null}
                   </div>
                   <p className="sheet-legend">
-                    <span className="sheet-swatch" style={{ background: "#c45c26" }} /> לא בוצע
-                    <span className="sheet-swatch" style={{ background: "#16a34a" }} /> בוצע
-                    <span className="sheet-dot" /> בית
+                    <span className="sheet-swatch" style={{ background: section.color }} /> לא בוצע
+                    <span className="sheet-swatch" style={{ background: MAP_COLOR.streetDone }} /> בוצע
+                    <span className="sheet-dot" style={{ background: section.color }} /> בית
                   </p>
                 </div>
 

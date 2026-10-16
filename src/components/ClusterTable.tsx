@@ -27,6 +27,8 @@ export type ClusterView = {
   street_done?: number;
   /** An admin marked the whole cluster done. */
   ops_done?: boolean;
+  /** The cluster's color (its streets and houses), from the server. */
+  color?: string;
 };
 
 type SortKey =

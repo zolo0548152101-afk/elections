@@ -15,12 +15,13 @@ setWorkerUrl("/maplibre-gl-worker.mjs");
 import type { ClusterView } from "./ClusterTable";
 import { ShowMore } from "@/components/ShowMore";
 import { useCloseOnOutsideClick, useMapFocus } from "./street-map/useMapFocus";
+import { ClusterPicker } from "./street-map/ClusterPicker";
 import type { Feature, Geometry } from "geojson";
 import { matchesSearch } from "@/lib/text-search";
 import { arrowMarksEvery, closestInsert, directedGeometry, spanOf } from "@/lib/street-span";
 import type { RouteGeometry } from "@/lib/cluster-route-types";
 import { RoutePlanner, stageColor, type RouteMode, type RouteApi } from "@/components/RoutePlanner";
-import { eshkolColorMap } from "@/lib/eshkol-house-colors";
+import { MAP_COLOR, STAGE_COLOR } from "@/lib/map-colors";
 import { CLUSTER_STAGE_LABEL, clusterStage } from "@/lib/cluster-stage";
 import { CLUSTER_DONE, LOADING_MAP, STREET_DONE, STREET_UNDONE, quip } from "@/lib/quips";
 import { tourBridge } from "@/lib/tour-bridge";
@@ -1075,19 +1076,11 @@ export function StreetMap({
   }, []);
 
   /** One color per cluster, unique inside each town — the same color its streets and houses use. */
-  const clusterColors = useMemo(() => {
-    const byTown = new Map<string, string[]>();
-    for (const c of clusters) {
-      const list = byTown.get(c.settlement_name);
-      if (list) list.push(c.ashkol);
-      else byTown.set(c.settlement_name, [c.ashkol]);
-    }
-    const colors = new Map<string, string>();
-    for (const list of byTown.values()) {
-      for (const [ashkol, color] of eshkolColorMap(list)) colors.set(ashkol, color);
-    }
-    return colors;
-  }, [clusters]);
+  // Each cluster's color comes from the server (lib/map-colors), the same on the map and the sheet.
+  const clusterColors = useMemo(
+    () => new Map(clusters.map((c) => [c.ashkol, c.color ?? MAP_COLOR.unknownCluster] as [string, string])),
+    [clusters],
+  );
 
   /** הושלם when every linked street is marked (or an admin marked the cluster); בתהליך once one is. */
   const clusterProgressOf = (c: ClusterView) => {
@@ -1150,7 +1143,7 @@ export function StreetMap({
             linked: linked ? 1 : 0,
             done: done ? 1 : 0,
             stage: stage === "done" ? 2 : stage === "partial" ? 1 : 0,
-            color: clusterColors.get(c.ashkol) ?? "#64748b",
+            color: clusterColors.get(c.ashkol) ?? MAP_COLOR.unknownCluster,
             searched:
               searchPlace !== "" && c.settlement_name === searchPlace ? 1 : 0,
           },
@@ -1409,7 +1402,7 @@ export function StreetMap({
     const ashkols = [...new Set(visibleHouses.map((house) => house.ashkol))].sort((a, b) =>
       a.localeCompare(b, "en", { numeric: true }),
     );
-    return new Map(ashkols.map((a) => [a, clusterColors.get(a) ?? "#64748b"] as [string, string]));
+    return new Map(ashkols.map((a) => [a, clusterColors.get(a) ?? MAP_COLOR.unknownCluster] as [string, string]));
   }, [visibleHouses, clusterColors]);
 
   /** Street colours: each cluster's streets in its colour; done streets green; selection thickens. */
@@ -1465,7 +1458,7 @@ export function StreetMap({
       .filter((c) => c.settlement_name === town)
       .map((c) => c.ashkol)
       .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
-      .map((ashkol) => ({ ashkol, color: clusterColors.get(ashkol) ?? "#64748b" }));
+      .map((ashkol) => ({ ashkol, color: clusterColors.get(ashkol) ?? MAP_COLOR.unknownCluster }));
   }, [houseColors, selectedAshkol, clusters, clusterColors]);
   const legendTown = selectedAshkol
     ? clusters.find((c) => c.ashkol === selectedAshkol)?.settlement_name
@@ -1569,7 +1562,7 @@ export function StreetMap({
         ashkol: house.ashkol,
         street: house.street,
         house: house.house,
-        color: houseColors.get(house.ashkol) ?? clusterColors.get(house.ashkol) ?? "#64748b",
+        color: houseColors.get(house.ashkol) ?? clusterColors.get(house.ashkol) ?? MAP_COLOR.unknownCluster,
       },
       geometry: { type: "Point" as const, coordinates: [house.lng, house.lat] },
     }));
@@ -1602,7 +1595,7 @@ export function StreetMap({
         name_he: line.street,
         ashkol: line.ashkol,
         street: line.street,
-        color: clusterColors.get(line.ashkol) ?? "#64748b",
+        color: clusterColors.get(line.ashkol) ?? MAP_COLOR.unknownCluster,
       },
       geometry: line.geometry as Geometry,
     }));
@@ -2288,6 +2281,14 @@ export function StreetMap({
 
   // Handles for the guided tour ("do it for me" and undo at the end).
   tourBridge.selectedAshkol = selectedAshkol;
+  tourBridge.selectAshkol = (ashkol: string) => {
+    if (ashkol) selectEshkolRef.current(ashkol);
+    else {
+      setSelectedAshkol("");
+      setPicked(null);
+      setPanel(null);
+    }
+  };
   tourBridge.tourAshkol = () =>
     [...clusters].sort((a, b) => (b.street_total ?? 0) - (a.street_total ?? 0))[0]?.ashkol;
   tourBridge.refreshStreets = () => {
@@ -2560,12 +2561,17 @@ export function StreetMap({
           )}
         </label>
         )}
-        <label data-tour="cluster-select">
-          אשכול
-          <select
+        <div className="cluster-picker-field" data-tour="cluster-select">
+          <span className="cluster-picker-label">אשכול</span>
+          <ClusterPicker
+            options={clusters.map((c) => ({
+              value: c.ashkol,
+              label: `${c.settlement_name} · ${c.ashkol}`,
+              meta: CLUSTER_STAGE_LABEL[clusterProgressOf(c).stage],
+            }))}
             value={selectedAshkol}
-            onChange={(e) => {
-              const ashkol = e.target.value;
+            allowEmpty={me?.role !== "coordinator"}
+            onChange={(ashkol) => {
               if (ashkol) selectEshkolRef.current(ashkol);
               else {
                 setSelectedAshkol("");
@@ -2573,18 +2579,8 @@ export function StreetMap({
                 setPanel(null);
               }
             }}
-          >
-            {me?.role === "coordinator" ? null : (
-              <option value="">בחרו אשכול</option>
-            )}
-            {clusters.map((c) => (
-              <option key={c.ashkol} value={c.ashkol}>
-                {c.settlement_name} · {c.ashkol}
-                {` · ${CLUSTER_STAGE_LABEL[clusterProgressOf(c).stage]}`}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
         {selectedAshkol && !selectedDone ? (
           <button
             type="button"
@@ -2663,7 +2659,7 @@ export function StreetMap({
                 <span>מחל</span>
                 <strong><bdi dir="ltr">{fmtPct(picked.likud_pct ?? 0)}</bdi></strong>
               </div>
-              {canLinkCluster && (
+              {(canLinkCluster || me?.role === "coordinator") && (
                 <div className="cluster-link-row">
                   <a
                     className="export"
@@ -2789,7 +2785,7 @@ export function StreetMap({
               <ClusterStreetList
                 streets={clusterStreets}
                 loading={clusterStreetsLoading}
-                color={clusterColors.get(selectedAshkol) ?? "#64748b"}
+                color={clusterColors.get(selectedAshkol) ?? MAP_COLOR.unknownCluster}
                 pickedId={pickedStreet?.id}
                 onToggleDone={(s, done) => void toggleStreetDone(s, done)}
                 onPick={(s) => {
@@ -3012,9 +3008,9 @@ export function StreetMap({
             </p>
             <p className="eshkol-legend-key">רק רחובות שזוהו במפה</p>
             <p className="eshkol-legend-key eshkol-stage-key">
-              <span style={{ color: "#2563eb" }} aria-hidden="true">◆</span> ממתין ·{" "}
-              <span style={{ color: "#f97316" }} aria-hidden="true">◆</span> בתהליך ·{" "}
-              <span style={{ color: "#16a34a" }} aria-hidden="true">◆</span> בוצע
+              <span style={{ color: STAGE_COLOR.pending }} aria-hidden="true">◆</span> ממתין ·{" "}
+              <span style={{ color: STAGE_COLOR.partial }} aria-hidden="true">◆</span> בתהליך ·{" "}
+              <span style={{ color: STAGE_COLOR.done }} aria-hidden="true">◆</span> בוצע
             </p>
           </div>
         )}

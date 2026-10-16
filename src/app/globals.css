@@ -2407,7 +2407,7 @@ button.route-more-name[aria-pressed="true"] {
   border-radius: 16px;
   padding: 1rem 1.1rem 1.2rem;
   margin: 0.5rem auto 1.5rem;
-  width: min(100% - 1.5rem, 1100px);
+  width: min(100% - 1.5rem, 900px);
   box-shadow: var(--shadow);
 }
 
@@ -2444,13 +2444,19 @@ button.route-more-name[aria-pressed="true"] {
   border-top: 2px solid var(--line);
 }
 
-/* Map first: about two thirds of the sheet. */
+/* Map first: about two thirds of the sheet. Same shape on screen and on paper
+   (194 x 180 mm), so the picture that prints shows exactly what is on screen. */
 .sheet-map {
-  height: min(66vh, 720px);
-  min-height: 380px;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 194 / 180;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
+}
+
+.sheet-map-picture {
+  display: none;
 }
 
 .sheet-nomap {
@@ -2539,11 +2545,11 @@ button.route-more-name[aria-pressed="true"] {
 
 .sheet-dot {
   display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 50%;
-  border: 1px solid #0f1c2e;
-  background: #fff;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
   margin-inline-start: 0.4rem;
 }
 
@@ -2675,8 +2681,21 @@ li.is-done .sheet-check {
   .sheet-map {
     width: 194mm;
     height: 180mm;
+    aspect-ratio: auto;
     min-height: 0;
     break-inside: avoid;
+  }
+
+  /* Print the picture of the map, not the live map. */
+  .sheet-map.has-picture .leaflet-container {
+    display: none !important;
+  }
+
+  .sheet-map-picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .sheet-section + .sheet-section {
@@ -3456,6 +3475,12 @@ body.tour-hands-on .driver-overlay {
   background: #f1f5f9;
 }
 
+a.row-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .row-btn:disabled {
   opacity: 0.55;
   cursor: default;
@@ -3657,7 +3682,7 @@ tr.is-editing {
   flex: 1.4 1 18rem;
 }
 
-.street-map-toolbar > label[data-tour="cluster-select"] {
+.street-map-toolbar > .cluster-picker-field {
   flex: 1 1 14rem;
 }
 
@@ -3673,9 +3698,106 @@ tr.is-editing {
   color: #b45309;
 }
 
-/* Before printing: the map takes its paper size on screen too, so Leaflet frames it right. */
-body.sheet-printing .sheet-map {
-  width: 194mm;
-  height: 180mm;
-  min-height: 0;
+
+
+/* Cluster picker: a select you can type into */
+.cluster-picker-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.cluster-picker-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.cluster-picker {
+  position: relative;
+}
+
+.cluster-picker input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem 0.5rem 2rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  color: #102033;
+  cursor: pointer;
+}
+
+.cluster-picker input:focus {
+  cursor: text;
+  outline: 2px solid #1d4ed8;
+  outline-offset: 1px;
+}
+
+.cluster-picker-caret {
+  position: absolute;
+  inset-inline-end: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #475569;
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.cluster-picker-list {
+  position: absolute;
+  z-index: 40;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  max-height: min(60vh, 360px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
+}
+
+.cluster-picker-list button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  color: #102033;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cluster-picker-list button.is-active,
+.cluster-picker-list button:hover {
+  background: #eff6ff;
+}
+
+.cluster-picker-list button[aria-selected="true"] {
+  font-weight: 800;
+}
+
+.cluster-picker-meta {
+  font-size: 0.8rem;
+  color: #64748b;
+  flex: none;
+}
+
+.cluster-picker-empty {
+  color: #64748b;
+}
+
+.cluster-picker-none {
+  padding: 0.6rem;
+  color: #64748b;
+  font-size: 0.9rem;
 }
