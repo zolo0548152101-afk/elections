@@ -422,7 +422,11 @@ export function RoutePlanner({
     if (!prev) return;
     historyRef.current = historyRef.current.slice(0, -1);
     setCanUndo(historyRef.current.length > 0);
-    chainRef.current = null;
+    // Keep extending the same line when it still exists after the undo (only its
+    // last joint is gone); if the whole line vanished, the next click starts a new one.
+    const chain = chainRef.current;
+    const chainStage = chain ? prev.find((stage) => Number(stage.stage_no) === Number(chain.stageNo)) : null;
+    if (!chain || !chainStage || !asDraws(chainStage.draws)[chain.index]) chainRef.current = null;
     setPickedDraw(null);
     if (activeRef.current != null && !prev.some((stage) => stage.stage_no === activeRef.current)) {
       setActive(prev[prev.length - 1]?.stage_no ?? null);
