@@ -247,6 +247,17 @@ const TASKS: Record<TaskId, Task> = {
       await wait(800);
     },
   },
+  "undo-last": {
+    // Any change to the route counts: the undo brings back the state before the last change.
+    base: () => JSON.stringify(stages().map((s) => [s.stage_no, s.point, s.draws.length, s.streets.length])),
+    done: (b) => JSON.stringify(stages().map((s) => [s.stage_no, s.point, s.draws.length, s.streets.length])) !== b,
+    run: async () => {
+      await ensureCluster();
+      await ensureMenu();
+      await tapElement(document.querySelector('[data-tour="route-undo"]'));
+      await wait(800);
+    },
+  },
   "add-stage": {
     base: () => stages().length,
     done: (b) => stages().length > Number(b),
@@ -366,6 +377,7 @@ const WORK_AREA: Record<TaskId, () => (Box | null)[]> = {
   "place-start": () => [clusterStreetsBox(), boxOf(MENU)],
   "draw-route": () => [clusterStreetsBox(), boxOf(MENU)],
   "add-stage": () => [boxOf('[data-tour="route-stage"]'), boxOf(MENU)],
+  "undo-last": () => [boxOf('[data-tour="route-undo"]'), boxOf(MENU)],
 };
 
 function overlapArea(a: Box, b: Box): number {
@@ -444,7 +456,12 @@ export function runTour(guide: Guide, onDone?: () => void): Driver {
   async function prepare(step: TourStep) {
     if (!step.task) return;
     snapshotMarks(undo);
-    if (step.task === "place-start" || step.task === "draw-route" || step.task === "add-stage") {
+    if (
+      step.task === "place-start" ||
+      step.task === "draw-route" ||
+      step.task === "add-stage" ||
+      step.task === "undo-last"
+    ) {
       await snapshotRoute(undo);
     }
   }

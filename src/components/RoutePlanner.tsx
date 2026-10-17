@@ -8,6 +8,26 @@ import type { RouteDraw, RouteStage } from "@/lib/cluster-route-types";
 import { arrowMarksEvery, formatLengthPill, formatMeters, lineLengthMeters } from "@/lib/street-span";
 
 
+/** How many route changes "ביטול פעולה אחרונה" can take back. */
+const UNDO_MAX = 30;
+
+/** Curved arrow back (undo). */
+function UndoMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        d="M9 7 4 12l5 5M4.5 12H14a5.5 5.5 0 0 1 0 11h-2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        transform="translate(1 -3)"
+      />
+    </svg>
+  );
+}
+
 function pointName(stageNo: number) {
   return stageNo === 1 ? "נקודת התחלה" : "נקודת קיבוץ";
 }
@@ -265,6 +285,10 @@ export function RoutePlanner({
   const activeRef = useRef(active);
   const chainRef = useRef<{ stageNo: number; index: number } | null>(null);
   const saveTail = useRef<Promise<void>>(Promise.resolve());
+  /** Undo: the route as last saved, and the saved states before it (newest last). */
+  const committedRef = useRef<RouteStage[]>([]);
+  const historyRef = useRef<RouteStage[][]>([]);
+  const [canUndo, setCanUndo] = useState(false);
   const onDrawDoneRef = useRef(onDrawDone);
   onDrawDoneRef.current = onDrawDone;
   const onShowRef = useRef(onShowStage);
@@ -329,6 +353,9 @@ export function RoutePlanner({
         const normalized = next.map((stage) => ({ ...stage, draws: asDraws(stage.draws) }));
         chainRef.current = null;
         stagesRef.current = normalized;
+        committedRef.current = normalized;
+        historyRef.current = [];
+        setCanUndo(false);
         setStages(normalized);
         setActive(normalized[0]?.stage_no ?? null);
       })
@@ -350,7 +377,13 @@ export function RoutePlanner({
     setStages(next);
   }
 
-  function persist(next: RouteStage[]) {
+  function persist(next: RouteStage[], opts: { undo?: boolean } = {}) {
+    // Remember the state before this change, so "ביטול פעולה אחרונה" can bring it back.
+    if (!opts.undo && JSON.stringify(payload(committedRef.current)) !== JSON.stringify(payload(next))) {
+      historyRef.current = [...historyRef.current, committedRef.current].slice(-UNDO_MAX);
+      setCanUndo(true);
+    }
+    committedRef.current = next;
     const savedFor = ashkol;
     const my = ++ticket.current;
     stagesRef.current = next;
@@ -374,12 +407,27 @@ export function RoutePlanner({
         draws: asDraws(stage.draws),
       }));
       stagesRef.current = saved;
+      committedRef.current = saved;
       setStages(saved);
     });
     saveTail.current = job.then(
       () => undefined,
       () => undefined,
     );
+  }
+
+  /** Bring back the route as it was before the last change, and save it. */
+  function undoLast() {
+    const prev = historyRef.current[historyRef.current.length - 1];
+    if (!prev) return;
+    historyRef.current = historyRef.current.slice(0, -1);
+    setCanUndo(historyRef.current.length > 0);
+    chainRef.current = null;
+    setPickedDraw(null);
+    if (activeRef.current != null && !prev.some((stage) => stage.stage_no === activeRef.current)) {
+      setActive(prev[prev.length - 1]?.stage_no ?? null);
+    }
+    persist(prev, { undo: true });
   }
 
   function withStage(stageNo: number | null) {
@@ -982,6 +1030,17 @@ export function RoutePlanner({
           onClick={() => addStage()}
         >
           +
+        </button>
+        <button
+          type="button"
+          className="route-icon-btn"
+          aria-label="ביטול פעולה אחרונה"
+          data-tour="route-undo"
+          data-tip="ביטול פעולה אחרונה"
+          disabled={!canUndo}
+          onClick={() => undoLast()}
+        >
+          <UndoMark />
         </button>
       </div>
       {error ? (
